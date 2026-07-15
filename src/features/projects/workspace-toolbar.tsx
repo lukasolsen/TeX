@@ -3,20 +3,17 @@ import { FolderOpen, Home } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
-import { RootFileControl } from "@/features/projects/root-file-control"
 
 /** Keeps project-level actions separate from the active document surface. */
 export function WorkspaceToolbar({
   feedback,
   onOpenProject,
   onReturnHome,
-  onSelectRoot,
   session,
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
   onReturnHome: () => void
-  onSelectRoot: (path: string) => void
   session: ProjectSession
 }) {
   const isOpening =
@@ -37,12 +34,6 @@ export function WorkspaceToolbar({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{session.project.name}</p>
       </div>
-      <RootFileControl
-        onSelectRoot={onSelectRoot}
-        project={session.project}
-        selectedRoot={session.workspace.selectedRoot}
-      />
-      <Separator className="mx-1 hidden lg:block" orientation="vertical" />
       <Button
         disabled={isOpening}
         onClick={onOpenProject}

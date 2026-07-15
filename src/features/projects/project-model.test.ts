@@ -7,6 +7,7 @@ import {
   preferredRoot,
   preferredSourceFile,
   projectTreeNodes,
+  texDependencies,
   treeContainsPath,
 } from "@/features/projects/project-model"
 
@@ -60,6 +61,22 @@ describe("project model", () => {
   it("keeps preview support explicit and case-insensitive", () => {
     expect(isReadableSource("sources/MAIN.TEX")).toBe(true)
     expect(isReadableSource("figures/chart.pdf")).toBe(false)
+  })
+
+  it("finds direct LaTeX dependencies and ignores comments", () => {
+    expect(
+      texDependencies(
+        String.raw`\input{sections/intro}
+% \include{ignored}
+\addbibresource{references}
+\includegraphics[width=\textwidth]{figures/result.pdf}`,
+        "chapters/main.tex"
+      )
+    ).toEqual([
+      { command: "input", kind: "source", path: "chapters/sections/intro.tex" },
+      { command: "addbibresource", kind: "bibliography", path: "chapters/references.bib" },
+      { command: "includegraphics", kind: "asset", path: "chapters/figures/result.pdf" },
+    ])
   })
 
   it("formats recent timestamps without future negative durations", () => {

@@ -450,7 +450,8 @@ export function useProjectSession() {
         session: { ...current.session, workspace },
       }
     })
-  }, [])
+    void openFile(path, false)
+  }, [openFile])
 
   const createProjectEntry = useCallback(
     async (parentPath: string | null, name: string, directory: boolean) => {

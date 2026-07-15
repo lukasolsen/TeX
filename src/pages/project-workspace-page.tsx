@@ -7,7 +7,8 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
-import { ProjectTree } from "@/features/projects/project-tree"
+import { ProjectSidebar } from "@/features/projects/project-sidebar"
+import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
 import { SourceTabs } from "@/features/projects/source-tabs"
 import { WorkspaceToolbar } from "@/features/projects/workspace-toolbar"
@@ -64,7 +65,6 @@ export function ProjectWorkspacePage({
         feedback={feedback}
         onOpenProject={onOpenProject}
         onReturnHome={onReturnHome}
-        onSelectRoot={onSelectRoot}
         session={session}
       />
 
@@ -87,13 +87,16 @@ export function ProjectWorkspacePage({
             sidebarWidth.current = size.inPixels
           }}
         >
-          <ProjectTree
+          <ProjectSidebar
             onPinFile={onPinFile}
             onPreviewFile={onPreviewFile}
             onCreate={onCreateProjectEntry}
             onRename={onRenameProjectEntry}
             onDelete={onDeleteProjectEntry}
+            documentState={session.documentState}
+            rootFiles={session.project.rootCandidates.map((candidate) => candidate.path)}
             selectedFile={selectedFile}
+            selectedRoot={session.workspace.selectedRoot}
             tree={session.project.tree}
           />
         </ResizablePanel>
@@ -139,10 +142,12 @@ export function ProjectWorkspacePage({
             {activity}
           </span>
         ) : null}
-        <span className="ml-auto truncate">
-          {session.workspace.selectedRoot === null
-            ? "Root file not selected"
-            : `Root: ${session.workspace.selectedRoot}`}
+        <span className="ml-auto min-w-0">
+          <RootFileControl
+            onSelectRoot={onSelectRoot}
+            project={session.project}
+            selectedRoot={session.workspace.selectedRoot}
+          />
         </span>
       </footer>
     </main>

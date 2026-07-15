@@ -22,6 +22,7 @@ import {
   ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
+import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ProjectEntry } from "@/domain/project"
 import {
@@ -61,7 +62,9 @@ function TreeBranch({
   onCreate,
   onRename,
   onDelete,
+  rootFiles,
   selectedFile,
+  selectedRoot,
 }: {
   entry: ProjectEntry & { path: string }
   level: number
@@ -74,11 +77,19 @@ function TreeBranch({
   ) => Promise<void>
   onRename: (path: string, name: string) => Promise<void>
   onDelete: (path: string) => Promise<void>
+  rootFiles: string[]
   selectedFile: string | null
+  selectedRoot: string | null
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDirectory = entry.kind === "directory"
   const readable = !isDirectory && isReadableSource(entry.path)
+  const rootLabel =
+    !isDirectory && selectedRoot === entry.path
+      ? "Root"
+      : !isDirectory && rootFiles.includes(entry.path)
+        ? "Root candidate"
+        : null
 
   return (
     <li>
@@ -123,7 +134,8 @@ function TreeBranch({
               isDirectory={isDirectory}
               path={entry.path}
             />
-            <span className="truncate">{entry.name}</span>
+            <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+            {rootLabel !== null ? <Badge variant="secondary">{rootLabel}</Badge> : null}
           </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
@@ -203,7 +215,9 @@ function TreeBranch({
               onCreate={onCreate}
               onRename={onRename}
               onDelete={onDelete}
+              rootFiles={rootFiles}
               selectedFile={selectedFile}
+              selectedRoot={selectedRoot}
             />
           ))}
         </ul>
@@ -218,7 +232,9 @@ export function ProjectTree({
   onCreate,
   onRename,
   onDelete,
+  rootFiles,
   selectedFile,
+  selectedRoot,
   tree,
 }: {
   onPinFile: (path: string) => void
@@ -230,7 +246,9 @@ export function ProjectTree({
   ) => Promise<void>
   onRename: (path: string, name: string) => Promise<void>
   onDelete: (path: string) => Promise<void>
+  rootFiles: string[]
   selectedFile: string | null
+  selectedRoot: string | null
   tree: ProjectEntry
 }) {
   return (
@@ -252,7 +270,9 @@ export function ProjectTree({
                   onCreate={onCreate}
                   onRename={onRename}
                   onDelete={onDelete}
+                  rootFiles={rootFiles}
                   selectedFile={selectedFile}
+                  selectedRoot={selectedRoot}
                 />
               ))}
             </ul>
