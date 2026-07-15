@@ -10,12 +10,14 @@ import {
 } from "@/components/ui/context-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import type { AsyncDocumentState } from "@/domain/project"
 
 export function SourceTabs({
   onClose,
   onCloseMany,
   onPin,
   onSelect,
+  documentState,
   pinnedFiles,
   projectPath,
   selectedFile,
@@ -24,6 +26,7 @@ export function SourceTabs({
   onCloseMany: (paths: string[]) => void
   onPin: (path: string) => void
   onSelect: (path: string) => void
+  documentState: AsyncDocumentState
   pinnedFiles: string[]
   projectPath: string
   selectedFile: string | null
@@ -56,6 +59,10 @@ export function SourceTabs({
         {files.map((path) => {
           const pinned = pinnedFiles.includes(path)
           const active = selectedFile === path
+          const unsaved =
+            active &&
+            documentState.status === "ready" &&
+            documentState.saveState.status !== "saved"
           return (
             <ContextMenu key={path}>
               <ContextMenuTrigger className="group/tab flex h-full min-w-0 shrink-0 items-center border-r">
@@ -69,6 +76,7 @@ export function SourceTabs({
                 >
                   <FileCode2 data-icon="inline-start" />
                   <span className="truncate">{path}</span>
+                  {unsaved ? <span aria-label="Unsaved changes">●</span> : null}
                 </TabsTrigger>
                 <Button
                   aria-label={`Close ${path}`}

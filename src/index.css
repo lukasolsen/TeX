@@ -55,33 +55,39 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.488 0.243 264.376);
-  --accent-foreground: oklch(0.97 0.014 254.604);
+  --primary: oklch(0.53 0.17 252);
+  --primary-foreground: oklch(0.985 0.006 252);
+  --secondary: oklch(0.955 0.008 250);
+  --secondary-foreground: oklch(0.25 0.018 250);
+  --muted: oklch(0.955 0.006 250);
+  --muted-foreground: oklch(0.48 0.018 250);
+  --accent: oklch(0.91 0.03 247);
+  --accent-foreground: oklch(0.25 0.04 250);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
-  --home-surface: oklch(0.975 0.003 250);
-  --home-document: oklch(0.985 0.01 250);
-  --home-nav: oklch(0.955 0.012 252);
-  --home-nav-foreground: oklch(0.24 0.01 250);
-  --home-nav-active: oklch(0.89 0.035 254);
-  --workspace: oklch(0.955 0.004 250);
-  --workspace-chrome: oklch(0.99 0.002 250);
-  --sidebar: oklch(0.972 0.004 250);
-  --sidebar-foreground: oklch(0.24 0.01 250);
-  --sidebar-accent: oklch(0.925 0.012 250);
-  --source: oklch(0.995 0.002 250);
-  --source-foreground: oklch(0.22 0.012 250);
-  --status: oklch(0.245 0.03 258);
-  --status-foreground: oklch(0.94 0.01 250);
+  --ring: oklch(0.62 0.14 252);
+  --radius: 0.5rem;
+  --home-surface: oklch(0.965 0.008 250);
+  --home-document: oklch(0.99 0.004 250);
+  --home-nav: oklch(0.94 0.012 250);
+  --home-nav-foreground: oklch(0.24 0.018 250);
+  --home-nav-active: oklch(0.89 0.035 247);
+  --workspace: oklch(0.935 0.01 250);
+  --workspace-chrome: oklch(0.975 0.006 250);
+  --sidebar: oklch(0.955 0.008 250);
+  --sidebar-foreground: oklch(0.25 0.018 250);
+  --sidebar-accent: oklch(0.89 0.032 247);
+  --source: oklch(0.992 0.004 250);
+  --source-foreground: oklch(0.22 0.018 250);
+  --status: oklch(0.22 0.025 252);
+  --status-foreground: oklch(0.94 0.008 250);
+  --editor-command: oklch(0.46 0.16 280);
+  --editor-comment: oklch(0.45 0.07 154);
+  --editor-string: oklch(0.46 0.13 40);
+  --editor-atom: oklch(0.47 0.14 220);
+  --editor-preview: oklch(0.975 0.008 250);
+  --editor-preview-foreground: oklch(0.25 0.018 250);
 }
 
 .dark {
@@ -91,14 +97,14 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.424 0.199 265.638);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  --primary: oklch(0.72 0.14 250);
+  --primary-foreground: oklch(0.16 0.018 250);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.424 0.199 265.638);
-  --accent-foreground: oklch(0.97 0.014 254.604);
+  --accent: oklch(0.29 0.04 250);
+  --accent-foreground: oklch(0.94 0.01 250);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -108,15 +114,21 @@
   --home-nav: oklch(0.19 0.012 250);
   --home-nav-foreground: oklch(0.9 0.008 250);
   --home-nav-active: oklch(0.27 0.035 254);
-  --workspace: oklch(0.12 0.006 250);
-  --workspace-chrome: oklch(0.17 0.008 250);
-  --sidebar: oklch(0.15 0.008 250);
-  --sidebar-foreground: oklch(0.91 0.008 250);
-  --sidebar-accent: oklch(0.23 0.015 250);
-  --source: oklch(0.135 0.006 250);
-  --source-foreground: oklch(0.9 0.008 250);
-  --status: oklch(0.2 0.035 258);
-  --status-foreground: oklch(0.92 0.012 250);
+  --workspace: oklch(0.145 0.012 250);
+  --workspace-chrome: oklch(0.19 0.014 250);
+  --sidebar: oklch(0.17 0.014 250);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-accent: oklch(0.27 0.045 250);
+  --source: oklch(0.135 0.014 250);
+  --source-foreground: oklch(0.92 0.012 250);
+  --status: oklch(0.18 0.025 252);
+  --status-foreground: oklch(0.93 0.012 250);
+  --editor-command: oklch(0.78 0.13 290);
+  --editor-comment: oklch(0.68 0.09 155);
+  --editor-string: oklch(0.76 0.12 62);
+  --editor-atom: oklch(0.76 0.11 220);
+  --editor-preview: oklch(0.16 0.018 250);
+  --editor-preview-foreground: oklch(0.9 0.012 250);
 }
 
 @layer base {
@@ -159,5 +171,38 @@ button,
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  .dark {
+    --background: Canvas;
+    --foreground: CanvasText;
+    --card: Canvas;
+    --card-foreground: CanvasText;
+    --popover: Canvas;
+    --popover-foreground: CanvasText;
+    --primary: Highlight;
+    --primary-foreground: HighlightText;
+    --secondary: ButtonFace;
+    --secondary-foreground: ButtonText;
+    --muted: Canvas;
+    --muted-foreground: GrayText;
+    --accent: Highlight;
+    --accent-foreground: HighlightText;
+    --destructive: Mark;
+    --border: ButtonBorder;
+    --input: Field;
+    --ring: Highlight;
+    --workspace: Canvas;
+    --workspace-chrome: Canvas;
+    --sidebar: Canvas;
+    --sidebar-foreground: CanvasText;
+    --sidebar-accent: Highlight;
+    --source: Canvas;
+    --source-foreground: CanvasText;
+    --status: Canvas;
+    --status-foreground: CanvasText;
   }
 }

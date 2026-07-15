@@ -1,0 +1,444 @@
+use std::{
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use regex::{NoExpand, Regex, RegexBuilder};
+use serde::{Deserialize, Serialize};
+use tauri::{AppHandle, Manager};
+
+use crate::{
+    source_edit::atomic_write,
+    source_read::{
+        is_readable_source, read_source, revision_for_content, SourceRevision, MAX_SOURCE_BYTES,
+    },
+};
+
+const MAX_SEARCH_RESULTS: usize = 500;
+const MAX_SEARCH_FILES: usize = 2_048;
+const MAX_REPLACE_FILES: usize = 128;
+const MAX_REPLACE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
+const MAX_REPLACEMENT_BYTES: usize = 64 * 1024;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchMatch {
+    pub path: String,
+    pub line: usize,
+    pub column: usize,
+    pub context: String,
+    pub revision: SourceRevision,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSearchResponse {
+    pub results: Vec<SearchMatch>,
+    pub total_matches: usize,
+    pub searched_files: usize,
+    pub truncated: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRevisionExpectation {
+    pub path: String,
+    pub revision: SourceRevision,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReplaceResponse {
+    pub transaction_id: String,
+    pub changed_files: usize,
+    pub replaced_matches: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchError {
+    pub code: &'static str,
+    pub message: &'static str,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReplaceTransaction {
+    project_path: String,
+    files: Vec<ReplaceBackup>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReplaceBackup {
+    path: String,
+    content: String,
+    after_revision: SourceRevision,
+}
+
+#[derive(Debug)]
+struct PendingReplacement {
+    relative_path: String,
+    absolute_path: PathBuf,
+    before: String,
+    after: String,
+    after_revision: SourceRevision,
+    matches: usize,
+}
+
+/// Searches bounded text sources without sending project-wide file access to the webview.
+#[tauri::command]
+pub fn search_project_sources(
+    project_path: String,
+    query: String,
+    case_sensitive: bool,
+) -> Result<ProjectSearchResponse, SearchError> {
+    let root = canonical_project(&project_path)?;
+    let matcher = literal_matcher(&query, case_sensitive)?;
+    search(&root, &matcher)
+}
+
+/// Applies a previewed replacement only if every source revision still matches.
+#[tauri::command]
+pub fn replace_project_sources(
+    app: AppHandle,
+    project_path: String,
+    query: String,
+    replacement: String,
+    case_sensitive: bool,
+    expected_files: Vec<FileRevisionExpectation>,
+) -> Result<ReplaceResponse, SearchError> {
+    let root = canonical_project(&project_path)?;
+    let matcher = literal_matcher(&query, case_sensitive)?;
+    if replacement.len() > MAX_REPLACEMENT_BYTES || expected_files.len() > MAX_REPLACE_FILES {
+        return Err(replace_too_large());
+    }
+    let mut pending = Vec::new();
+    let mut seen = HashSet::new();
+    let mut pending_bytes = 0_usize;
+
+    for expected in expected_files {
+        if !seen.insert(expected.path.clone()) {
+            return Err(unavailable());
+        }
+        let document = read_source(&root, Path::new(&expected.path)).map_err(|_| unavailable())?;
+        if document.revision != expected.revision {
+            return Err(changed());
+        }
+        let matches = matcher.find_iter(&document.content).count();
+        if matches == 0 {
+            continue;
+        }
+        let after = matcher
+            .replace_all(&document.content, NoExpand(replacement.as_str()))
+            .into_owned();
+        pending_bytes = pending_bytes
+            .checked_add(document.content.len())
+            .and_then(|total| total.checked_add(after.len()))
+            .ok_or_else(replace_too_large)?;
+        if after.len() as u64 > MAX_SOURCE_BYTES || pending_bytes > MAX_REPLACE_TOTAL_BYTES {
+            return Err(replace_too_large());
+        }
+        let absolute_path = root
+            .join(&expected.path)
+            .canonicalize()
+            .map_err(|_| unavailable())?;
+        pending.push(PendingReplacement {
+            relative_path: expected.path,
+            absolute_path,
+            before: document.content,
+            after_revision: revision_for_content(after.as_bytes()),
+            after,
+            matches,
+        });
+    }
+
+    if pending.is_empty() {
+        return Err(SearchError {
+            code: "replace-empty",
+            message: "No current matches are available to replace.",
+        });
+    }
+
+    let transaction_id = transaction_id(&project_path);
+    let transaction = ReplaceTransaction {
+        project_path,
+        files: pending
+            .iter()
+            .map(|item| ReplaceBackup {
+                path: item.relative_path.clone(),
+                content: item.before.clone(),
+                after_revision: item.after_revision.clone(),
+            })
+            .collect(),
+    };
+    persist_transaction(&app, &transaction_id, &transaction)?;
+
+    for (written, item) in pending.iter().enumerate() {
+        if atomic_write(&item.absolute_path, item.after.as_bytes()).is_err() {
+            let restored = pending.iter().take(written).all(|rollback| {
+                atomic_write(&rollback.absolute_path, rollback.before.as_bytes()).is_ok()
+            });
+            return Err(if restored {
+                unavailable()
+            } else {
+                replace_incomplete()
+            });
+        }
+    }
+
+    Ok(ReplaceResponse {
+        transaction_id,
+        changed_files: pending.len(),
+        replaced_matches: pending.iter().map(|item| item.matches).sum(),
+    })
+}
+
+/// Restores a replacement transaction unless any changed file has since been edited again.
+#[tauri::command]
+pub fn undo_project_replace(
+    app: AppHandle,
+    transaction_id: String,
+) -> Result<ReplaceResponse, SearchError> {
+    if !transaction_id
+        .chars()
+        .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(unavailable());
+    }
+    let path = transaction_path(&app, &transaction_id)?;
+    let encoded = fs::read(&path).map_err(|_| unavailable())?;
+    let transaction: ReplaceTransaction =
+        serde_json::from_slice(&encoded).map_err(|_| unavailable())?;
+    let root = canonical_project(&transaction.project_path)?;
+
+    let mut targets = Vec::new();
+    for backup in &transaction.files {
+        let document = read_source(&root, Path::new(&backup.path)).map_err(|_| unavailable())?;
+        if document.revision != backup.after_revision {
+            return Err(changed());
+        }
+        let absolute = root
+            .join(&backup.path)
+            .canonicalize()
+            .map_err(|_| unavailable())?;
+        targets.push((absolute, backup));
+    }
+    for (target, backup) in &targets {
+        atomic_write(target, backup.content.as_bytes()).map_err(|_| unavailable())?;
+    }
+    fs::remove_file(path).map_err(|_| unavailable())?;
+
+    Ok(ReplaceResponse {
+        transaction_id,
+        changed_files: targets.len(),
+        replaced_matches: 0,
+    })
+}
+
+fn search(root: &Path, matcher: &Regex) -> Result<ProjectSearchResponse, SearchError> {
+    let mut files = Vec::new();
+    collect_source_files(root, root, &mut files)?;
+    let searched_files = files.len();
+    let mut results = Vec::new();
+    let mut total_matches = 0;
+
+    for relative in files {
+        let document = match read_source(root, &relative) {
+            Ok(document) => document,
+            Err(_) => continue,
+        };
+        for (line_index, line) in document.content.lines().enumerate() {
+            for found in matcher.find_iter(line) {
+                total_matches += 1;
+                if results.len() < MAX_SEARCH_RESULTS {
+                    results.push(SearchMatch {
+                        path: document.path.clone(),
+                        line: line_index + 1,
+                        column: line[..found.start()].chars().count() + 1,
+                        context: compact_context(line),
+                        revision: document.revision.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(ProjectSearchResponse {
+        truncated: total_matches > results.len(),
+        results,
+        total_matches,
+        searched_files,
+    })
+}
+
+fn collect_source_files(
+    root: &Path,
+    directory: &Path,
+    files: &mut Vec<PathBuf>,
+) -> Result<(), SearchError> {
+    if files.len() >= MAX_SEARCH_FILES {
+        return Ok(());
+    }
+    let entries = fs::read_dir(directory).map_err(|_| unavailable())?;
+    for entry in entries {
+        let entry = entry.map_err(|_| unavailable())?;
+        let file_type = entry.file_type().map_err(|_| unavailable())?;
+        if file_type.is_symlink() || ignored_name(&entry.file_name()) {
+            continue;
+        }
+        if file_type.is_dir() {
+            collect_source_files(root, &entry.path(), files)?;
+        } else if file_type.is_file() && is_readable_source(&entry.path()) {
+            if let Ok(relative) = entry.path().strip_prefix(root) {
+                files.push(relative.to_path_buf());
+            }
+        }
+        if files.len() >= MAX_SEARCH_FILES {
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn literal_matcher(query: &str, case_sensitive: bool) -> Result<Regex, SearchError> {
+    if query.trim().is_empty() || query.chars().count() > 256 {
+        return Err(SearchError {
+            code: "invalid-search",
+            message: "Enter a search term between 1 and 256 characters.",
+        });
+    }
+    RegexBuilder::new(&regex::escape(query))
+        .case_insensitive(!case_sensitive)
+        .size_limit(1_000_000)
+        .build()
+        .map_err(|_| unavailable())
+}
+
+fn compact_context(line: &str) -> String {
+    let trimmed = line.trim();
+    let mut context: String = trimmed.chars().take(180).collect();
+    if trimmed.chars().count() > 180 {
+        context.push('…');
+    }
+    context
+}
+
+fn canonical_project(project_path: &str) -> Result<PathBuf, SearchError> {
+    let root = Path::new(project_path)
+        .canonicalize()
+        .map_err(|_| unavailable())?;
+    if root.is_dir() {
+        Ok(root)
+    } else {
+        Err(unavailable())
+    }
+}
+
+fn persist_transaction(
+    app: &AppHandle,
+    transaction_id: &str,
+    transaction: &ReplaceTransaction,
+) -> Result<(), SearchError> {
+    let path = transaction_path(app, transaction_id)?;
+    let encoded = serde_json::to_vec(transaction).map_err(|_| unavailable())?;
+    atomic_write(&path, &encoded).map_err(|_| unavailable())
+}
+
+fn transaction_path(app: &AppHandle, transaction_id: &str) -> Result<PathBuf, SearchError> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| unavailable())?
+        .join("replace-history");
+    fs::create_dir_all(&directory).map_err(|_| unavailable())?;
+    Ok(directory.join(format!("{transaction_id}.json")))
+}
+
+fn transaction_id(project_path: &str) -> String {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_nanos());
+    let mut hash = 0xcbf29ce484222325_u64;
+    for byte in project_path.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    format!("{timestamp:x}{hash:016x}")
+}
+
+fn ignored_name(name: &std::ffi::OsStr) -> bool {
+    matches!(
+        name.to_str(),
+        Some(
+            ".git"
+                | ".cache"
+                | ".texpadtmp"
+                | "node_modules"
+                | "target"
+                | "build"
+                | "dist"
+                | "out"
+                | "_build"
+        )
+    )
+}
+
+fn changed() -> SearchError {
+    SearchError {
+        code: "search-results-changed",
+        message: "One or more files changed after the preview. Search again before replacing.",
+    }
+}
+
+fn replace_too_large() -> SearchError {
+    SearchError {
+        code: "replace-too-large",
+        message: "This replacement affects too much source at once. Narrow the search and preview a smaller change.",
+    }
+}
+
+fn replace_incomplete() -> SearchError {
+    SearchError {
+        code: "replace-incomplete",
+        message: "Replacement stopped and at least one file could not be restored automatically. Review the matched files before continuing; TeX retained the local replacement backup.",
+    }
+}
+
+fn unavailable() -> SearchError {
+    SearchError {
+        code: "search-unavailable",
+        message:
+            "TeX could not complete project search safely. Your source files were not changed.",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, time::SystemTime};
+
+    use super::{literal_matcher, search};
+
+    #[test]
+    fn search_reports_file_line_context_and_count() -> Result<(), Box<dyn std::error::Error>> {
+        let unique = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!("tex-search-{unique}"));
+        fs::create_dir(&directory)?;
+        fs::write(
+            directory.join("main.tex"),
+            "first needle\nneedle twice needle",
+        )?;
+        let matcher = literal_matcher("needle", true).map_err(|_| "matcher failed")?;
+        let response = search(&directory, &matcher).map_err(|_| "search failed")?;
+        assert_eq!(response.total_matches, 3);
+        assert_eq!(response.results[0].line, 1);
+        assert_eq!(response.results[0].column, 7);
+        assert_eq!(response.results[0].path, "main.tex");
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+}

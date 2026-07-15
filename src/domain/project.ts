@@ -37,6 +37,7 @@ export type WorkspaceState = {
   selectedRoot: string | null
   selectedFile: string | null
   sidebarWidth: number
+  editorFontSize: number
 }
 
 export type StartupState = {
@@ -49,6 +50,20 @@ export type SourceDocument = {
   path: string
   content: string
   byteLength: number
+  revision: SourceRevision
+}
+
+export type SourceRevision = {
+  byteLength: number
+  contentHash: string
+}
+
+export type RecoveryDraft = {
+  projectPath: string
+  relativePath: string
+  content: string
+  baseRevision: SourceRevision
+  savedAt: number
 }
 
 export type ProjectError = {
@@ -59,8 +74,42 @@ export type ProjectError = {
 export type AsyncDocumentState =
   | { status: "empty" }
   | { status: "loading"; path: string }
-  | { status: "ready"; document: SourceDocument }
+  | {
+      status: "ready"
+      document: SourceDocument
+      content: string
+      saveState: DocumentSaveState
+    }
   | { status: "error"; path: string; error: ProjectError }
+
+export type DocumentSaveState =
+  | { status: "saved" }
+  | { status: "dirty" }
+  | { status: "saving" }
+  | { status: "error"; error: ProjectError }
+  | { status: "conflict"; external: SourceDocument }
+  | { status: "recovery"; draft: RecoveryDraft }
+
+export type SearchMatch = {
+  path: string
+  line: number
+  column: number
+  context: string
+  revision: SourceRevision
+}
+
+export type ProjectSearchResponse = {
+  results: SearchMatch[]
+  totalMatches: number
+  searchedFiles: number
+  truncated: boolean
+}
+
+export type ReplaceResponse = {
+  transactionId: string
+  changedFiles: number
+  replacedMatches: number
+}
 
 export type OpenProjectFeedback =
   | { status: "idle" }

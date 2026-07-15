@@ -3,8 +3,10 @@
 mod persistence;
 mod project_files;
 mod project_open;
+mod project_search;
 mod readiness;
 pub mod root_detection;
+mod source_edit;
 mod source_read;
 
 use tauri_plugin_log::{Target, TargetKind};
@@ -32,6 +34,13 @@ pub fn run() {
             persistence::load_startup_state,
             persistence::save_workspace_state,
             source_read::read_project_source,
+            source_edit::save_project_source,
+            source_edit::save_recovery_draft,
+            source_edit::load_recovery_draft,
+            source_edit::discard_recovery_draft,
+            project_search::search_project_sources,
+            project_search::replace_project_sources,
+            project_search::undo_project_replace,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the TeX desktop application");

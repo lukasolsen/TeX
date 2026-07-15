@@ -14,5 +14,13 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    // A project can live within this repository during development. Saving a
+    // LaTeX source must not make Vite reload the application and restart its
+    // workspace-restoration flow.
+    watch: {
+      ignored: [
+        "**/*.{aux,bib,cls,fdb_latexmk,fls,pdf,sty,synctex.gz,tex,txt}",
+      ],
+    },
   },
 })

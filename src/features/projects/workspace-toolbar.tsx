@@ -1,4 +1,4 @@
-import { FolderOpen, Home } from "lucide-react"
+import { FolderOpen, Home, Save, Search, SquareTerminal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -8,16 +8,28 @@ import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
 export function WorkspaceToolbar({
   feedback,
   onOpenProject,
+  onOpenCommands,
+  onOpenSearch,
   onReturnHome,
+  onSave,
   session,
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
+  onOpenCommands: () => void
+  onOpenSearch: () => void
   onReturnHome: () => void
+  onSave: () => void
   session: ProjectSession
 }) {
   const isOpening =
     feedback.status === "choosing" || feedback.status === "opening"
+  const documentState = session.documentState
+  const saveUnavailable =
+    documentState.status !== "ready" ||
+    documentState.saveState.status === "saving" ||
+    documentState.saveState.status === "conflict" ||
+    documentState.saveState.status === "recovery"
 
   return (
     <header className="flex min-w-0 items-center gap-2 border-b bg-workspace-chrome px-3">
@@ -34,6 +46,34 @@ export function WorkspaceToolbar({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{session.project.name}</p>
       </div>
+      <Button
+        aria-label="Save source"
+        disabled={saveUnavailable}
+        onClick={onSave}
+        size="icon-sm"
+        title="Save source (Ctrl+S)"
+        variant="ghost"
+      >
+        <Save aria-hidden="true" />
+      </Button>
+      <Button
+        aria-label="Search project"
+        onClick={onOpenSearch}
+        size="icon-sm"
+        title="Search project (Ctrl+Shift+F)"
+        variant="ghost"
+      >
+        <Search aria-hidden="true" />
+      </Button>
+      <Button
+        aria-label="Command palette"
+        onClick={onOpenCommands}
+        size="icon-sm"
+        title="Command palette (Ctrl+Shift+P)"
+        variant="ghost"
+      >
+        <SquareTerminal aria-hidden="true" />
+      </Button>
       <Button
         disabled={isOpening}
         onClick={onOpenProject}

@@ -40,7 +40,10 @@ export function isReadableSource(path: string): boolean {
 }
 
 /** Extracts direct file references from common LaTeX commands without resolving TeX's full macro language. */
-export function texDependencies(source: string, sourcePath: string): TexDependency[] {
+export function texDependencies(
+  source: string,
+  sourcePath: string
+): TexDependency[] {
   const dependencies: TexDependency[] = []
   const seen = new Set<string>()
   const sourceDirectory = sourcePath.includes("/")
@@ -50,11 +53,15 @@ export function texDependencies(source: string, sourcePath: string): TexDependen
     .split("\n")
     .map((line) => line.replace(/(^|[^\\])%.*$/, "$1"))
     .join("\n")
-  const commandPattern = /\\(input|include|subfile|bibliography|addbibresource|includegraphics|usepackage|documentclass)\s*(?:\[[^\]]*\]\s*)?\{([^}]*)\}/g
+  const commandPattern =
+    /\\(input|include|subfile|bibliography|addbibresource|includegraphics|usepackage|documentclass)\s*(?:\[[^\]]*\]\s*)?\{([^}]*)\}/g
 
   for (const match of uncommented.matchAll(commandPattern)) {
     const command = match[1]
-    const values = match[2].split(",").map((value) => value.trim()).filter(Boolean)
+    const values = match[2]
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean)
     for (const value of values) {
       const kind = dependencyKind(command)
       const path = dependencyPath(value, sourceDirectory, kind)
@@ -70,7 +77,8 @@ export function texDependencies(source: string, sourcePath: string): TexDependen
 
 function dependencyKind(command: string): TexDependencyKind {
   if (["input", "include", "subfile"].includes(command)) return "source"
-  if (["bibliography", "addbibresource"].includes(command)) return "bibliography"
+  if (["bibliography", "addbibresource"].includes(command))
+    return "bibliography"
   if (command === "includegraphics") return "asset"
   return "package"
 }
@@ -82,7 +90,8 @@ function dependencyPath(
 ): string {
   const extension =
     kind === "source" ? ".tex" : kind === "bibliography" ? ".bib" : ""
-  const path = extension !== "" && !value.includes(".") ? `${value}${extension}` : value
+  const path =
+    extension !== "" && !value.includes(".") ? `${value}${extension}` : value
   if (kind === "package") return path
   return sourceDirectory === "" ? path : `${sourceDirectory}/${path}`
 }

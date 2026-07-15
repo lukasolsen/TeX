@@ -1,9 +1,17 @@
 use std::{fs, io, path::Path};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
-const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
+pub(crate) const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
+pub(crate) const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceRevision {
+    pub byte_length: u64,
+    pub content_hash: String,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -11,6 +19,7 @@ pub struct SourceDocument {
     pub path: String,
     pub content: String,
     pub byte_length: u64,
+    pub revision: SourceRevision,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,7 +38,7 @@ pub fn read_project_source(
     read_source(Path::new(&project_path), Path::new(&relative_path))
 }
 
-fn read_source(
+pub(crate) fn read_source(
     project_path: &Path,
     relative_path: &Path,
 ) -> Result<SourceDocument, SourceReadError> {
@@ -41,16 +50,7 @@ fn read_source(
     if !project_root.is_dir() {
         return Err(unavailable());
     }
-    let source_path = project_root
-        .join(relative_path)
-        .canonicalize()
-        .map_err(map_io_error)?;
-    if !source_path.starts_with(&project_root) || !source_path.is_file() {
-        return Err(SourceReadError {
-            code: "outside-project",
-            message: "That file is not available inside this project.",
-        });
-    }
+    let source_path = resolve_source_path(&project_root, relative_path)?;
 
     let byte_length = fs::metadata(&source_path).map_err(map_io_error)?.len();
     if byte_length > MAX_SOURCE_BYTES {
@@ -67,19 +67,48 @@ fn read_source(
         }
     })?;
 
+    let revision = revision_for_content(content.as_bytes());
     Ok(SourceDocument {
         path: relative_path.to_string_lossy().into_owned(),
         content,
         byte_length,
+        revision,
     })
 }
 
-fn is_readable_source(path: &Path) -> bool {
+pub(crate) fn resolve_source_path(
+    project_root: &Path,
+    relative_path: &Path,
+) -> Result<std::path::PathBuf, SourceReadError> {
+    if relative_path.is_absolute() || !is_readable_source(relative_path) {
+        return Err(unsupported());
+    }
+    let source_path = project_root
+        .join(relative_path)
+        .canonicalize()
+        .map_err(map_io_error)?;
+    if !source_path.starts_with(project_root) || !source_path.is_file() {
+        return Err(SourceReadError {
+            code: "outside-project",
+            message: "That file is not available inside this project.",
+        });
+    }
+    Ok(source_path)
+}
+
+pub(crate) fn is_readable_source(path: &Path) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| {
             READABLE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
         })
+}
+
+pub(crate) fn revision_for_content(content: &[u8]) -> SourceRevision {
+    SourceRevision {
+        byte_length: content.len() as u64,
+        content_hash: format!("{:x}", Sha256::digest(content)),
+    }
 }
 
 fn map_io_error(error: io::Error) -> SourceReadError {

@@ -2,13 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import type {
   AppSessionState,
+  AsyncDocumentState,
   OpenProjectFeedback,
   ProjectSession,
   ProjectSummary,
   StartupState,
   WorkspaceState,
 } from "@/domain/project"
-import { closeDocument, openDocument } from "@/features/projects/document-tabs"
+import {
+  closeDocument,
+  openDocument,
+  shouldSaveBeforeOpening,
+} from "@/features/projects/document-tabs"
 import {
   preferredRoot,
   preferredSourceFile,
@@ -18,13 +23,45 @@ import {
   createProjectEntry as createProjectEntryRequest,
   deleteProjectEntry as deleteProjectEntryRequest,
   forgetRecentProject,
+  discardRecoveryDraft,
   loadStartupState,
+  loadRecoveryDraft,
   openProjectFolder,
   projectErrorFromUnknown,
   readProjectSource,
+  saveProjectSource,
+  saveRecoveryDraft,
   renameProjectEntry as renameProjectEntryRequest,
   saveWorkspaceState,
 } from "@/services/project-service"
+
+function readyDocument(
+  document: Awaited<ReturnType<typeof readProjectSource>>
+): AsyncDocumentState {
+  return {
+    status: "ready",
+    document,
+    content: document.content,
+    saveState: { status: "saved" },
+  }
+}
+
+async function loadEditableDocument(
+  projectPath: string,
+  relativePath: string
+): Promise<AsyncDocumentState> {
+  const document = await readProjectSource(projectPath, relativePath)
+  const draft = await loadRecoveryDraft(projectPath, relativePath)
+  if (draft === null || draft.content === document.content) {
+    return readyDocument(document)
+  }
+  return {
+    status: "ready",
+    document,
+    content: draft.content,
+    saveState: { status: "recovery", draft },
+  }
+}
 
 const emptyStartupState: StartupState = {
   recentProjects: [],
@@ -37,6 +74,9 @@ const dialogError = {
   message:
     "TeX could not show the folder picker. Try again after restarting the application.",
 }
+
+const recoveryFailureNotice =
+  "TeX could not update the recovery copy. Keep TeX open until the source is saved."
 
 function workspaceForProject(
   project: ProjectSummary,
@@ -53,6 +93,7 @@ function workspaceForProject(
       selectedRoot
     ),
     sidebarWidth: restored?.sidebarWidth ?? 288,
+    editorFontSize: restored?.editorFontSize ?? 14,
   }
 }
 
@@ -83,11 +124,11 @@ async function hydrateSession(
   }
 
   try {
-    const document = await readProjectSource(project.path, selectedFile)
+    const documentState = await loadEditableDocument(project.path, selectedFile)
     return {
       project,
       workspace,
-      documentState: { status: "ready", document },
+      documentState,
       notice: project.persistenceNote ?? notice,
     }
   } catch (error: unknown) {
@@ -117,10 +158,21 @@ export function useProjectSession() {
   const [state, setState] = useState<AppSessionState>({ status: "starting" })
   const stateRef = useRef<AppSessionState>(state)
   const documentRequest = useRef(0)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const recoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveActionRef = useRef<() => Promise<boolean>>(async () => true)
 
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  useEffect(
+    () => () => {
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+      if (recoveryTimer.current !== null) clearTimeout(recoveryTimer.current)
+    },
+    []
+  )
 
   useEffect(() => {
     let active = true
@@ -208,6 +260,7 @@ export function useProjectSession() {
   }, [])
 
   const chooseAndOpenProject = useCallback(async () => {
+    if (!(await saveActionRef.current())) return
     setState((current) => withOpenFeedback(current, { status: "choosing" }))
     let selectedPath: string | null
     try {
@@ -247,60 +300,453 @@ export function useProjectSession() {
     }
   }, [])
 
-  const openFile = useCallback(async (path: string, pin: boolean) => {
-    const request = ++documentRequest.current
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      const workspace = openDocument(current.session.workspace, path, pin)
-      return {
-        ...current,
-        session: {
-          ...current.session,
-          workspace,
-          documentState: { status: "loading", path },
-        },
-      }
-    })
+  const saveActiveDocument = useCallback(async (): Promise<boolean> => {
+    const current = stateRef.current
+    if (
+      current.status !== "workspace" ||
+      current.session.documentState.status !== "ready"
+    ) {
+      return true
+    }
+    const active = current.session.documentState
+    if (active.saveState.status === "saved") return true
+    if (
+      active.saveState.status === "saving" ||
+      active.saveState.status === "conflict" ||
+      active.saveState.status === "recovery"
+    ) {
+      return false
+    }
 
-    const currentState = stateRef.current
-    if (currentState.status !== "workspace") return
-    const projectPath = currentState.session.project.path
+    const projectPath = current.session.project.path
+    const path = active.document.path
+    const content = active.content
+    const revision = active.document.revision
+    setState((value) =>
+      value.status !== "workspace" ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
+        ? value
+        : {
+            ...value,
+            session: {
+              ...value.session,
+              documentState: {
+                ...value.session.documentState,
+                saveState: { status: "saving" },
+              },
+            },
+          }
+    )
 
     try {
-      const document = await readProjectSource(projectPath, path)
-      if (request !== documentRequest.current) return
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = current.session.workspace
-        void saveWorkspaceState({
-          ...workspace,
-        })
-        return {
-          ...current,
-          session: {
-            ...current.session,
-            documentState: { status: "ready", document },
-          },
+      const document = await saveProjectSource(
+        projectPath,
+        path,
+        content,
+        revision
+      )
+      setState((value) => {
+        if (
+          value.status !== "workspace" ||
+          value.session.documentState.status !== "ready" ||
+          value.session.documentState.document.path !== path
+        ) {
+          return value
         }
-      })
-    } catch (error: unknown) {
-      if (request !== documentRequest.current) return
-      setState((current) => {
-        if (current.status !== "workspace") return current
+        const unchanged = value.session.documentState.content === content
         return {
-          ...current,
+          ...value,
           session: {
-            ...current.session,
+            ...value.session,
+            notice:
+              value.session.notice === recoveryFailureNotice
+                ? null
+                : value.session.notice,
             documentState: {
-              status: "error",
-              path,
-              error: projectErrorFromUnknown(error),
+              ...value.session.documentState,
+              document,
+              saveState: unchanged ? { status: "saved" } : { status: "dirty" },
             },
           },
         }
       })
+      const latest = stateRef.current
+      return (
+        latest.status === "workspace" &&
+        latest.session.documentState.status === "ready" &&
+        latest.session.documentState.document.path === path &&
+        latest.session.documentState.content === content
+      )
+    } catch (error: unknown) {
+      const projectError = projectErrorFromUnknown(error)
+      if (projectError.code === "external-change") {
+        try {
+          const external = await readProjectSource(projectPath, path)
+          setState((value) =>
+            value.status !== "workspace" ||
+            value.session.documentState.status !== "ready" ||
+            value.session.documentState.document.path !== path
+              ? value
+              : {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    documentState: {
+                      ...value.session.documentState,
+                      saveState: { status: "conflict", external },
+                    },
+                  },
+                }
+          )
+        } catch {
+          setState((value) =>
+            value.status !== "workspace" ||
+            value.session.documentState.status !== "ready"
+              ? value
+              : {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    documentState: {
+                      ...value.session.documentState,
+                      saveState: { status: "error", error: projectError },
+                    },
+                  },
+                }
+          )
+        }
+      } else {
+        setState((value) =>
+          value.status !== "workspace" ||
+          value.session.documentState.status !== "ready" ||
+          value.session.documentState.document.path !== path
+            ? value
+            : {
+                ...value,
+                session: {
+                  ...value.session,
+                  documentState: {
+                    ...value.session.documentState,
+                    saveState: { status: "error", error: projectError },
+                  },
+                },
+              }
+        )
+      }
+      return false
     }
   }, [])
+
+  useEffect(() => {
+    saveActionRef.current = saveActiveDocument
+  }, [saveActiveDocument])
+
+  const editDocument = useCallback((path: string, content: string) => {
+    const current = stateRef.current
+    if (
+      current.status !== "workspace" ||
+      current.session.documentState.status !== "ready" ||
+      current.session.documentState.document.path !== path ||
+      current.session.documentState.content === content
+    ) {
+      return
+    }
+    const { project } = current.session
+    setState((value) =>
+      value.status !== "workspace" ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
+        ? value
+        : {
+            ...value,
+            session: {
+              ...value.session,
+              documentState: {
+                ...value.session.documentState,
+                content,
+                saveState: { status: "dirty" },
+              },
+            },
+          }
+    )
+
+    if (recoveryTimer.current === null) {
+      recoveryTimer.current = setTimeout(() => {
+        recoveryTimer.current = null
+        const latest = stateRef.current
+        if (
+          latest.status !== "workspace" ||
+          latest.session.documentState.status !== "ready" ||
+          latest.session.documentState.document.path !== path
+        ) {
+          return
+        }
+        void saveRecoveryDraft(
+          project.path,
+          path,
+          latest.session.documentState.content,
+          latest.session.documentState.document.revision
+        ).catch(() => {
+          setState((value) =>
+            value.status !== "workspace"
+              ? value
+              : {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    notice: recoveryFailureNotice,
+                  },
+                }
+          )
+        })
+      }, 150)
+    }
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      void saveActionRef.current()
+    }, 850)
+  }, [])
+
+  const resolveRecovery = useCallback(async (restore: boolean) => {
+    const current = stateRef.current
+    if (
+      current.status !== "workspace" ||
+      current.session.documentState.status !== "ready" ||
+      current.session.documentState.saveState.status !== "recovery"
+    ) {
+      return
+    }
+    const { project, documentState } = current.session
+    if (!restore) {
+      await discardRecoveryDraft(project.path, documentState.document.path)
+    }
+    setState((value) =>
+      value.status !== "workspace" ||
+      value.session.documentState.status !== "ready"
+        ? value
+        : {
+            ...value,
+            session: {
+              ...value.session,
+              documentState: {
+                ...value.session.documentState,
+                content: restore
+                  ? value.session.documentState.content
+                  : value.session.documentState.document.content,
+                saveState: restore ? { status: "dirty" } : { status: "saved" },
+              },
+            },
+          }
+    )
+    if (restore) {
+      saveTimer.current = setTimeout(() => void saveActionRef.current(), 250)
+    }
+  }, [])
+
+  const resolveExternalChange = useCallback(async (keepMine: boolean) => {
+    const current = stateRef.current
+    if (
+      current.status !== "workspace" ||
+      current.session.documentState.status !== "ready"
+    ) {
+      return
+    }
+    const { project, documentState } = current.session
+    if (documentState.saveState.status !== "conflict") return
+    const external = documentState.saveState.external
+    if (!keepMine) {
+      await discardRecoveryDraft(project.path, documentState.document.path)
+      setState((value) =>
+        value.status !== "workspace"
+          ? value
+          : {
+              ...value,
+              session: {
+                ...value.session,
+                documentState: readyDocument(external),
+              },
+            }
+      )
+      return
+    }
+    try {
+      const document = await saveProjectSource(
+        project.path,
+        documentState.document.path,
+        documentState.content,
+        external.revision,
+        true
+      )
+      setState((value) =>
+        value.status !== "workspace" ||
+        value.session.documentState.status !== "ready"
+          ? value
+          : {
+              ...value,
+              session: {
+                ...value.session,
+                documentState: {
+                  ...value.session.documentState,
+                  document,
+                  saveState: { status: "saved" },
+                },
+              },
+            }
+      )
+    } catch (error: unknown) {
+      const projectError = projectErrorFromUnknown(error)
+      setState((value) =>
+        value.status !== "workspace" ||
+        value.session.documentState.status !== "ready"
+          ? value
+          : {
+              ...value,
+              session: {
+                ...value.session,
+                documentState: {
+                  ...value.session.documentState,
+                  saveState: { status: "error", error: projectError },
+                },
+              },
+            }
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    let checking = false
+    async function checkExternalChange() {
+      if (checking) return
+      const current = stateRef.current
+      if (
+        current.status !== "workspace" ||
+        current.session.documentState.status !== "ready" ||
+        current.session.documentState.saveState.status !== "saved"
+      ) {
+        return
+      }
+      checking = true
+      const active = current.session.documentState
+      try {
+        const external = await readProjectSource(
+          current.session.project.path,
+          active.document.path
+        )
+        if (
+          external.revision.contentHash !== active.document.revision.contentHash
+        ) {
+          setState((value) =>
+            value.status !== "workspace" ||
+            value.session.documentState.status !== "ready" ||
+            value.session.documentState.document.path !== external.path ||
+            value.session.documentState.saveState.status !== "saved"
+              ? value
+              : {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    documentState: {
+                      ...value.session.documentState,
+                      saveState: { status: "conflict", external },
+                    },
+                  },
+                }
+          )
+        }
+      } catch {
+        // A transient read failure must not replace the editor with an error surface.
+      } finally {
+        checking = false
+      }
+    }
+
+    const interval = window.setInterval(() => void checkExternalChange(), 2500)
+    const onFocus = () => void checkExternalChange()
+    window.addEventListener("focus", onFocus)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", onFocus)
+    }
+  }, [])
+
+  const openFile = useCallback(
+    async (path: string, pin: boolean) => {
+      const currentState = stateRef.current
+      if (currentState.status !== "workspace") return
+
+      const currentWorkspace = currentState.session.workspace
+      if (!shouldSaveBeforeOpening(currentWorkspace, path)) {
+        if (!pin || currentWorkspace.pinnedFiles.includes(path)) return
+        const workspace = openDocument(currentWorkspace, path, true)
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: { ...current.session, workspace },
+              }
+        )
+        void saveWorkspaceState(workspace)
+        return
+      }
+
+      if (!(await saveActiveDocument())) return
+      const request = ++documentRequest.current
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = openDocument(current.session.workspace, path, pin)
+        return {
+          ...current,
+          session: {
+            ...current.session,
+            workspace,
+            documentState: { status: "loading", path },
+          },
+        }
+      })
+
+      const stateAfterSave = stateRef.current
+      if (stateAfterSave.status !== "workspace") return
+      const projectPath = stateAfterSave.session.project.path
+
+      try {
+        const documentState = await loadEditableDocument(projectPath, path)
+        if (request !== documentRequest.current) return
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          const workspace = current.session.workspace
+          void saveWorkspaceState({
+            ...workspace,
+          })
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              documentState,
+            },
+          }
+        })
+      } catch (error: unknown) {
+        if (request !== documentRequest.current) return
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              documentState: {
+                status: "error",
+                path,
+                error: projectErrorFromUnknown(error),
+              },
+            },
+          }
+        })
+      }
+    },
+    [saveActiveDocument]
+  )
 
   const previewFile = useCallback(
     (path: string) => {
@@ -316,142 +762,153 @@ export function useProjectSession() {
     [openFile]
   )
 
-  const closeFile = useCallback(async (path: string) => {
-    const currentState = stateRef.current
-    if (currentState.status !== "workspace") return
+  const closeFile = useCallback(
+    async (path: string) => {
+      if (!(await saveActiveDocument())) return
+      const currentState = stateRef.current
+      if (currentState.status !== "workspace") return
 
-    const request = ++documentRequest.current
-    const { project, workspace: previousWorkspace } = currentState.session
-    const workspace = closeDocument(previousWorkspace, path)
-    const closingActiveFile = previousWorkspace.selectedFile === path
-    const nextFile = workspace.selectedFile
+      const request = ++documentRequest.current
+      const { project, workspace: previousWorkspace } = currentState.session
+      const workspace = closeDocument(previousWorkspace, path)
+      const closingActiveFile = previousWorkspace.selectedFile === path
+      const nextFile = workspace.selectedFile
 
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      return {
-        ...current,
-        session: {
-          ...current.session,
-          workspace,
-          documentState: closingActiveFile
-            ? nextFile === null
-              ? { status: "empty" }
-              : { status: "loading", path: nextFile }
-            : current.session.documentState,
-        },
-      }
-    })
-    void saveWorkspaceState(workspace)
-
-    if (!closingActiveFile || nextFile === null) return
-
-    try {
-      const document = await readProjectSource(project.path, nextFile)
-      if (request !== documentRequest.current) return
       setState((current) => {
         if (current.status !== "workspace") return current
         return {
           ...current,
           session: {
             ...current.session,
-            documentState: { status: "ready", document },
+            workspace,
+            documentState: closingActiveFile
+              ? nextFile === null
+                ? { status: "empty" }
+                : { status: "loading", path: nextFile }
+              : current.session.documentState,
           },
         }
       })
-    } catch (error: unknown) {
-      if (request !== documentRequest.current) return
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        return {
-          ...current,
-          session: {
-            ...current.session,
-            documentState: {
-              status: "error",
-              path: nextFile,
-              error: projectErrorFromUnknown(error),
-            },
-          },
-        }
-      })
-    }
-  }, [])
-
-  const closeFiles = useCallback(async (paths: string[]) => {
-    const currentState = stateRef.current
-    if (currentState.status !== "workspace") return
-
-    const request = ++documentRequest.current
-    const { project, workspace: previousWorkspace } = currentState.session
-    const workspace = paths.reduce(closeDocument, previousWorkspace)
-    const activeFileChanged =
-      workspace.selectedFile !== previousWorkspace.selectedFile
-    const nextFile = workspace.selectedFile
-
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      return {
-        ...current,
-        session: {
-          ...current.session,
-          workspace,
-          documentState: activeFileChanged
-            ? nextFile === null
-              ? { status: "empty" }
-              : { status: "loading", path: nextFile }
-            : current.session.documentState,
-        },
-      }
-    })
-    void saveWorkspaceState(workspace)
-    if (!activeFileChanged || nextFile === null) return
-
-    try {
-      const document = await readProjectSource(project.path, nextFile)
-      if (request !== documentRequest.current) return
-      setState((current) =>
-        current.status !== "workspace"
-          ? current
-          : {
-              ...current,
-              session: {
-                ...current.session,
-                documentState: { status: "ready", document },
-              },
-            }
-      )
-    } catch (error: unknown) {
-      if (request !== documentRequest.current) return
-      setState((current) =>
-        current.status !== "workspace"
-          ? current
-          : {
-              ...current,
-              session: {
-                ...current.session,
-                documentState: {
-                  status: "error",
-                  path: nextFile,
-                  error: projectErrorFromUnknown(error),
-                },
-              },
-            }
-      )
-    }
-  }, [])
-
-  const selectRoot = useCallback((path: string) => {
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      const workspace = { ...current.session.workspace, selectedRoot: path }
       void saveWorkspaceState(workspace)
-      return {
-        ...current,
-        session: { ...current.session, workspace },
+
+      if (!closingActiveFile || nextFile === null) return
+
+      try {
+        const documentState = await loadEditableDocument(project.path, nextFile)
+        if (request !== documentRequest.current) return
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              documentState,
+            },
+          }
+        })
+      } catch (error: unknown) {
+        if (request !== documentRequest.current) return
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              documentState: {
+                status: "error",
+                path: nextFile,
+                error: projectErrorFromUnknown(error),
+              },
+            },
+          }
+        })
       }
-    })
-    void openFile(path, false)
-  }, [openFile])
+    },
+    [saveActiveDocument]
+  )
+
+  const closeFiles = useCallback(
+    async (paths: string[]) => {
+      if (!(await saveActiveDocument())) return
+      const currentState = stateRef.current
+      if (currentState.status !== "workspace") return
+
+      const request = ++documentRequest.current
+      const { project, workspace: previousWorkspace } = currentState.session
+      const workspace = paths.reduce(closeDocument, previousWorkspace)
+      const activeFileChanged =
+        workspace.selectedFile !== previousWorkspace.selectedFile
+      const nextFile = workspace.selectedFile
+
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        return {
+          ...current,
+          session: {
+            ...current.session,
+            workspace,
+            documentState: activeFileChanged
+              ? nextFile === null
+                ? { status: "empty" }
+                : { status: "loading", path: nextFile }
+              : current.session.documentState,
+          },
+        }
+      })
+      void saveWorkspaceState(workspace)
+      if (!activeFileChanged || nextFile === null) return
+
+      try {
+        const documentState = await loadEditableDocument(project.path, nextFile)
+        if (request !== documentRequest.current) return
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: {
+                  ...current.session,
+                  documentState,
+                },
+              }
+        )
+      } catch (error: unknown) {
+        if (request !== documentRequest.current) return
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: {
+                  ...current.session,
+                  documentState: {
+                    status: "error",
+                    path: nextFile,
+                    error: projectErrorFromUnknown(error),
+                  },
+                },
+              }
+        )
+      }
+    },
+    [saveActiveDocument]
+  )
+
+  const selectRoot = useCallback(
+    (path: string) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = { ...current.session.workspace, selectedRoot: path }
+        void saveWorkspaceState(workspace)
+        return {
+          ...current,
+          session: { ...current.session, workspace },
+        }
+      })
+      void openFile(path, false)
+    },
+    [openFile]
+  )
 
   const createProjectEntry = useCallback(
     async (parentPath: string | null, name: string, directory: boolean) => {
@@ -465,7 +922,9 @@ export function useProjectSession() {
           name,
           directory
         )
-        const project = await openProjectFolder(currentState.session.project.path)
+        const project = await openProjectFolder(
+          currentState.session.project.path
+        )
         setState((current) =>
           current.status !== "workspace"
             ? current
@@ -493,155 +952,183 @@ export function useProjectSession() {
     []
   )
 
-  const renameProjectEntry = useCallback(async (path: string, name: string) => {
-    const currentState = stateRef.current
-    if (currentState.status !== "workspace") return
+  const renameProjectEntry = useCallback(
+    async (path: string, name: string) => {
+      if (!(await saveActiveDocument())) return
+      const currentState = stateRef.current
+      if (currentState.status !== "workspace") return
 
-    const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : ""
-    const renamedPath = parent === "" ? name : `${parent}/${name}`
-    try {
-      await renameProjectEntryRequest(currentState.session.project.path, path, name)
-      const project = await openProjectFolder(currentState.session.project.path)
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = {
-          ...current.session.workspace,
-          pinnedFiles: current.session.workspace.pinnedFiles.map((file) =>
-            renamedProjectPath(file, path, renamedPath)
-          ),
-          selectedRoot:
-            current.session.workspace.selectedRoot === null
-              ? null
-              : renamedProjectPath(
-                  current.session.workspace.selectedRoot,
-                  path,
-                  renamedPath
-                ),
-          selectedFile:
-            current.session.workspace.selectedFile === null
-              ? null
-              : renamedProjectPath(
-                  current.session.workspace.selectedFile,
-                  path,
-                  renamedPath
-                ),
-        }
-        const documentState = current.session.documentState
-        const nextDocumentState =
-          documentState.status === "empty"
-            ? documentState
-            : documentState.status === "ready"
-              ? {
-                  ...documentState,
-                  document: {
-                    ...documentState.document,
+      const parent = path.includes("/")
+        ? path.slice(0, path.lastIndexOf("/"))
+        : ""
+      const renamedPath = parent === "" ? name : `${parent}/${name}`
+      try {
+        await renameProjectEntryRequest(
+          currentState.session.project.path,
+          path,
+          name
+        )
+        const project = await openProjectFolder(
+          currentState.session.project.path
+        )
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          const workspace = {
+            ...current.session.workspace,
+            pinnedFiles: current.session.workspace.pinnedFiles.map((file) =>
+              renamedProjectPath(file, path, renamedPath)
+            ),
+            selectedRoot:
+              current.session.workspace.selectedRoot === null
+                ? null
+                : renamedProjectPath(
+                    current.session.workspace.selectedRoot,
+                    path,
+                    renamedPath
+                  ),
+            selectedFile:
+              current.session.workspace.selectedFile === null
+                ? null
+                : renamedProjectPath(
+                    current.session.workspace.selectedFile,
+                    path,
+                    renamedPath
+                  ),
+          }
+          const documentState = current.session.documentState
+          const nextDocumentState =
+            documentState.status === "empty"
+              ? documentState
+              : documentState.status === "ready"
+                ? {
+                    ...documentState,
+                    document: {
+                      ...documentState.document,
+                      path: renamedProjectPath(
+                        documentState.document.path,
+                        path,
+                        renamedPath
+                      ),
+                    },
+                  }
+                : {
+                    ...documentState,
                     path: renamedProjectPath(
-                      documentState.document.path,
+                      documentState.path,
                       path,
                       renamedPath
                     ),
-                  },
-                }
-              : {
-                  ...documentState,
-                  path: renamedProjectPath(documentState.path, path, renamedPath),
-                }
+                  }
+          void saveWorkspaceState(workspace)
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              project,
+              workspace,
+              documentState: nextDocumentState,
+              notice: `Renamed ${path} to ${renamedPath}.`,
+            },
+          }
+        })
+      } catch (error: unknown) {
+        const projectError = projectErrorFromUnknown(error)
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: { ...current.session, notice: projectError.message },
+              }
+        )
+      }
+    },
+    [saveActiveDocument]
+  )
+
+  const deleteProjectEntry = useCallback(
+    async (path: string) => {
+      if (!(await saveActiveDocument())) return
+      const currentState = stateRef.current
+      if (currentState.status !== "workspace") return
+
+      try {
+        await deleteProjectEntryRequest(currentState.session.project.path, path)
+        const project = await openProjectFolder(
+          currentState.session.project.path
+        )
+        const request = ++documentRequest.current
+        const previous = currentState.session.workspace
+        const pinnedFiles = previous.pinnedFiles.filter(
+          (file) => !isProjectPathWithin(file, path)
+        )
+        const selectedRoot = isProjectPathWithin(previous.selectedRoot, path)
+          ? null
+          : previous.selectedRoot
+        const nextFile = isProjectPathWithin(previous.selectedFile, path)
+          ? (pinnedFiles.at(-1) ?? selectedRoot)
+          : previous.selectedFile
+        const workspace = {
+          ...previous,
+          pinnedFiles,
+          selectedRoot,
+          selectedFile: nextFile,
+        }
         void saveWorkspaceState(workspace)
-        return {
-          ...current,
-          session: {
-            ...current.session,
-            project,
-            workspace,
-            documentState: nextDocumentState,
-            notice: `Renamed ${path} to ${renamedPath}.`,
-          },
+        setState((current) => {
+          if (current.status !== "workspace") return current
+          return {
+            ...current,
+            session: {
+              ...current.session,
+              project,
+              workspace,
+              documentState:
+                nextFile === previous.selectedFile
+                  ? current.session.documentState
+                  : nextFile === null
+                    ? { status: "empty" }
+                    : { status: "loading", path: nextFile },
+              notice: `Deleted ${path}.`,
+            },
+          }
+        })
+        if (
+          nextFile === null ||
+          nextFile === currentState.session.workspace.selectedFile
+        ) {
+          return
         }
-      })
-    } catch (error: unknown) {
-      const projectError = projectErrorFromUnknown(error)
-      setState((current) =>
-        current.status !== "workspace"
-          ? current
-          : {
-              ...current,
-              session: { ...current.session, notice: projectError.message },
-            }
-      )
-    }
-  }, [])
-
-  const deleteProjectEntry = useCallback(async (path: string) => {
-    const currentState = stateRef.current
-    if (currentState.status !== "workspace") return
-
-    try {
-      await deleteProjectEntryRequest(currentState.session.project.path, path)
-      const project = await openProjectFolder(currentState.session.project.path)
-      const request = ++documentRequest.current
-      const previous = currentState.session.workspace
-      const pinnedFiles = previous.pinnedFiles.filter(
-        (file) => !isProjectPathWithin(file, path)
-      )
-      const selectedRoot = isProjectPathWithin(previous.selectedRoot, path)
-        ? null
-        : previous.selectedRoot
-      const nextFile = isProjectPathWithin(previous.selectedFile, path)
-        ? pinnedFiles.at(-1) ?? selectedRoot
-        : previous.selectedFile
-      const workspace = {
-        ...previous,
-        pinnedFiles,
-        selectedRoot,
-        selectedFile: nextFile,
+        const documentState = await loadEditableDocument(
+          currentState.session.project.path,
+          nextFile
+        )
+        if (request !== documentRequest.current) return
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: {
+                  ...current.session,
+                  documentState,
+                },
+              }
+        )
+      } catch (error: unknown) {
+        const projectError = projectErrorFromUnknown(error)
+        setState((current) =>
+          current.status !== "workspace"
+            ? current
+            : {
+                ...current,
+                session: { ...current.session, notice: projectError.message },
+              }
+        )
       }
-      void saveWorkspaceState(workspace)
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        return {
-          ...current,
-          session: {
-            ...current.session,
-            project,
-            workspace,
-            documentState:
-              nextFile === previous.selectedFile
-                ? current.session.documentState
-                : nextFile === null
-                  ? { status: "empty" }
-                  : { status: "loading", path: nextFile },
-            notice: `Deleted ${path}.`,
-          },
-        }
-      })
-      if (nextFile === null || nextFile === currentState.session.workspace.selectedFile) {
-        return
-      }
-      const document = await readProjectSource(currentState.session.project.path, nextFile)
-      if (request !== documentRequest.current) return
-      setState((current) =>
-        current.status !== "workspace"
-          ? current
-          : {
-              ...current,
-              session: {
-                ...current.session,
-                documentState: { status: "ready", document },
-              },
-            }
-      )
-    } catch (error: unknown) {
-      const projectError = projectErrorFromUnknown(error)
-      setState((current) =>
-        current.status !== "workspace"
-          ? current
-          : {
-              ...current,
-              session: { ...current.session, notice: projectError.message },
-            }
-      )
-    }
-  }, [])
+    },
+    [saveActiveDocument]
+  )
 
   const resizeSidebar = useCallback((width: number, persist: boolean) => {
     setState((current) => {
@@ -658,7 +1145,54 @@ export function useProjectSession() {
     })
   }, [])
 
+  const setEditorFontSize = useCallback((fontSize: number) => {
+    setState((current) => {
+      if (current.status !== "workspace") return current
+      const workspace = {
+        ...current.session.workspace,
+        editorFontSize: Math.max(11, Math.min(24, fontSize)),
+      }
+      void saveWorkspaceState(workspace)
+      return {
+        ...current,
+        session: { ...current.session, workspace },
+      }
+    })
+  }, [])
+
+  const refreshActiveDocument = useCallback(async () => {
+    const current = stateRef.current
+    if (
+      current.status !== "workspace" ||
+      current.session.documentState.status !== "ready" ||
+      current.session.documentState.saveState.status !== "saved"
+    ) {
+      return
+    }
+    const path = current.session.documentState.document.path
+    try {
+      const documentState = await loadEditableDocument(
+        current.session.project.path,
+        path
+      )
+      setState((value) =>
+        value.status !== "workspace" ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path ||
+        value.session.documentState.saveState.status !== "saved"
+          ? value
+          : {
+              ...value,
+              session: { ...value.session, documentState },
+            }
+      )
+    } catch {
+      // The current editor remains intact when a post-operation refresh is unavailable.
+    }
+  }, [])
+
   const returnHome = useCallback(async () => {
+    if (!(await saveActionRef.current())) return
     try {
       const startup = await loadStartupState()
       setState({
@@ -685,14 +1219,20 @@ export function useProjectSession() {
     closeFiles,
     createProjectEntry,
     deleteProjectEntry,
+    editDocument,
     forgetProject,
     openProjectAtPath,
     pinFile,
     previewFile,
+    refreshActiveDocument,
     renameProjectEntry,
     resizeSidebar,
+    resolveExternalChange,
+    resolveRecovery,
     returnHome,
     selectRoot,
+    setEditorFontSize,
+    saveActiveDocument,
     state,
   }
 }

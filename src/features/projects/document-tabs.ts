@@ -14,6 +14,14 @@ export function openDocument(
   return { ...workspace, pinnedFiles, selectedFile: path }
 }
 
+/** A selected document does not need saving again merely because it was reselected. */
+export function shouldSaveBeforeOpening(
+  workspace: WorkspaceState,
+  path: string
+): boolean {
+  return workspace.selectedFile !== path
+}
+
 /** Removes a tab and selects the most recently pinned document when needed. */
 export function closeDocument(
   workspace: WorkspaceState,

@@ -6,6 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use atomic_write_file::AtomicWriteFile;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
@@ -49,6 +50,8 @@ pub struct WorkspaceState {
     pub selected_root: Option<String>,
     pub selected_file: Option<String>,
     pub sidebar_width: u16,
+    #[serde(default = "default_editor_font_size")]
+    pub editor_font_size: u8,
 }
 
 #[derive(Debug, Serialize)]
@@ -145,6 +148,7 @@ pub fn save_workspace_state(
         sidebar_width: workspace
             .sidebar_width
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH),
+        editor_font_size: workspace.editor_font_size.clamp(11, 24),
         ..workspace
     });
     write_state(&path, &state)
@@ -176,6 +180,7 @@ pub fn record_project_opened(
         selected_root: None,
         selected_file: None,
         sidebar_width: DEFAULT_SIDEBAR_WIDTH,
+        editor_font_size: default_editor_font_size(),
     });
     write_state(&path, &state)
 }
@@ -222,6 +227,7 @@ fn startup_state_from_persisted(
         workspace.sidebar_width = workspace
             .sidebar_width
             .clamp(MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH);
+        workspace.editor_font_size = workspace.editor_font_size.clamp(11, 24);
         Some(workspace)
     });
 
@@ -272,12 +278,10 @@ fn read_state(path: &Path) -> Result<PersistedState, PersistenceError> {
 fn write_state(path: &Path, state: &PersistedState) -> Result<(), PersistenceError> {
     let parent = path.parent().ok_or_else(unavailable)?;
     fs::create_dir_all(parent).map_err(|_| unavailable())?;
-    let temporary_path = path.with_extension("json.tmp");
     let encoded = serde_json::to_vec_pretty(state).map_err(|_| unavailable())?;
-    let mut temporary = fs::File::create(&temporary_path).map_err(|_| unavailable())?;
+    let mut temporary = AtomicWriteFile::open(path).map_err(|_| unavailable())?;
     temporary.write_all(&encoded).map_err(|_| unavailable())?;
-    temporary.sync_all().map_err(|_| unavailable())?;
-    fs::rename(&temporary_path, path).map_err(|_| unavailable())
+    temporary.commit().map_err(|_| unavailable())
 }
 
 fn validate_optional_file(root: &Path, relative: Option<&str>) -> Result<(), PersistenceError> {
@@ -311,6 +315,10 @@ fn now_millis() -> u64 {
         .map_or(0, |duration| {
             u64::try_from(duration.as_millis()).unwrap_or(u64::MAX)
         })
+}
+
+const fn default_editor_font_size() -> u8 {
+    14
 }
 
 fn unavailable() -> PersistenceError {
@@ -357,6 +365,7 @@ mod tests {
                     selected_root: Some("main.tex".to_owned()),
                     selected_file: Some("missing.tex".to_owned()),
                     sidebar_width: 999,
+                    editor_font_size: 14,
                 }),
             },
         )?;

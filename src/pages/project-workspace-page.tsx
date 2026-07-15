@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { LockKeyhole } from "lucide-react"
 
 import {
@@ -12,6 +12,9 @@ import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
 import { SourceTabs } from "@/features/projects/source-tabs"
 import { WorkspaceToolbar } from "@/features/projects/workspace-toolbar"
+import { WorkspaceCommandPalette } from "@/features/commands/workspace-command-palette"
+import { ProjectSearchPanel } from "@/features/search/project-search-panel"
+import type { EditorTarget } from "@/features/editor/latex-editor"
 
 export function ProjectWorkspacePage({
   feedback,
@@ -22,9 +25,15 @@ export function ProjectWorkspacePage({
   onCloseFiles,
   onCreateProjectEntry,
   onDeleteProjectEntry,
+  onEditDocument,
   onPinFile,
   onPreviewFile,
   onRenameProjectEntry,
+  onResolveExternalChange,
+  onResolveRecovery,
+  onProjectFilesChanged,
+  onSaveDocument,
+  onSetEditorFontSize,
   onSelectRoot,
   session,
 }: {
@@ -40,14 +49,25 @@ export function ProjectWorkspacePage({
     directory: boolean
   ) => Promise<void>
   onDeleteProjectEntry: (path: string) => Promise<void>
+  onEditDocument: (path: string, content: string) => void
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
   onRenameProjectEntry: (path: string, name: string) => Promise<void>
+  onResolveExternalChange: (keepMine: boolean) => void
+  onResolveRecovery: (restore: boolean) => void
+  onProjectFilesChanged: () => void
+  onSaveDocument: () => void
+  onSetEditorFontSize: (fontSize: number) => void
   onSelectRoot: (path: string) => void
   session: ProjectSession
 }) {
   const selectedFile = session.workspace.selectedFile
   const sidebarWidth = useRef(session.workspace.sidebarWidth)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [target, setTarget] = useState<
+    (EditorTarget & { path: string }) | null
+  >(null)
   const activity =
     feedback.status === "choosing"
       ? "Waiting for a folder…"
@@ -58,13 +78,55 @@ export function ProjectWorkspacePage({
           : feedback.status === "error"
             ? feedback.error.message
             : null
+  const saveActivity =
+    session.documentState.status !== "ready"
+      ? null
+      : session.documentState.saveState.status === "saved"
+        ? "Saved"
+        : session.documentState.saveState.status === "dirty"
+          ? "Unsaved changes"
+          : session.documentState.saveState.status === "saving"
+            ? "Saving…"
+            : session.documentState.saveState.status === "error"
+              ? "Save failed · recovery available"
+              : session.documentState.saveState.status === "conflict"
+                ? "External change needs review"
+                : "Recovery draft needs review"
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const modifier = event.ctrlKey || event.metaKey
+      if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
+        event.preventDefault()
+        setCommandPaletteOpen(true)
+      } else if (
+        modifier &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "f"
+      ) {
+        event.preventDefault()
+        setSearchOpen(true)
+      } else if (modifier && (event.key === "+" || event.key === "=")) {
+        event.preventDefault()
+        onSetEditorFontSize(session.workspace.editorFontSize + 1)
+      } else if (modifier && event.key === "-") {
+        event.preventDefault()
+        onSetEditorFontSize(session.workspace.editorFontSize - 1)
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [onSetEditorFontSize, session.workspace.editorFontSize])
 
   return (
     <main className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace">
       <WorkspaceToolbar
         feedback={feedback}
         onOpenProject={onOpenProject}
+        onOpenCommands={() => setCommandPaletteOpen(true)}
+        onOpenSearch={() => setSearchOpen(true)}
         onReturnHome={onReturnHome}
+        onSave={onSaveDocument}
         session={session}
       />
 
@@ -87,18 +149,34 @@ export function ProjectWorkspacePage({
             sidebarWidth.current = size.inPixels
           }}
         >
-          <ProjectSidebar
-            onPinFile={onPinFile}
-            onPreviewFile={onPreviewFile}
-            onCreate={onCreateProjectEntry}
-            onRename={onRenameProjectEntry}
-            onDelete={onDeleteProjectEntry}
-            documentState={session.documentState}
-            rootFiles={session.project.rootCandidates.map((candidate) => candidate.path)}
-            selectedFile={selectedFile}
-            selectedRoot={session.workspace.selectedRoot}
-            tree={session.project.tree}
-          />
+          {searchOpen ? (
+            <ProjectSearchPanel
+              onClose={() => setSearchOpen(false)}
+              onFilesChanged={onProjectFilesChanged}
+              onNavigate={(path, line, column) => {
+                const token = Date.now()
+                setTarget({ path, line, column, token })
+                onPinFile(path)
+              }}
+              projectPath={session.project.path}
+            />
+          ) : (
+            <ProjectSidebar
+              onPinFile={onPinFile}
+              onPreviewFile={onPreviewFile}
+              onCreate={onCreateProjectEntry}
+              onRename={onRenameProjectEntry}
+              projectPath={session.project.path}
+              onDelete={onDeleteProjectEntry}
+              documentState={session.documentState}
+              rootFiles={session.project.rootCandidates.map(
+                (candidate) => candidate.path
+              )}
+              selectedFile={selectedFile}
+              selectedRoot={session.workspace.selectedRoot}
+              tree={session.project.tree}
+            />
+          )}
         </ResizablePanel>
         <ResizableHandle
           aria-label="Resize project files sidebar"
@@ -111,6 +189,7 @@ export function ProjectWorkspacePage({
             aria-label="Source preview"
           >
             <SourceTabs
+              documentState={session.documentState}
               onClose={onCloseFile}
               onCloseMany={onCloseFiles}
               onPin={onPinFile}
@@ -127,7 +206,18 @@ export function ProjectWorkspacePage({
                 {session.notice}
               </p>
             ) : null}
-            <SourceViewer state={session.documentState} />
+            <SourceViewer
+              fontSize={session.workspace.editorFontSize}
+              onChange={onEditDocument}
+              onResolveConflict={onResolveExternalChange}
+              onResolveRecovery={onResolveRecovery}
+              onSave={onSaveDocument}
+              retainedPaths={session.workspace.pinnedFiles}
+              state={session.documentState}
+              target={
+                target !== null && target.path === selectedFile ? target : null
+              }
+            />
           </section>
         </ResizablePanel>
       </ResizablePanelGroup>
@@ -142,6 +232,11 @@ export function ProjectWorkspacePage({
             {activity}
           </span>
         ) : null}
+        {saveActivity !== null ? (
+          <span className="truncate" role="status">
+            {saveActivity}
+          </span>
+        ) : null}
         <span className="ml-auto min-w-0">
           <RootFileControl
             onSelectRoot={onSelectRoot}
@@ -150,6 +245,21 @@ export function ProjectWorkspacePage({
           />
         </span>
       </footer>
+      <WorkspaceCommandPalette
+        onOpenChange={setCommandPaletteOpen}
+        onOpenFile={onPinFile}
+        onOpenProject={onOpenProject}
+        onSave={onSaveDocument}
+        onSearch={() => setSearchOpen(true)}
+        onZoomIn={() =>
+          onSetEditorFontSize(session.workspace.editorFontSize + 1)
+        }
+        onZoomOut={() =>
+          onSetEditorFontSize(session.workspace.editorFontSize - 1)
+        }
+        open={commandPaletteOpen}
+        tree={session.project.tree}
+      />
     </main>
   )
 }

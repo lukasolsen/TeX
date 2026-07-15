@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import type { WorkspaceState } from "@/domain/project"
-import { closeDocument, openDocument } from "@/features/projects/document-tabs"
+import {
+  closeDocument,
+  openDocument,
+  shouldSaveBeforeOpening,
+} from "@/features/projects/document-tabs"
 
 const workspace: WorkspaceState = {
   projectPath: "/projects/thesis",
@@ -9,6 +13,7 @@ const workspace: WorkspaceState = {
   selectedFile: "main.tex",
   selectedRoot: "main.tex",
   sidebarWidth: 288,
+  editorFontSize: 14,
 }
 
 describe("document tabs", () => {
@@ -31,5 +36,10 @@ describe("document tabs", () => {
       pinnedFiles: ["main.tex"],
       selectedFile: "main.tex",
     })
+  })
+
+  it("does not require a save when the selected file is reselected", () => {
+    expect(shouldSaveBeforeOpening(workspace, "main.tex")).toBe(false)
+    expect(shouldSaveBeforeOpening(workspace, "chapters/intro.tex")).toBe(true)
   })
 })

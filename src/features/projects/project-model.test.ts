@@ -74,8 +74,16 @@ describe("project model", () => {
       )
     ).toEqual([
       { command: "input", kind: "source", path: "chapters/sections/intro.tex" },
-      { command: "addbibresource", kind: "bibliography", path: "chapters/references.bib" },
-      { command: "includegraphics", kind: "asset", path: "chapters/figures/result.pdf" },
+      {
+        command: "addbibresource",
+        kind: "bibliography",
+        path: "chapters/references.bib",
+      },
+      {
+        command: "includegraphics",
+        kind: "asset",
+        path: "chapters/figures/result.pdf",
+      },
     ])
   })
 
