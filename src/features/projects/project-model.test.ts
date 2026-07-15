@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest"
+
+import type { ProjectSummary } from "@/domain/project"
+import {
+  formatLastOpened,
+  isReadableSource,
+  preferredRoot,
+  preferredSourceFile,
+  projectTreeNodes,
+  treeContainsPath,
+} from "@/features/projects/project-model"
+
+const project: ProjectSummary = {
+  name: "Thesis",
+  path: "/projects/thesis",
+  tree: {
+    name: "thesis",
+    kind: "directory",
+    children: [
+      {
+        name: "chapters",
+        kind: "directory",
+        children: [{ name: "intro.tex", kind: "file", children: [] }],
+      },
+      { name: "main.tex", kind: "file", children: [] },
+    ],
+  },
+  rootCandidates: [{ path: "main.tex", evidence: ["documentClass"] }],
+  rootDetectionNote: null,
+  persistenceNote: null,
+}
+
+describe("project model", () => {
+  it("builds stable project-relative tree paths", () => {
+    const rootNodes = projectTreeNodes(project.tree)
+    expect(rootNodes.map((entry) => entry.path)).toEqual([
+      "chapters",
+      "main.tex",
+    ])
+    expect(projectTreeNodes(rootNodes[0], rootNodes[0].path)[0].path).toBe(
+      "chapters/intro.tex"
+    )
+  })
+
+  it("restores only roots and source files that still exist", () => {
+    expect(preferredRoot(project, "missing.tex")).toBe("main.tex")
+    expect(preferredRoot(project, "chapters/intro.tex")).toBe(
+      "chapters/intro.tex"
+    )
+    expect(preferredSourceFile(project, "chapters/intro.tex", "main.tex")).toBe(
+      "chapters/intro.tex"
+    )
+    expect(preferredSourceFile(project, "missing.tex", "main.tex")).toBe(
+      "main.tex"
+    )
+    expect(treeContainsPath(project.tree, "chapters/intro.tex")).toBe(true)
+    expect(treeContainsPath(project.tree, "chapters")).toBe(false)
+  })
+
+  it("keeps preview support explicit and case-insensitive", () => {
+    expect(isReadableSource("sources/MAIN.TEX")).toBe(true)
+    expect(isReadableSource("figures/chart.pdf")).toBe(false)
+  })
+
+  it("formats recent timestamps without future negative durations", () => {
+    const now = Date.UTC(2026, 6, 15, 12)
+    expect(formatLastOpened(now + 10_000, now)).toBe("Opened just now")
+    expect(formatLastOpened(now - 15 * 60_000, now)).toBe("Opened 15m ago")
+    expect(formatLastOpened(now - 2 * 60 * 60_000, now)).toBe("Opened 2h ago")
+  })
+})
