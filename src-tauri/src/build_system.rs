@@ -15,6 +15,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
+use crate::project_config::{
+    validate_configuration, BibliographyTool, EnvironmentSetting, ProjectBuildConfiguration,
+};
 use crate::source_read::resolve_source_path;
 
 const BUILD_EVENT: &str = "tex://build-event";
@@ -37,6 +40,8 @@ pub struct BuildRequest {
     project_path: String,
     root_file: String,
     engine: BuildEngine,
+    #[serde(default)]
+    configuration: Option<ProjectBuildConfiguration>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -47,6 +52,10 @@ pub struct BuildInvocation {
     working_directory: String,
     root_file: String,
     engine: BuildEngine,
+    environment: Vec<EnvironmentSetting>,
+    bibliography_tool: BibliographyTool,
+    custom: bool,
+    tool_version: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -189,7 +198,8 @@ pub fn start_build(
     app: AppHandle,
     controller: State<'_, BuildController>,
 ) -> Result<BuildRun, BuildError> {
-    let validated = validate_build(request)?;
+    let mut validated = validate_build(request)?;
+    validated.invocation.tool_version = tool_version(&validated.invocation);
     let mut command = command_for(&validated.invocation);
     let mut child = command.spawn().map_err(|_| BuildError {
         code: "build-tool-unavailable",
@@ -292,36 +302,68 @@ fn validate_build_with_availability(
     executable_is_available: impl Fn(&str) -> bool,
 ) -> Result<ValidatedBuild, BuildError> {
     let project_root = canonical_project_root(Path::new(&request.project_path))?;
-    let relative_root = Path::new(&request.root_file);
+    let configuration = request.configuration.unwrap_or_default();
+    validate_configuration(&project_root, &configuration).map_err(|error| BuildError {
+        code: error.code,
+        message: error.message,
+    })?;
+    let root_file = configuration.root_file.clone().unwrap_or(request.root_file);
+    let relative_root = Path::new(&root_file);
     if relative_root.extension().and_then(|value| value.to_str()) != Some("tex") {
         return Err(invalid_root());
     }
     resolve_source_path(&project_root, relative_root).map_err(|_| invalid_root())?;
 
-    let (executable, mut arguments) = match request.engine {
-        BuildEngine::LatexmkPdf => ("latexmk", vec!["-pdf"]),
-        BuildEngine::PdfLatex => ("pdflatex", Vec::new()),
-        BuildEngine::XeLatex => ("xelatex", Vec::new()),
-        BuildEngine::LuaLatex => ("lualatex", Vec::new()),
+    let (executable, arguments, custom) = if let Some(command) = &configuration.custom_command {
+        let executable = Path::new(&command.executable)
+            .canonicalize()
+            .map_err(|_| unavailable())?;
+        (
+            executable.to_string_lossy().into_owned(),
+            command.arguments.clone(),
+            true,
+        )
+    } else {
+        let (executable_name, mut arguments) = match request.engine {
+            BuildEngine::LatexmkPdf => ("latexmk", vec!["-pdf"]),
+            BuildEngine::PdfLatex => ("pdflatex", Vec::new()),
+            BuildEngine::XeLatex => ("xelatex", Vec::new()),
+            BuildEngine::LuaLatex => ("lualatex", Vec::new()),
+        };
+        if !executable_is_available(executable_name) {
+            return Err(BuildError {
+                code: "build-tool-unavailable",
+                message:
+                    "The selected LaTeX build tool is not installed or is unavailable on PATH.",
+            });
+        }
+        let executable =
+            resolve_executable(executable_name).unwrap_or_else(|| PathBuf::from(executable_name));
+        arguments.extend(["-interaction=nonstopmode", "-file-line-error", "-synctex=1"]);
+        let mut arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
+        if let Some(output) = &configuration.output_directory {
+            let argument = match request.engine {
+                BuildEngine::LatexmkPdf => format!("-outdir={output}"),
+                _ => format!("-output-directory={output}"),
+            };
+            arguments.push(argument);
+        }
+        arguments.push(root_file.clone());
+        (executable.to_string_lossy().into_owned(), arguments, false)
     };
-    if !executable_is_available(executable) {
-        return Err(BuildError {
-            code: "build-tool-unavailable",
-            message: "The selected LaTeX build tool is not installed or is unavailable on PATH.",
-        });
-    }
-    arguments.extend(["-interaction=nonstopmode", "-file-line-error", "-synctex=1"]);
-    let mut arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
-    arguments.push(request.root_file.clone());
 
     Ok(ValidatedBuild {
         project_root: project_root.clone(),
         invocation: BuildInvocation {
-            executable: executable.to_owned(),
+            executable,
             arguments,
             working_directory: project_root.to_string_lossy().into_owned(),
-            root_file: request.root_file,
+            root_file,
             engine: request.engine,
+            environment: configuration.environment,
+            bibliography_tool: configuration.bibliography_tool,
+            custom,
+            tool_version: None,
         },
     })
 }
@@ -373,11 +415,21 @@ impl BuildEngine {
 }
 
 fn executable_available(executable: &str) -> bool {
-    env::var_os("PATH")
-        .map(|path| executable_available_in(executable, env::split_paths(&path)))
-        .unwrap_or(false)
+    resolve_executable(executable).is_some()
 }
 
+fn resolve_executable(executable: &str) -> Option<PathBuf> {
+    env::var_os("PATH").and_then(|path| {
+        env::split_paths(&path).find_map(|directory| {
+            executable_candidates(&directory, executable)
+                .into_iter()
+                .find(|candidate| is_executable_file(candidate))
+                .and_then(|candidate| candidate.canonicalize().ok())
+        })
+    })
+}
+
+#[cfg(test)]
 fn executable_available_in(executable: &str, directories: impl Iterator<Item = PathBuf>) -> bool {
     directories.into_iter().any(|directory| {
         executable_candidates(&directory, executable)
@@ -430,7 +482,28 @@ fn command_for(invocation: &BuildInvocation) -> Command {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for setting in &invocation.environment {
+        command.env(&setting.name, &setting.value);
+    }
     command
+}
+
+fn tool_version(invocation: &BuildInvocation) -> Option<String> {
+    if invocation.custom {
+        return None;
+    }
+    let output = Command::new(&invocation.executable)
+        .arg("--version")
+        .output()
+        .ok()?;
+    let text = if output.stdout.is_empty() {
+        String::from_utf8_lossy(&output.stderr)
+    } else {
+        String::from_utf8_lossy(&output.stdout)
+    };
+    text.lines()
+        .next()
+        .map(|line| line.chars().take(240).collect())
 }
 
 fn supervise_build(
@@ -690,6 +763,7 @@ mod tests {
         validate_build_with_availability, BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream,
         BuildRequest, BuildStatus, DiagnosticSeverity,
     };
+    use crate::project_config::{CustomCommand, ProjectBuildConfiguration};
 
     fn fixture_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/root-detection")
@@ -703,12 +777,13 @@ mod tests {
                 project_path: root.to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
+                configuration: None,
             },
             |_| true,
         )
         .map_err(|_| "validation failed")?;
 
-        assert_eq!(validated.invocation.executable, "latexmk");
+        assert!(Path::new(&validated.invocation.executable).is_absolute());
         assert_eq!(
             validated.invocation.arguments,
             [
@@ -723,6 +798,42 @@ mod tests {
     }
 
     #[test]
+    fn preserves_custom_executable_and_argument_boundaries(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let executable = std::env::current_exe()?;
+        let configuration = ProjectBuildConfiguration {
+            root_file: Some("main.tex".to_owned()),
+            custom_command: Some(CustomCommand {
+                executable: executable.to_string_lossy().into_owned(),
+                arguments: vec!["argument with spaces".to_owned(), "main.tex".to_owned()],
+            }),
+            custom_command_consent: true,
+            ..ProjectBuildConfiguration::default()
+        };
+        let validated = validate_build_with_availability(
+            BuildRequest {
+                project_path: fixture_root().to_string_lossy().into_owned(),
+                root_file: "main.tex".to_owned(),
+                engine: BuildEngine::LatexmkPdf,
+                configuration: Some(configuration),
+            },
+            |_| true,
+        )
+        .map_err(|_| "validation failed")?;
+
+        assert_eq!(
+            validated.invocation.executable,
+            executable.to_string_lossy()
+        );
+        assert_eq!(
+            validated.invocation.arguments,
+            ["argument with spaces", "main.tex"]
+        );
+        assert!(validated.invocation.custom);
+        Ok(())
+    }
+
+    #[test]
     fn rejects_roots_outside_the_project() -> Result<(), Box<dyn std::error::Error>> {
         let root = fixture_root();
         let parent = root.parent().ok_or("fixture has no parent")?;
@@ -732,6 +843,7 @@ mod tests {
             project_path: root.to_string_lossy().into_owned(),
             root_file: "../outside-build.tex".to_owned(),
             engine: BuildEngine::PdfLatex,
+            configuration: None,
         });
         fs::remove_file(outside)?;
 

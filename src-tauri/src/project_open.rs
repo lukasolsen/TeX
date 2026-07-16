@@ -8,6 +8,7 @@ use serde::Serialize;
 use tauri::AppHandle;
 
 use crate::persistence;
+use crate::project_config::load_configuration_for_project;
 use crate::root_detection::{self, RootEvidence};
 
 const MAX_TREE_DEPTH: usize = 12;
@@ -52,6 +53,7 @@ pub struct RootCandidate {
 pub enum RootEvidenceKind {
     DocumentClass,
     MagicComment,
+    Configured,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,6 +86,22 @@ pub enum ProjectOpenErrorCode {
 pub fn open_project(path: String, app: AppHandle) -> Result<ProjectSummary, ProjectOpenError> {
     let mut project = open_project_path(Path::new(&path))?;
     let project_path = Path::new(&project.path);
+    if let Ok(configuration) = load_configuration_for_project(&app, project_path) {
+        if let Some(configured_root) = configuration.root_file {
+            if let Some(candidate) = project
+                .root_candidates
+                .iter_mut()
+                .find(|candidate| candidate.path == configured_root)
+            {
+                candidate.evidence.push(RootEvidenceKind::Configured);
+            } else {
+                project.root_candidates.push(RootCandidate {
+                    path: configured_root,
+                    evidence: vec![RootEvidenceKind::Configured],
+                });
+            }
+        }
+    }
     if persistence::record_project_opened(&app, &project.name, project_path).is_err() {
         project.persistence_note = Some(
             "The project opened, but TeX could not remember this workspace. Your source files were not changed."
