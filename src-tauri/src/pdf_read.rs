@@ -109,7 +109,10 @@ fn unavailable() -> PdfReadError {
 
 #[cfg(test)]
 mod tests {
-    use std::path::{Path, PathBuf};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use super::read_pdf;
 
@@ -129,5 +132,40 @@ mod tests {
     fn rejects_non_pdf_and_escaping_paths() {
         assert!(read_pdf(&fixture(), Path::new("main.tex")).is_err());
         assert!(read_pdf(&fixture(), Path::new("../main.pdf")).is_err());
+    }
+
+    #[test]
+    fn retains_last_good_bytes_across_repeated_read_failures(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let root = fixture();
+        assert!(root.join("main.synctex.gz").is_file());
+        assert!(root.join("sections/introduction.tex").is_file());
+        let mut last_good = Vec::new();
+        for _ in 0..100 {
+            let candidate = read_pdf(&root, Path::new("main.pdf")).map_err(|_| "read failed")?;
+            last_good = candidate;
+            assert!(last_good.starts_with(b"%PDF-"));
+        }
+        let expected = last_good.clone();
+        for _ in 0..100 {
+            if let Ok(candidate) = read_pdf(&root, Path::new("removed.pdf")) {
+                last_good = candidate;
+            }
+            assert_eq!(last_good, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_oversized_pdf_before_reading_bytes() -> Result<(), Box<dyn std::error::Error>> {
+        let root = std::env::temp_dir().join(format!("tex-oversized-pdf-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root)?;
+        let path = root.join("large.pdf");
+        let file = fs::File::create(&path)?;
+        file.set_len(super::MAX_PDF_BYTES + 1)?;
+        assert!(read_pdf(&root, Path::new("large.pdf")).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
     }
 }
