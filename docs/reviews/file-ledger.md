@@ -2,7 +2,7 @@
 
 Ledger revision: 1  
 Baseline commit: `eb95280770d2a7b15703f4ebbd3af6ca7e4af767`  
-Inventory state: complete; Waves A–F reviewed
+Inventory state: complete; Waves A–G reviewed
 
 Every maintained file has one primary review wave. `Inventoried` means the
 file's existence, broad owner, and review assignment are recorded; it does not
@@ -26,9 +26,9 @@ artifact evidence.
 | D | Domain and IPC contracts | 16 | Reviewed |
 | E | React orchestration | 13 | Reviewed |
 | F | Editor, search, project tree, and UI | 28 | Reviewed |
-| G | PDF and synchronization UI | 3 | Inventoried |
+| G | PDF and synchronization UI | 3 | Reviewed |
 | H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
-| **Total** | | **253 ledger rows / 252 maintained** | **Waves A–F reviewed** |
+| **Total** | | **253 ledger rows / 252 maintained** | **Waves A–G reviewed** |
 
 ## File register
 
@@ -161,9 +161,9 @@ artifact evidence.
 | `src/features/editor/latex-hover.ts` | F | Reviewed | TEX-F-005; safe DOM construction and approved project reads |
 | `src/features/editor/latex-semantic-highlighting.test.ts` | F | Reviewed | Semantic argument and missing-file regressions |
 | `src/features/editor/latex-semantic-highlighting.ts` | F | Reviewed | Viewport-owned decoration lifecycle and readonly context |
-| `src/features/pdf/pdf-viewer-model.test.ts` | G | Inventoried | — |
-| `src/features/pdf/pdf-viewer-model.ts` | G | Inventoried | — |
-| `src/features/pdf/pdf-viewer.tsx` | G | Inventoried | — |
+| `src/features/pdf/pdf-viewer-model.test.ts` | G | Reviewed | TEX-G-001, TEX-G-003, TEX-G-004; replacement, bounds, outline, rotation, and render-window regressions |
+| `src/features/pdf/pdf-viewer-model.ts` | G | Reviewed | TEX-G-001, TEX-G-003, TEX-G-004; last-good state and explicit PDF resource budgets |
+| `src/features/pdf/pdf-viewer.tsx` | G | Reviewed | TEX-G-001–TEX-G-005, TEX-H-002; task disposal, bounded rendering/search, context and SyncTeX ownership |
 | `src/features/projects/document-outline-panel.tsx` | F | Reviewed | Memoized outline derivation and semantic navigation |
 | `src/features/projects/document-outline.test.ts` | F | Reviewed | Section, comment, formatting, and escaped-percent regressions |
 | `src/features/projects/document-outline.ts` | F | Reviewed | Bounded line-oriented structural extraction |
