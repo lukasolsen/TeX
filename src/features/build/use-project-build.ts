@@ -182,7 +182,6 @@ export function useProjectBuild({
       projectPath,
       rootFile: effectiveRoot,
       engine,
-      configuration: configurationState.configuration,
     })
       .then((invocation) => {
         if (active) dispatch({ type: "previewReady", invocation })
@@ -214,7 +213,6 @@ export function useProjectBuild({
         projectPath,
         rootFile: effectiveRoot,
         engine,
-        configuration: configurationState.configuration,
       }
       const run = await startBuild(request)
       dispatch({ type: "runStarted", run })

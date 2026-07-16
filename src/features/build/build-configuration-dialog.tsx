@@ -72,8 +72,6 @@ export function BuildConfigurationDialog({
         executable.trim() === "" && argumentsList.length === 0
           ? null
           : { executable, arguments: argumentsList },
-      customCommandConsent: false,
-      shellEscapeConsent: false,
     }))
   }
 
@@ -230,16 +228,10 @@ export function BuildConfigurationDialog({
                   toolVersion: null,
                 })}
               </p>
-              <Consent
-                checked={draft.customCommandConsent}
-                label="I reviewed this exact executable and argument list and allow TeX to run it for this project."
-                onChange={(checked) =>
-                  setDraft((current) => ({
-                    ...current,
-                    customCommandConsent: checked,
-                  }))
-                }
-              />
+              <p className="mt-3 text-xs text-muted-foreground">
+                Saving a new or changed command opens a native confirmation
+                showing the exact executable and arguments.
+              </p>
             </>
           ) : null}
           {usesShellEscape ? (
@@ -247,17 +239,8 @@ export function BuildConfigurationDialog({
               <ShieldAlert />
               <AlertTitle>Shell escape expands project trust</AlertTitle>
               <AlertDescription>
-                LaTeX may run programs requested by project source.
-                <Consent
-                  checked={draft.shellEscapeConsent}
-                  label="I separately allow shell escape for this project."
-                  onChange={(checked) =>
-                    setDraft((current) => ({
-                      ...current,
-                      shellEscapeConsent: checked,
-                    }))
-                  }
-                />
+                LaTeX may run programs requested by project source. Saving
+                opens a separate native shell-escape confirmation.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -285,28 +268,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
     <label className="grid gap-1.5 text-sm font-medium">
       {label}
       {children}
-    </label>
-  )
-}
-
-function Consent({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean
-  label: string
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <label className="mt-3 flex items-start gap-2 text-xs font-normal">
-      <input
-        checked={checked}
-        className="mt-0.5 size-4"
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
-      <span>{label}</span>
     </label>
   )
 }

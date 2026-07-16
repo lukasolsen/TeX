@@ -18,7 +18,8 @@ use tauri::{AppHandle, Emitter, State};
 use crate::{
     project_access::ProjectAccess,
     project_config::{
-        validate_configuration, BibliographyTool, EnvironmentSetting, ProjectBuildConfiguration,
+        load_configuration_for_project, validate_configuration, BibliographyTool,
+        EnvironmentSetting, ProjectBuildConfiguration,
     },
     source_read::resolve_source_path,
 };
@@ -43,8 +44,6 @@ pub struct BuildRequest {
     project_path: String,
     root_file: String,
     engine: BuildEngine,
-    #[serde(default)]
-    configuration: Option<ProjectBuildConfiguration>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -183,10 +182,12 @@ struct ValidatedBuild {
 #[tauri::command]
 pub fn preview_build(
     request: BuildRequest,
+    app: AppHandle,
     access: State<'_, ProjectAccess>,
 ) -> Result<BuildInvocation, BuildError> {
     let request = authorize_request(request, &access)?;
-    Ok(validate_build(request)?.invocation)
+    let configuration = configuration_for_request(&app, &request)?;
+    Ok(validate_build(request, configuration)?.invocation)
 }
 
 /// Reports installed build tools without executing project code or compiler processes.
@@ -207,7 +208,8 @@ pub fn start_build(
     access: State<'_, ProjectAccess>,
 ) -> Result<BuildRun, BuildError> {
     let request = authorize_request(request, &access)?;
-    let mut validated = validate_build(request)?;
+    let configuration = configuration_for_request(&app, &request)?;
+    let mut validated = validate_build(request, configuration)?;
     validated.invocation.tool_version = tool_version(&validated.invocation);
     let mut command = command_for(&validated.invocation);
     let mut child = command.spawn().map_err(|_| BuildError {
@@ -316,16 +318,31 @@ fn authorize_request(
     Ok(request)
 }
 
-fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {
-    validate_build_with_resolver(request, resolve_executable)
+fn configuration_for_request(
+    app: &AppHandle,
+    request: &BuildRequest,
+) -> Result<ProjectBuildConfiguration, BuildError> {
+    load_configuration_for_project(app, Path::new(&request.project_path)).map_err(|error| {
+        BuildError {
+            code: error.code,
+            message: error.message,
+        }
+    })
+}
+
+fn validate_build(
+    request: BuildRequest,
+    configuration: ProjectBuildConfiguration,
+) -> Result<ValidatedBuild, BuildError> {
+    validate_build_with_resolver(request, configuration, resolve_executable)
 }
 
 fn validate_build_with_resolver(
     request: BuildRequest,
+    configuration: ProjectBuildConfiguration,
     executable_resolver: impl Fn(&str) -> Option<PathBuf>,
 ) -> Result<ValidatedBuild, BuildError> {
     let project_root = canonical_project_root(Path::new(&request.project_path))?;
-    let configuration = request.configuration.unwrap_or_default();
     validate_configuration(&project_root, &configuration).map_err(|error| BuildError {
         code: error.code,
         message: error.message,
@@ -820,8 +837,8 @@ mod tests {
                 project_path: root.to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
-                configuration: None,
             },
+            ProjectBuildConfiguration::default(),
             |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
@@ -858,8 +875,8 @@ mod tests {
                 project_path: fixture_root().to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
-                configuration: Some(configuration),
             },
+            configuration,
             |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
@@ -877,17 +894,46 @@ mod tests {
     }
 
     #[test]
+    fn ignores_frontend_supplied_build_configuration() -> Result<(), Box<dyn std::error::Error>> {
+        let request: BuildRequest = serde_json::from_value(serde_json::json!({
+            "projectPath": fixture_root().to_string_lossy(),
+            "rootFile": "main.tex",
+            "engine": "latexmkPdf",
+            "configuration": {
+                "schemaVersion": 1,
+                "customCommand": {
+                    "executable": "/tmp/forged-command",
+                    "arguments": []
+                },
+                "customCommandConsent": true,
+                "shellEscapeConsent": true
+            }
+        }))?;
+        let validated =
+            validate_build_with_resolver(request, ProjectBuildConfiguration::default(), |_| {
+                Some(std::path::PathBuf::from("/usr/bin/latexmk"))
+            })
+            .map_err(|_| "validation failed")?;
+
+        assert!(!validated.invocation.custom);
+        assert_eq!(validated.invocation.executable, "/usr/bin/latexmk");
+        Ok(())
+    }
+
+    #[test]
     fn rejects_roots_outside_the_project() -> Result<(), Box<dyn std::error::Error>> {
         let root = fixture_root();
         let parent = root.parent().ok_or("fixture has no parent")?;
         let outside = parent.join("outside-build.tex");
         fs::write(&outside, "\\documentclass{article}")?;
-        let result = validate_build(BuildRequest {
-            project_path: root.to_string_lossy().into_owned(),
-            root_file: "../outside-build.tex".to_owned(),
-            engine: BuildEngine::PdfLatex,
-            configuration: None,
-        });
+        let result = validate_build(
+            BuildRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                root_file: "../outside-build.tex".to_owned(),
+                engine: BuildEngine::PdfLatex,
+            },
+            ProjectBuildConfiguration::default(),
+        );
         fs::remove_file(outside)?;
 
         assert!(result.is_err());

@@ -34,7 +34,6 @@ export type BuildRequest = {
   projectPath: string
   rootFile: string
   engine: BuildEngine
-  configuration: ProjectBuildConfiguration
 }
 
 export type BibliographyTool = "automatic" | "biber" | "bibtex" | "none"
@@ -49,8 +48,6 @@ export type ProjectBuildConfiguration = {
   generatedDirectories: string[]
   environment: EnvironmentSetting[]
   customCommand: { executable: string; arguments: string[] } | null
-  customCommandConsent: boolean
-  shellEscapeConsent: boolean
 }
 
 export type ProjectBuildConfigurationState =
