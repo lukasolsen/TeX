@@ -1,4 +1,11 @@
-import { FolderOpen, Home, Save, Search, SquareTerminal } from "lucide-react"
+import {
+  FolderOpen,
+  Hammer,
+  Home,
+  Save,
+  Search,
+  SquareTerminal,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -9,6 +16,7 @@ export function WorkspaceToolbar({
   feedback,
   onOpenProject,
   onOpenCommands,
+  onOpenBuild,
   onOpenSearch,
   onReturnHome,
   onSave,
@@ -17,6 +25,7 @@ export function WorkspaceToolbar({
   feedback: OpenProjectFeedback
   onOpenProject: () => void
   onOpenCommands: () => void
+  onOpenBuild: () => void
   onOpenSearch: () => void
   onReturnHome: () => void
   onSave: () => void
@@ -46,6 +55,15 @@ export function WorkspaceToolbar({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium">{session.project.name}</p>
       </div>
+      <Button
+        aria-label="Show build panel"
+        onClick={onOpenBuild}
+        size="icon-sm"
+        title="Show build panel (Ctrl+Shift+B)"
+        variant="ghost"
+      >
+        <Hammer aria-hidden="true" />
+      </Button>
       <Button
         aria-label="Save source"
         disabled={saveUnavailable}

@@ -3,6 +3,52 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+const latexWorkspaceSuffixes = [
+  ".acn",
+  ".acr",
+  ".alg",
+  ".aux",
+  ".bbl",
+  ".bcf",
+  ".bib",
+  ".blg",
+  ".cls",
+  ".dvi",
+  ".fdb_latexmk",
+  ".fls",
+  ".glo",
+  ".gls",
+  ".glg",
+  ".idx",
+  ".ilg",
+  ".ind",
+  ".ist",
+  ".lof",
+  ".log",
+  ".lot",
+  ".nav",
+  ".out",
+  ".pdf",
+  ".ps",
+  ".run.xml",
+  ".snm",
+  ".sty",
+  ".synctex",
+  ".synctex(busy)",
+  ".synctex.gz",
+  ".synctex.gz(busy)",
+  ".tex",
+  ".toc",
+  ".txt",
+  ".vrb",
+  ".xdv",
+]
+
+export function isLatexWorkspaceFile(filePath: string): boolean {
+  const normalized = filePath.toLowerCase()
+  return latexWorkspaceSuffixes.some((suffix) => normalized.endsWith(suffix))
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -18,9 +64,7 @@ export default defineConfig({
     // LaTeX source must not make Vite reload the application and restart its
     // workspace-restoration flow.
     watch: {
-      ignored: [
-        "**/*.{aux,bib,cls,fdb_latexmk,fls,pdf,sty,synctex.gz,tex,txt}",
-      ],
+      ignored: isLatexWorkspaceFile,
     },
   },
 })

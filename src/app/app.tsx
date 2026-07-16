@@ -56,7 +56,7 @@ export default function App() {
           onResolveExternalChange={resolveExternalChange}
           onResolveRecovery={resolveRecovery}
           onProjectFilesChanged={refreshActiveDocument}
-          onSaveDocument={() => void saveActiveDocument()}
+          onSaveDocument={saveActiveDocument}
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}
           session={state.session}

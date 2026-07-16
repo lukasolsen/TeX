@@ -15,7 +15,7 @@ pub fn phase_zero_readiness() -> PhaseZeroReadiness {
     PhaseZeroReadiness {
         local_first: true,
         project_access_enabled: true,
-        build_execution_enabled: false,
+        build_execution_enabled: true,
     }
 }
 
@@ -24,11 +24,11 @@ mod tests {
     use super::phase_zero_readiness;
 
     #[test]
-    fn enables_project_access_without_build_execution() {
+    fn reports_local_project_and_build_capabilities() {
         let readiness = phase_zero_readiness();
 
         assert!(readiness.local_first);
         assert!(readiness.project_access_enabled);
-        assert!(!readiness.build_execution_enabled);
+        assert!(readiness.build_execution_enabled);
     }
 }

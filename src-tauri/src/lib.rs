@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod build_system;
 #[cfg(test)]
 mod latex_fixtures;
 mod persistence;
@@ -17,6 +18,7 @@ use tauri_plugin_log::{Target, TargetKind};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(build_system::BuildController::default())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -43,6 +45,11 @@ pub fn run() {
             project_search::search_project_sources,
             project_search::replace_project_sources,
             project_search::undo_project_replace,
+            build_system::preview_build,
+            build_system::get_build_profiles,
+            build_system::start_build,
+            build_system::stop_build,
+            build_system::get_build_history,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the TeX desktop application");
