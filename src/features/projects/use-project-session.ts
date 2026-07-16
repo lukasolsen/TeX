@@ -19,6 +19,7 @@ import {
   preferredPdf,
   preferredSourceFile,
 } from "@/features/projects/project-model"
+import { restoreWorkspaceGeometry } from "@/features/projects/workspace-restoration"
 import {
   chooseProjectFolder,
   createProjectEntry as createProjectEntryRequest,
@@ -95,13 +96,28 @@ function workspaceForProject(
     ),
     sidebarWidth: restored?.sidebarWidth ?? 288,
     editorFontSize: restored?.editorFontSize ?? 14,
+    pdfPaneOpen: restored?.pdfPaneOpen ?? true,
+    pdfPaneWidth: restored?.pdfPaneWidth ?? 480,
+    buildPanelOpen: restored?.buildPanelOpen ?? false,
+    buildPanelHeight: restored?.buildPanelHeight ?? 240,
+    sidebarTab: restored?.sidebarTab ?? "files",
+    buildPanelTab: restored?.buildPanelTab ?? "output",
+    buildProfile: restored?.buildProfile ?? "latexmkPdf",
     selectedPdf: preferredPdf(
       project,
       restored?.selectedPdf ?? null,
       selectedRoot
     ),
     pdfViewerStates: restored?.pdfViewerStates ?? {},
+    editorViewerStates: restored?.editorViewerStates ?? {},
   }
+}
+
+function combinedNotice(...notices: (string | null)[]): string | null {
+  const available = notices.filter(
+    (notice): notice is string => notice !== null
+  )
+  return available.length === 0 ? null : available.join(" ")
 }
 
 function renamedProjectPath(path: string, from: string, to: string): string {
@@ -119,14 +135,23 @@ async function hydrateSession(
   restored: WorkspaceState | null,
   notice: string | null
 ): Promise<ProjectSession> {
-  const workspace = workspaceForProject(project, restored)
+  const restoredGeometry = restoreWorkspaceGeometry(
+    workspaceForProject(project, restored),
+    { width: window.innerWidth, height: window.innerHeight }
+  )
+  const workspace = restoredGeometry.workspace
+  const restorationNotice = combinedNotice(
+    project.persistenceNote,
+    notice,
+    restoredGeometry.notice
+  )
   const selectedFile = workspace.selectedFile
   if (selectedFile === null) {
     return {
       project,
       workspace,
       documentState: { status: "empty" },
-      notice: project.persistenceNote ?? notice,
+      notice: restorationNotice,
     }
   }
 
@@ -136,7 +161,7 @@ async function hydrateSession(
       project,
       workspace,
       documentState,
-      notice: project.persistenceNote ?? notice,
+      notice: restorationNotice,
     }
   } catch (error: unknown) {
     return {
@@ -147,7 +172,7 @@ async function hydrateSession(
         path: selectedFile,
         error: projectErrorFromUnknown(error),
       },
-      notice: project.persistenceNote ?? notice,
+      notice: restorationNotice,
     }
   }
 }
@@ -1032,6 +1057,14 @@ export function useProjectSession() {
                 ]
               )
             ),
+            editorViewerStates: Object.fromEntries(
+              Object.entries(current.session.workspace.editorViewerStates).map(
+                ([sourcePath, viewerState]) => [
+                  renamedProjectPath(sourcePath, path, renamedPath),
+                  viewerState,
+                ]
+              )
+            ),
           }
           const documentState = current.session.documentState
           const nextDocumentState =
@@ -1110,6 +1143,11 @@ export function useProjectSession() {
           ...previous,
           pinnedFiles,
           selectedRoot,
+          editorViewerStates: Object.fromEntries(
+            Object.entries(previous.editorViewerStates).filter(
+              ([sourcePath]) => !isProjectPathWithin(sourcePath, path)
+            )
+          ),
           selectedFile: nextFile,
           selectedPdf: isProjectPathWithin(previous.selectedPdf, path)
             ? null
@@ -1233,6 +1271,52 @@ export function useProjectSession() {
     []
   )
 
+  const updateEditorViewerState = useCallback(
+    (
+      path: string,
+      viewerState: WorkspaceState["editorViewerStates"][string]
+    ) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = {
+          ...current.session.workspace,
+          editorViewerStates: {
+            ...current.session.workspace.editorViewerStates,
+            [path]: viewerState,
+          },
+        }
+        void saveWorkspaceState(workspace)
+        return { ...current, session: { ...current.session, workspace } }
+      })
+    },
+    []
+  )
+
+  const updateWorkspaceView = useCallback(
+    (
+      update: Partial<
+        Pick<
+          WorkspaceState,
+          | "pdfPaneOpen"
+          | "pdfPaneWidth"
+          | "buildPanelOpen"
+          | "buildPanelHeight"
+          | "sidebarTab"
+          | "buildPanelTab"
+          | "buildProfile"
+        >
+      >
+    ) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = { ...current.session.workspace, ...update }
+        void saveWorkspaceState(workspace)
+        return { ...current, session: { ...current.session, workspace } }
+      })
+    },
+    []
+  )
+
   const refreshActiveDocument = useCallback(async () => {
     const current = stateRef.current
     if (
@@ -1309,5 +1393,7 @@ export function useProjectSession() {
     saveActiveDocument,
     state,
     updatePdfViewerState,
+    updateEditorViewerState,
+    updateWorkspaceView,
   }
 }

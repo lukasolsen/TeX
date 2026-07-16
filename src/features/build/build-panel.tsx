@@ -42,6 +42,7 @@ import {
   type ProjectBuildState,
 } from "@/domain/build"
 import type { ProjectError } from "@/domain/project"
+import type { BuildPanelTab } from "@/domain/project"
 
 export function BuildPanel({
   dispatch,
@@ -50,9 +51,11 @@ export function BuildPanel({
   onClose,
   onNavigate,
   onStop,
+  onTabChange,
   profiles,
   setEngine,
   state,
+  tab,
 }: {
   dispatch: Dispatch<ProjectBuildAction>
   engine: BuildEngine
@@ -60,9 +63,11 @@ export function BuildPanel({
   onClose: () => void
   onNavigate: (path: string, line: number) => void
   onStop: () => void
+  onTabChange: (tab: BuildPanelTab) => void
   profiles: BuildProfilesState
   setEngine: (engine: BuildEngine) => void
   state: ProjectBuildState
+  tab: BuildPanelTab
 }) {
   const run = selectedBuildRun(state)
   const running = state.runs.some((item) => item.status === "running")
@@ -149,7 +154,13 @@ export function BuildPanel({
         <BuildCommand state={state} />
         <SelectedRunMetadata run={run} />
         {issue !== null ? <BuildIssue error={issue} /> : null}
-        <Tabs className="min-h-0 flex-1 gap-1" defaultValue="output">
+        <Tabs
+          className="min-h-0 flex-1 gap-1"
+          onValueChange={(value) => {
+            if (value === "output" || value === "problems") onTabChange(value)
+          }}
+          value={tab}
+        >
           <div className="flex min-w-0 items-center">
             <TabsList variant="line">
               <TabsTrigger value="output">Output</TabsTrigger>

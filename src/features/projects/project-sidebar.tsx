@@ -10,7 +10,11 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { AsyncDocumentState, ProjectEntry } from "@/domain/project"
+import type {
+  AsyncDocumentState,
+  ProjectEntry,
+  ProjectSidebarTab,
+} from "@/domain/project"
 import { ProjectTree } from "@/features/projects/project-tree"
 import { DocumentOutlinePanel } from "@/features/projects/document-outline-panel"
 import {
@@ -182,6 +186,8 @@ export function ProjectSidebar({
   selectedPdf,
   selectedRoot,
   tree,
+  tab,
+  onTabChange,
 }: {
   activeLine: number | null
   documentState: AsyncDocumentState
@@ -201,9 +207,23 @@ export function ProjectSidebar({
   selectedPdf: string | null
   selectedRoot: string | null
   tree: ProjectEntry
+  tab: ProjectSidebarTab
+  onTabChange: (tab: ProjectSidebarTab) => void
 }) {
   return (
-    <Tabs className="size-full min-h-0 gap-0 bg-sidebar" defaultValue="files">
+    <Tabs
+      className="size-full min-h-0 gap-0 bg-sidebar"
+      onValueChange={(value) => {
+        if (
+          value === "files" ||
+          value === "outline" ||
+          value === "references"
+        ) {
+          onTabChange(value)
+        }
+      }}
+      value={tab}
+    >
       <TabsList
         className="h-10 w-full shrink-0 justify-start gap-0 rounded-none border-b bg-sidebar p-0"
         variant="line"

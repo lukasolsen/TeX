@@ -95,6 +95,18 @@ Exit gate:
   focus survive restart on every supported platform or produce a specific safe
   restoration notice.
 
+Progress (2026-07-16):
+
+- Implemented in the repository: schema v2 with an explicit v1 migration and
+  safe corrupted/newer-schema fallback; per-project PDF/build pane state and
+  dimensions; sidebar/build tabs; build profile; source cursor/scroll; viewport-
+  aware geometry clamping with a one-time partial-restoration notice; and source/
+  PDF focus restoration after Settings.
+- Automated coverage includes schema upgrade, corrupted state, missing paths,
+  complete workspace-context round trips, and smaller-window geometry.
+- Open qualification gate: run restart, resize, keyboard, focus, and restoration-
+  notice smoke tests in packaged builds on every supported platform.
+
 ## Milestone 2 — resilient filesystem observation and watch mode
 
 Purpose: replace polling-only awareness with a controlled project event model

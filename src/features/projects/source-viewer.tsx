@@ -26,19 +26,21 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import type { AsyncDocumentState } from "@/domain/project"
+import type { AsyncDocumentState, EditorViewerState } from "@/domain/project"
 import type { ProjectEntry } from "@/domain/project"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 import { shortcutLabel } from "@/lib/shortcuts"
 
 export function SourceViewer({
   fontSize,
+  initialViewerState,
   onChange,
   onCursorChange,
   onOpenReference,
   onResolveConflict,
   onResolveRecovery,
   onSave,
+  onViewerStateChange,
   projectPath,
   projectTree,
   retainedPaths,
@@ -46,12 +48,14 @@ export function SourceViewer({
   target,
 }: {
   fontSize: number
+  initialViewerState: EditorViewerState | undefined
   onChange: (path: string, content: string) => void
   onCursorChange: (path: string, line: number, column: number) => void
   onOpenReference: (path: string) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onSave: () => void
+  onViewerStateChange: (path: string, state: EditorViewerState) => void
   projectPath: string
   projectTree: ProjectEntry
   retainedPaths: string[]
@@ -169,6 +173,7 @@ export function SourceViewer({
       <LatexEditor
         content={state.content}
         fontSize={fontSize}
+        initialViewerState={initialViewerState}
         label={`Edit ${state.document.path}`}
         onChange={(content) => onChange(state.document.path, content)}
         onCursorChange={(line, column) =>
@@ -176,6 +181,7 @@ export function SourceViewer({
         }
         onOpenReference={onOpenReference}
         onSave={onSave}
+        onViewerStateChange={onViewerStateChange}
         path={state.document.path}
         projectPath={projectPath}
         projectTree={projectTree}

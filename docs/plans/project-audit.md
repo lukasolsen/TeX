@@ -48,7 +48,7 @@ performance/accessibility/platform qualification.
 | Detect and surface root candidates | **Partial** | `root_detection.rs` supports `\documentclass` and magic-root comments and exposes ambiguity. Configured roots and build-metadata signals are not implemented. |
 | Bounded project tree with generated/cache exclusions | **Partial** | `project_open.rs` bounds depth/count and excludes common fixed directories and generated extensions. User-configurable output/generated exclusions are missing. |
 | Restore valid roots, files, tabs, and PDF state safely | **Implemented** | `persistence.rs`, `use-project-session.ts`, and document-tab tests validate paths and provide restoration notices for missing entries. |
-| Restore split sizes, open panels, and last selected panel | **Partial** | Sidebar width, editor font size, tabs, selected PDF, and per-PDF state persist. PDF width/open state, build-panel height/open state, sidebar tab, and other panel selections do not. |
+| Restore split sizes, open panels, and last selected panel | **Implemented; platform qualification open** | Schema-v2 workspace persistence restores viewport-validated sidebar/PDF/build geometry, pane visibility, sidebar/build tabs, build profile, source cursor/scroll, selected PDF, and per-PDF state. Automated migration, corruption, missing-path, round-trip, and smaller-window tests pass; packaged cross-platform smoke evidence remains open. |
 | Safe rename/delete with recovery or undo | **Partial** | Paths are validated and UI confirmation is explicit. Rename is non-overwriting, but delete is permanent and has no trash/undo route. |
 
 ### Phase 2 — editing
@@ -116,9 +116,9 @@ performance/accessibility/platform qualification.
 
 The following order keeps the plan's reliability-first intent:
 
-1. **Workspace persistence completion** — define a versioned layout model for
-   PDF width/open state, build-panel height/open state, active sidebar tab, and
-   selected panel; restore only valid geometry without stealing focus.
+1. **Workspace persistence qualification** — run packaged restart, resize,
+   keyboard, focus, migration, corruption, and missing-path smoke tests on each
+   supported platform.
 2. **Watch and filesystem event architecture** — add a Rust watcher with
    debounce/coalescing, rename/remove handling, generated-output exclusions,
    visible status, stop control, and explicit unsafe-profile consent.
