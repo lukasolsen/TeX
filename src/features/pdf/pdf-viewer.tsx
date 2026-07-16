@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { ReactElement } from "react"
 import {
   ArrowLeftRight,
   ChevronLeft,
@@ -22,6 +23,7 @@ import {
   GlobalWorkerOptions,
   TextLayer,
   type PDFDocumentProxy,
+  type PDFDocumentLoadingTask,
   type PDFPageProxy,
 } from "pdfjs-dist"
 import "pdfjs-dist/web/pdf_viewer.css"
@@ -43,11 +45,24 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import type { PdfViewerState, ProjectError } from "@/domain/project"
-import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 import { cn } from "@/lib/utils"
 import { shortcutLabel } from "@/lib/shortcuts"
+import { runDetached } from "@/lib/promises"
 import {
+  boundedPdfOutputScale,
+  flattenPdfOutline,
+  type FlatPdfOutlineItem,
+  MAX_PDF_PAGE_CSS_DIMENSION,
+  MAX_PDF_SEARCH_MATCH_PAGES,
+  MAX_SUPPORTED_PDF_PAGES,
   normalizePdfOutline,
+  pdfPageSizeSupported,
+  rotatePdfClockwise,
+  shouldRenderPdfPage,
   stateAfterPdfReplacement,
 } from "@/features/pdf/pdf-viewer-model"
 import {
@@ -72,6 +87,12 @@ const defaultViewerState: PdfViewerState = {
   sidebar: "none",
 }
 
+function destroyPdfTask(task: PDFDocumentLoadingTask): void {
+  void task.destroy().catch(() => {
+    // Destruction is terminal; no document state remains to recover.
+  })
+}
+
 type OutlineItem = Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>[number]
 type PdfLoadState =
   | { status: "loading" }
@@ -83,51 +104,97 @@ type PdfLoadState =
   | { status: "error"; error: ProjectError }
 
 type PdfUpdateOrigin = "initial" | "build" | "external"
-type PendingPdfUpdate = {
+type PendingPdfUpdate = Readonly<{
   document: PDFDocumentProxy
-  outline: OutlineItem[]
+  outline: ReadonlyArray<FlatPdfOutlineItem<OutlineItem>>
+  outlineTruncated: boolean
   origin: PdfUpdateOrigin
   generation: number
-}
+}>
 
 function PdfPage({
+  active,
   document,
   pageNumber,
   rotation,
   scale,
+  searchNeedle,
   syncMarker,
   onInverseSearch,
+  onTextLayerReady,
 }: {
+  active: boolean
   document: PDFDocumentProxy
   pageNumber: number
   rotation: number
   scale: number
+  searchNeedle: string | null
   syncMarker: { page: number; x: number; y: number } | null
   onInverseSearch: (page: number, x: number, y: number) => void
-}) {
+  onTextLayerReady: (page: number) => void
+}): ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const textRef = useRef<HTMLDivElement>(null)
   const [page, setPage] = useState<PDFPageProxy | null>(null)
+  const [pageError, setPageError] = useState(false)
+  const [baseSize, setBaseSize] = useState({ width: 612, height: 792 })
+  const [textLayerRevision, setTextLayerRevision] = useState(0)
 
   useEffect(() => {
-    let active = true
-    void document.getPage(pageNumber).then((value) => {
-      if (active) setPage(value)
-    })
-    return () => {
-      active = false
+    if (!active) {
+      setPage(null)
+      return
     }
-  }, [document, pageNumber])
+    let requestActive = true
+    setPageError(false)
+    void document
+      .getPage(pageNumber)
+      .then((value) => {
+        if (!requestActive) return
+        const viewport = value.getViewport({ scale: 1, rotation: 0 })
+        if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
+          value.cleanup()
+          setPageError(true)
+          return
+        }
+        setBaseSize({ width: viewport.width, height: viewport.height })
+        setPage(value)
+      })
+      .catch(() => {
+        if (requestActive) setPageError(true)
+      })
+    return () => {
+      requestActive = false
+    }
+  }, [active, document, pageNumber])
 
   useEffect(() => {
-    if (page === null || canvasRef.current === null || textRef.current === null)
+    if (
+      !active ||
+      page === null ||
+      canvasRef.current === null ||
+      textRef.current === null
+    )
       return
     const canvas = canvasRef.current
     const textHost = textRef.current
     const viewport = page.getViewport({ scale, rotation })
-    const outputScale = Math.min(window.devicePixelRatio || 1, 2.5)
-    canvas.width = Math.floor(viewport.width * outputScale)
-    canvas.height = Math.floor(viewport.height * outputScale)
+    setPageError(false)
+    if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
+      setPageError(true)
+      return
+    }
+    const outputScale = boundedPdfOutputScale(
+      viewport.width,
+      viewport.height,
+      window.devicePixelRatio
+    )
+    if (outputScale === null) {
+      setPageError(true)
+      return
+    }
+    canvas.width = Math.max(1, Math.floor(viewport.width * outputScale))
+    canvas.height = Math.max(1, Math.floor(viewport.height * outputScale))
     canvas.style.width = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
     textHost.replaceChildren()
@@ -140,25 +207,77 @@ function PdfPage({
       viewport,
     })
     let textLayer: TextLayer | null = null
-    void page.getTextContent().then((content) => {
-      textLayer = new TextLayer({
-        container: textHost,
-        textContentSource: content,
-        viewport,
-      })
-      return textLayer.render()
+    let effectActive = true
+    void renderTask.promise.catch((error: unknown) => {
+      if (
+        effectActive &&
+        (!(error instanceof Error) ||
+          error.name !== "RenderingCancelledException")
+      ) {
+        setPageError(true)
+      }
     })
+    void page
+      .getTextContent()
+      .then((content) => {
+        if (!effectActive) return
+        textLayer = new TextLayer({
+          container: textHost,
+          textContentSource: content,
+          viewport,
+        })
+        return textLayer.render().then(() => {
+          if (effectActive) {
+            setTextLayerRevision((current) => current + 1)
+            onTextLayerReady(pageNumber)
+          }
+        })
+      })
+      .catch(() => {
+        // Canvas rendering remains usable when selectable text is unavailable.
+      })
     return () => {
+      effectActive = false
       renderTask.cancel()
       textLayer?.cancel()
+      canvas.width = 0
+      canvas.height = 0
+      textHost.replaceChildren()
     }
-  }, [page, rotation, scale])
+  }, [active, onTextLayerReady, page, pageNumber, rotation, scale])
 
-  if (page === null) {
-    return <div className="aspect-[0.707] w-lg max-w-full bg-card shadow-sm" />
-  }
-  const viewport = page.getViewport({ scale, rotation })
-  const pageHeight = page.view[3] ?? 0
+  useEffect(() => () => void page?.cleanup(), [page])
+
+  useEffect(() => {
+    const textHost = textRef.current
+    if (textHost === null) return
+    for (const span of textHost.querySelectorAll(".pdf-search-match")) {
+      span.classList.remove("pdf-search-match")
+    }
+    if (searchNeedle === null || searchNeedle === "") return
+    const needle = searchNeedle.toLowerCase()
+    for (const span of textHost.querySelectorAll<HTMLElement>("span")) {
+      if (span.textContent?.toLowerCase().includes(needle)) {
+        span.classList.add("pdf-search-match")
+      }
+    }
+  }, [searchNeedle, textLayerRevision])
+
+  const viewport = page?.getViewport({ scale, rotation })
+  const rawWidth =
+    viewport?.width ??
+    (rotation % 180 === 0 ? baseSize.width : baseSize.height) * scale
+  const rawHeight =
+    viewport?.height ??
+    (rotation % 180 === 0 ? baseSize.height : baseSize.width) * scale
+  const displayScale = Math.min(
+    1,
+    MAX_PDF_PAGE_CSS_DIMENSION / rawWidth,
+    MAX_PDF_PAGE_CSS_DIMENSION / rawHeight
+  )
+  const width = rawWidth * displayScale
+  const height = rawHeight * displayScale
+  const pageHeight = page?.view[3] ?? 0
   return (
     <div
       aria-label={`Page ${pageNumber}`}
@@ -166,6 +285,7 @@ function PdfPage({
       data-page={pageNumber}
       onClick={(event) => {
         if (!event.ctrlKey && !event.metaKey) return
+        if (page === null) return
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
         const viewport = page.getViewport({ scale, rotation })
@@ -177,6 +297,7 @@ function PdfPage({
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return
+        if (page === null || viewport === undefined) return
         event.preventDefault()
         const [pdfX, pdfY] = viewport.convertToPdfPoint(
           viewport.width / 2,
@@ -185,12 +306,17 @@ function PdfPage({
         onInverseSearch(pageNumber, pdfX, pageHeight - pdfY)
       }}
       role="button"
-      style={{ width: viewport.width, height: viewport.height }}
-      tabIndex={0}
+      style={{ width, height }}
+      tabIndex={page === null ? -1 : 0}
       title={`${shortcutLabel(["primary"])}-click to synchronize to source`}
     >
       <canvas aria-hidden="true" ref={canvasRef} />
       <div className="textLayer" ref={textRef} />
+      {pageError ? (
+        <span className="absolute inset-0 grid place-items-center text-sm text-destructive">
+          Page {pageNumber} could not be rendered.
+        </span>
+      ) : null}
       {syncMarker?.page === pageNumber && rotation === 0 ? (
         <span
           aria-label="Synchronized source location"
@@ -212,21 +338,34 @@ function pageNumbers(
     : Array.from({ length: count }, (_, index) => index + 1)
 }
 
-function restorePdfSelection(root: HTMLElement, text: string) {
-  if (text === "" || !document.getSelection()?.isCollapsed) return
-  for (const span of root.querySelectorAll<HTMLElement>(".textLayer span")) {
+type PdfTextSelection = Readonly<{ page: number; text: string }>
+
+function restorePdfSelection(
+  root: HTMLElement,
+  selectionToRestore: PdfTextSelection | null
+): boolean {
+  if (
+    selectionToRestore === null ||
+    selectionToRestore.text === "" ||
+    !document.getSelection()?.isCollapsed
+  )
+    return false
+  for (const span of root.querySelectorAll<HTMLElement>(
+    `[data-page="${selectionToRestore.page}"] .textLayer span`
+  )) {
     const content = span.textContent ?? ""
-    const offset = content.indexOf(text)
+    const offset = content.indexOf(selectionToRestore.text)
     const node = span.firstChild
     if (offset < 0 || node === null) continue
     const range = document.createRange()
     range.setStart(node, offset)
-    range.setEnd(node, offset + text.length)
+    range.setEnd(node, offset + selectionToRestore.text.length)
     const selection = document.getSelection()
     selection?.removeAllRanges()
     selection?.addRange(range)
-    return
+    return true
   }
+  return false
 }
 
 export function PdfViewer({
@@ -242,7 +381,11 @@ export function PdfViewer({
   initialState: PdfViewerState | undefined
   onClose: () => void
   onStateChange: (state: PdfViewerState) => void
-  onNavigateSource: (path: ProjectRelativePath, line: number, column: number) => void
+  onNavigateSource: (
+    path: ProjectRelativePath,
+    line: number,
+    column: number
+  ) => void
   path: ProjectRelativePath | null
   projectPath: CanonicalProjectPath
   refreshToken: string
@@ -251,15 +394,21 @@ export function PdfViewer({
     line: number
     column: number
   } | null
-}) {
+}): ReactElement {
   const [viewer, setViewer] = useState(initialState ?? defaultViewerState)
   const [loadState, setLoadState] = useState<PdfLoadState>({
     status: "loading",
   })
-  const [outline, setOutline] = useState<OutlineItem[]>([])
+  const [outline, setOutline] = useState<
+    ReadonlyArray<FlatPdfOutlineItem<OutlineItem>>
+  >([])
+  const [outlineTruncated, setOutlineTruncated] = useState(false)
   const [query, setQuery] = useState("")
   const [matches, setMatches] = useState<number[]>([])
   const [matchIndex, setMatchIndex] = useState(0)
+  const [searchStatus, setSearchStatus] = useState<
+    "idle" | "searching" | "ready" | "truncated" | "error"
+  >("idle")
   const [externalRefresh, setExternalRefresh] = useState(0)
   const [syncMarker, setSyncMarker] = useState<{
     page: number
@@ -285,7 +434,9 @@ export function PdfViewer({
   const syncGeneration = useRef(0)
   const interactionUntil = useRef(0)
   const selectionActive = useRef(false)
-  const selectedText = useRef("")
+  const selectedText = useRef<PdfTextSelection | null>(null)
+  const selectionToRestore = useRef<PdfTextSelection | null>(null)
+  const restoreFrame = useRef<number | null>(null)
   const lastBuildToken = useRef("")
   const pendingUpdateRef = useRef<PendingPdfUpdate | null>(null)
   const readyDocument = loadState.status === "ready" ? loadState.document : null
@@ -295,12 +446,12 @@ export function PdfViewer({
   }, [onClose, onStateChange, path, viewer])
 
   const markInteraction = useCallback((duration = 500) => {
-    interactionUntil.current = Date.now() + duration
+    interactionUntil.current = performance.now() + duration
   }, [])
 
   const applyUpdate = useCallback((candidate: PendingPdfUpdate) => {
     if (candidate.generation !== loadGeneration.current) {
-      void candidate.document.loadingTask.destroy()
+      destroyPdfTask(candidate.document.loadingTask)
       if (pendingUpdateRef.current === candidate) {
         pendingUpdateRef.current = null
         setPendingUpdate(null)
@@ -316,11 +467,16 @@ export function PdfViewer({
       sectionRef.current?.contains(focused) === true
         ? focused
         : null
-    const selectionToRestore = selectedText.current
     const replacement = stateAfterPdfReplacement(
       viewerRef.current,
       candidate.document.numPages
     )
+    const currentSelection = selectedText.current
+    selectionToRestore.current =
+      currentSelection !== null &&
+      currentSelection.page <= candidate.document.numPages
+        ? currentSelection
+        : null
     setViewer(replacement.state)
     viewerRef.current = replacement.state
     setLoadState({
@@ -329,6 +485,7 @@ export function PdfViewer({
       updateError: null,
     })
     setOutline(candidate.outline)
+    setOutlineTruncated(candidate.outlineTruncated)
     pendingUpdateRef.current = null
     setPendingUpdate(null)
     const source =
@@ -342,14 +499,32 @@ export function PdfViewer({
         ? `${source}; previous page no longer exists; showing page ${replacement.state.page} of ${candidate.document.numPages}.`
         : `${source}; page ${replacement.state.page} of ${candidate.document.numPages}.`
     )
-    window.requestAnimationFrame(() => {
+    if (restoreFrame.current !== null) {
+      window.cancelAnimationFrame(restoreFrame.current)
+    }
+    restoreFrame.current = window.requestAnimationFrame(() => {
+      restoreFrame.current = null
       if (restoreFocus?.isConnected) restoreFocus.focus({ preventScroll: true })
-      window.setTimeout(() => {
-        const root = sectionRef.current
-        if (root !== null) restorePdfSelection(root, selectionToRestore)
-      }, 300)
     })
   }, [])
+
+  useEffect(
+    () => () => {
+      if (restoreFrame.current !== null) {
+        window.cancelAnimationFrame(restoreFrame.current)
+      }
+    },
+    []
+  )
+
+  useEffect(
+    () => () => {
+      searchGeneration.current += 1
+      outlineGeneration.current += 1
+      syncGeneration.current += 1
+    },
+    []
+  )
 
   useEffect(() => {
     viewerRef.current = viewer
@@ -368,6 +543,9 @@ export function PdfViewer({
 
   useEffect(() => {
     if (path === null) return
+    let active = true
+    let loadingTask: PDFDocumentLoadingTask | null = null
+    let ownershipTransferred = false
     const generation = loadGeneration.current + 1
     loadGeneration.current = generation
     const origin: PdfUpdateOrigin =
@@ -377,30 +555,42 @@ export function PdfViewer({
           ? "external"
           : "initial"
     lastBuildToken.current = refreshToken
-    void readProjectPdf(projectPath, path)
-      .then((data) => getDocument({ data }).promise)
-      .then(async (document) => {
-        if (generation !== loadGeneration.current) {
-          await document.loadingTask.destroy()
-          return
+    const load = async (): Promise<void> => {
+      try {
+        const data = await readProjectPdf(projectPath, path)
+        if (!active || generation !== loadGeneration.current) return
+        loadingTask = getDocument({ data })
+        const document = await loadingTask.promise
+        if (!active || generation !== loadGeneration.current) return
+        if (document.numPages > MAX_SUPPORTED_PDF_PAGES) {
+          throw {
+            code: "pdf-page-limit",
+            message: `This PDF has more than ${MAX_SUPPORTED_PDF_PAGES.toLocaleString()} pages and cannot be opened safely.`,
+          }
         }
-        const outline = normalizePdfOutline(
-          await document.getOutline().catch(() => null)
+        const flattenedOutline = flattenPdfOutline(
+          normalizePdfOutline(await document.getOutline().catch(() => null))
         )
-        if (generation !== loadGeneration.current) {
-          await document.loadingTask.destroy()
-          return
+        if (!active || generation !== loadGeneration.current) return
+        const candidate = {
+          document,
+          outline: flattenedOutline.items,
+          outlineTruncated: flattenedOutline.truncated,
+          origin,
+          generation,
         }
-        const candidate = { document, outline, origin, generation }
+        ownershipTransferred = true
         if (
           readyDocumentRef.current !== null &&
-          (selectionActive.current || Date.now() < interactionUntil.current)
+          (selectionActive.current ||
+            performance.now() < interactionUntil.current)
         ) {
-          setPendingUpdate((current) => {
-            if (current !== null) void current.document.loadingTask.destroy()
-            pendingUpdateRef.current = candidate
-            return candidate
-          })
+          const currentPending = pendingUpdateRef.current
+          if (currentPending !== null) {
+            destroyPdfTask(currentPending.document.loadingTask)
+          }
+          pendingUpdateRef.current = candidate
+          setPendingUpdate(candidate)
           setUpdateAnnouncement(
             origin === "build"
               ? "Build PDF update ready; waiting for PDF interaction to finish."
@@ -409,18 +599,27 @@ export function PdfViewer({
         } else {
           applyUpdate(candidate)
         }
-      })
-      .catch((error: unknown) => {
-        if (generation !== loadGeneration.current) return
+      } catch (error: unknown) {
+        if (!active || generation !== loadGeneration.current) return
+        if (loadingTask !== null && !ownershipTransferred) {
+          destroyPdfTask(loadingTask)
+          loadingTask = null
+        }
         const projectError = projectErrorFromUnknown(error)
         setLoadState((current) =>
           current.status === "ready"
             ? { ...current, updateError: projectError }
             : { status: "error", error: projectError }
         )
-      })
+      }
+    }
+    void load()
     return () => {
+      active = false
       loadGeneration.current += 1
+      if (loadingTask !== null && !ownershipTransferred) {
+        destroyPdfTask(loadingTask)
+      }
     }
   }, [applyUpdate, externalRefresh, path, projectPath, refreshToken])
 
@@ -429,7 +628,7 @@ export function PdfViewer({
       readyDocument === null
         ? undefined
         : () => {
-            void readyDocument.loadingTask.destroy()
+            destroyPdfTask(readyDocument.loadingTask)
           },
     [readyDocument]
   )
@@ -445,7 +644,7 @@ export function PdfViewer({
   useEffect(
     () => () => {
       const pending = pendingUpdateRef.current
-      if (pending !== null) void pending.document.loadingTask.destroy()
+      if (pending !== null) destroyPdfTask(pending.document.loadingTask)
     },
     []
   )
@@ -453,7 +652,10 @@ export function PdfViewer({
   useEffect(() => {
     if (pendingUpdate === null) return
     const interval = window.setInterval(() => {
-      if (!selectionActive.current && Date.now() >= interactionUntil.current) {
+      if (
+        !selectionActive.current &&
+        performance.now() >= interactionUntil.current
+      ) {
         applyUpdate(pendingUpdate)
       }
     }, 100)
@@ -472,8 +674,19 @@ export function PdfViewer({
           root.contains(selection.anchorNode)) ||
           (selection.focusNode !== null && root.contains(selection.focusNode)))
       if (selectionActive.current) {
-        selectedText.current = selection?.toString() ?? ""
+        const anchorElement =
+          selection?.anchorNode instanceof Element
+            ? selection.anchorNode
+            : selection?.anchorNode?.parentElement
+        const page = Number(
+          anchorElement?.closest<HTMLElement>("[data-page]")?.dataset.page
+        )
+        selectedText.current = Number.isFinite(page)
+          ? { page, text: selection?.toString() ?? "" }
+          : null
         markInteraction(1_000)
+      } else {
+        selectedText.current = null
       }
     }
     document.addEventListener("selectionchange", trackSelection)
@@ -483,8 +696,11 @@ export function PdfViewer({
   useEffect(() => {
     if (path === null) return
     let active = true
+    let checking = false
     let revision: string | null = null
-    const check = async () => {
+    const check = async (): Promise<void> => {
+      if (checking) return
+      checking = true
       try {
         const next = await projectPdfRevision(projectPath, path)
         if (!active) return
@@ -493,6 +709,8 @@ export function PdfViewer({
         revision = next
       } catch {
         // A transient stat failure must not replace the last readable PDF.
+      } finally {
+        checking = false
       }
     }
     void check()
@@ -516,7 +734,14 @@ export function PdfViewer({
   const goToPage = useCallback(
     (page: number) => {
       if (readyDocument === null) return
-      const next = Math.max(1, Math.min(readyDocument.numPages, page))
+      if (!Number.isFinite(page)) {
+        setSyncStatus("Enter a valid PDF page number.")
+        return
+      }
+      const next = Math.max(
+        1,
+        Math.min(readyDocument.numPages, Math.trunc(page))
+      )
       updateViewer({ page: next, position: 0 })
       scrollRef.current
         ?.querySelector<HTMLElement>(`[data-page="${next}"]`)
@@ -526,25 +751,36 @@ export function PdfViewer({
   )
 
   const fit = useCallback(
-    async (mode: "width" | "page") => {
+    async (mode: "width" | "page"): Promise<void> => {
       const host = scrollRef.current
       if (readyDocument === null || host === null) return
-      const page = await readyDocument.getPage(viewer.page)
-      const viewport = page.getViewport({ scale: 1, rotation: viewer.rotation })
-      const horizontal = Math.max(
-        0.25,
-        (host.clientWidth - 40) / viewport.width
-      )
-      const vertical = Math.max(
-        0.25,
-        (host.clientHeight - 40) / viewport.height
-      )
-      updateViewer({
-        zoom: Math.min(
-          5,
-          mode === "width" ? horizontal : Math.min(horizontal, vertical)
-        ),
-      })
+      try {
+        const page = await readyDocument.getPage(viewer.page)
+        if (readyDocumentRef.current !== readyDocument) return
+        const viewport = page.getViewport({
+          scale: 1,
+          rotation: viewer.rotation,
+        })
+        if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
+          throw new Error("PDF page geometry is outside the viewer limit.")
+        }
+        const horizontal = Math.max(
+          0.25,
+          (host.clientWidth - 40) / viewport.width
+        )
+        const vertical = Math.max(
+          0.25,
+          (host.clientHeight - 40) / viewport.height
+        )
+        updateViewer({
+          zoom: Math.min(
+            5,
+            mode === "width" ? horizontal : Math.min(horizontal, vertical)
+          ),
+        })
+      } catch {
+        setSyncStatus("Could not calculate the requested PDF fit.")
+      }
     },
     [readyDocument, updateViewer, viewer.page, viewer.rotation]
   )
@@ -576,105 +812,80 @@ export function PdfViewer({
     viewer.zoom,
   ])
 
-  useEffect(() => {
-    const root = scrollRef.current
-    if (
-      root === null ||
-      readyDocument === null ||
-      viewer.layout !== "continuous"
-    )
-      return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort(
-            (left, right) => right.intersectionRatio - left.intersectionRatio
-          )[0]
-        const page = Number(
-          (visible?.target as HTMLElement | undefined)?.dataset.page
-        )
-        if (Number.isFinite(page))
-          setViewer((current) => ({ ...current, page }))
-      },
-      { root, threshold: [0.15, 0.4, 0.7] }
-    )
-    root
-      .querySelectorAll("[data-page]")
-      .forEach((page) => observer.observe(page))
-    return () => observer.disconnect()
-  }, [readyDocument, viewer.layout, viewer.rotation, viewer.zoom])
-
   const runSearch = useCallback(async () => {
     const generation = searchGeneration.current + 1
     searchGeneration.current = generation
-    if (readyDocument === null || query.trim() === "") {
+    const normalizedQuery = query.trim()
+    if (readyDocument === null || normalizedQuery === "") {
       setMatches([])
+      setSearchStatus("idle")
       return
     }
-    const needle = query.toLocaleLowerCase()
+    setSearchStatus("searching")
+    const needle = normalizedQuery.toLowerCase()
     const found: number[] = []
-    for (
-      let pageNumber = 1;
-      pageNumber <= readyDocument.numPages;
-      pageNumber += 1
-    ) {
-      const page = await readyDocument.getPage(pageNumber)
-      const content = await page.getTextContent()
-      if (generation !== searchGeneration.current) return
-      const text = content.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .toLocaleLowerCase()
-      if (text.includes(needle)) found.push(pageNumber)
+    let truncated = false
+    try {
+      for (
+        let pageNumber = 1;
+        pageNumber <= readyDocument.numPages;
+        pageNumber += 1
+      ) {
+        if (generation !== searchGeneration.current) return
+        const page = await readyDocument.getPage(pageNumber)
+        try {
+          const content = await page.getTextContent()
+          if (generation !== searchGeneration.current) return
+          const text = content.items
+            .map((item) => ("str" in item ? item.str : ""))
+            .join(" ")
+            .toLowerCase()
+          if (text.includes(needle)) {
+            found.push(pageNumber)
+            if (found.length === MAX_PDF_SEARCH_MATCH_PAGES) {
+              truncated = pageNumber < readyDocument.numPages
+              break
+            }
+          }
+        } finally {
+          if (Math.abs(pageNumber - viewerRef.current.page) > 2) page.cleanup()
+        }
+      }
+    } catch {
+      if (generation === searchGeneration.current) setSearchStatus("error")
+      return
     }
     if (generation !== searchGeneration.current) return
     setMatches(found)
     setMatchIndex(0)
+    setSearchStatus(truncated ? "truncated" : "ready")
     if (found[0] !== undefined) goToPage(found[0])
   }, [goToPage, query, readyDocument])
 
-  useEffect(() => {
-    const host = scrollRef.current
-    if (host === null) return
-    const timer = window.setTimeout(() => {
-      host
-        .querySelectorAll(".pdf-search-match")
-        .forEach((node) => node.classList.remove("pdf-search-match"))
-      if (query.trim() === "") return
-      const needle = query.toLocaleLowerCase()
-      for (const page of matches) {
-        host
-          .querySelectorAll<HTMLElement>(
-            `[data-page="${page}"] .textLayer span`
-          )
-          .forEach((span) => {
-            if (span.textContent?.toLocaleLowerCase().includes(needle))
-              span.classList.add("pdf-search-match")
-          })
-      }
-    }, 50)
-    return () => window.clearTimeout(timer)
-  }, [matches, query, viewer.zoom, viewer.rotation])
-
   const navigateOutline = useCallback(
-    async (item: OutlineItem) => {
+    async (item: OutlineItem): Promise<void> => {
       if (readyDocument === null || item.dest === null) return
       const generation = outlineGeneration.current + 1
       outlineGeneration.current = generation
-      const destination =
-        typeof item.dest === "string"
-          ? await readyDocument.getDestination(item.dest)
-          : item.dest
-      if (destination === null) return
-      if (generation !== outlineGeneration.current) return
-      const reference = destination[0]
-      const index =
-        typeof reference === "object"
-          ? await readyDocument.getPageIndex(reference)
-          : 0
-      if (generation !== outlineGeneration.current) return
-      goToPage(index + 1)
+      try {
+        const destination =
+          typeof item.dest === "string"
+            ? await readyDocument.getDestination(item.dest)
+            : item.dest
+        if (destination === null) return
+        if (generation !== outlineGeneration.current) return
+        const reference = destination[0]
+        const index =
+          typeof reference === "object"
+            ? await readyDocument.getPageIndex(reference)
+            : 0
+        if (generation !== outlineGeneration.current) return
+        goToPage(index + 1)
+      } catch {
+        if (generation === outlineGeneration.current) {
+          setSyncStatus("This PDF outline destination is unavailable.")
+        }
+      }
     },
     [goToPage, readyDocument]
   )
@@ -734,6 +945,62 @@ export function PdfViewer({
         : pageNumbers(readyDocument.numPages, viewer.layout, viewer.page),
     [readyDocument, viewer.layout, viewer.page]
   )
+  const matchPages = useMemo(() => new Set(matches), [matches])
+  const handleTextLayerReady = useCallback((page: number): void => {
+    const pendingSelection = selectionToRestore.current
+    const root = sectionRef.current
+    if (
+      pendingSelection?.page === page &&
+      root !== null &&
+      restorePdfSelection(root, pendingSelection)
+    ) {
+      selectionToRestore.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const host = scrollRef.current
+    if (host === null || readyDocument === null) return
+    const onPointerDown = (): void => markInteraction(1_000)
+    const onPointerUp = (): void => markInteraction()
+    const onKeyDown = (event: KeyboardEvent): void => {
+      const modifier = event.ctrlKey || event.metaKey
+      if (modifier && event.key.toLowerCase() === "f") {
+        event.preventDefault()
+        event.stopPropagation()
+        searchInputRef.current?.focus()
+      } else if (modifier && (event.key === "+" || event.key === "=")) {
+        event.preventDefault()
+        event.stopPropagation()
+        updateViewer({ zoom: Math.min(5, viewer.zoom + 0.1) })
+      } else if (modifier && event.key === "-") {
+        event.preventDefault()
+        event.stopPropagation()
+        updateViewer({ zoom: Math.max(0.25, viewer.zoom - 0.1) })
+      } else if (event.key === "PageDown") {
+        event.preventDefault()
+        goToPage(viewer.page + 1)
+      } else if (event.key === "PageUp") {
+        event.preventDefault()
+        goToPage(viewer.page - 1)
+      }
+    }
+    host.addEventListener("pointerdown", onPointerDown)
+    host.addEventListener("pointerup", onPointerUp)
+    host.addEventListener("keydown", onKeyDown)
+    return () => {
+      host.removeEventListener("pointerdown", onPointerDown)
+      host.removeEventListener("pointerup", onPointerUp)
+      host.removeEventListener("keydown", onKeyDown)
+    }
+  }, [
+    goToPage,
+    markInteraction,
+    readyDocument,
+    updateViewer,
+    viewer.page,
+    viewer.zoom,
+  ])
 
   if (path === null) {
     return (
@@ -910,7 +1177,7 @@ export function PdfViewer({
         </Button>
         <Button
           aria-label="Fit width"
-          onClick={() => void fit("width")}
+          onClick={() => runDetached(fit("width"))}
           size="icon-xs"
           title="Fit width"
           variant="ghost"
@@ -919,7 +1186,7 @@ export function PdfViewer({
         </Button>
         <Button
           aria-label="Fit page"
-          onClick={() => void fit("page")}
+          onClick={() => runDetached(fit("page"))}
           size="icon-xs"
           title="Fit page"
           variant="ghost"
@@ -930,7 +1197,7 @@ export function PdfViewer({
           <Button
             aria-label="Synchronize source to PDF"
             disabled={sourceLocation === null}
-            onClick={() => void forwardSearch()}
+            onClick={() => runDetached(forwardSearch())}
             size="icon-xs"
             title="Show source cursor in PDF"
             variant="ghost"
@@ -963,8 +1230,7 @@ export function PdfViewer({
             aria-label="Rotate clockwise"
             onClick={() =>
               updateViewer({
-                rotation: ((viewer.rotation + 90) %
-                  360) as PdfViewerState["rotation"],
+                rotation: rotatePdfClockwise(viewer.rotation),
               })
             }
             size="icon-xs"
@@ -1000,11 +1266,12 @@ export function PdfViewer({
               </p>
             ) : (
               <ul className="flex flex-col gap-0.5">
-                {outline.map((item, index) => (
+                {outline.map(({ depth, item }, index) => (
                   <li key={`${item.title}-${index}`}>
                     <button
                       className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      onClick={() => void navigateOutline(item)}
+                      onClick={() => runDetached(navigateOutline(item))}
+                      style={{ paddingInlineStart: `${0.5 + depth * 0.75}rem` }}
                       type="button"
                     >
                       {item.title}
@@ -1013,6 +1280,12 @@ export function PdfViewer({
                 ))}
               </ul>
             )}
+            {outlineTruncated ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground">
+                Additional outline entries are omitted to keep navigation
+                responsive.
+              </p>
+            ) : null}
           </aside>
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -1023,29 +1296,41 @@ export function PdfViewer({
               </InputGroupAddon>
               <InputGroupInput
                 aria-label="Find in PDF"
+                maxLength={256}
                 onChange={(event) => {
                   searchGeneration.current += 1
                   setQuery(event.target.value)
+                  setMatches([])
+                  setMatchIndex(0)
+                  setSearchStatus("idle")
                 }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") void runSearch()
+                  if (event.key === "Enter") runDetached(runSearch())
                 }}
                 placeholder="Find in PDF"
                 ref={searchInputRef}
                 value={query}
               />
               <InputGroupAddon align="inline-end">
-                <InputGroupButton onClick={() => void runSearch()}>
+                <InputGroupButton onClick={() => runDetached(runSearch())}>
                   Find
                 </InputGroupButton>
               </InputGroupAddon>
             </InputGroup>
             <span className="text-xs text-muted-foreground" role="status">
-              {matches.length === 0
-                ? query === ""
-                  ? "Selectable text"
-                  : "No matches"
-                : `${matchIndex + 1} of ${matches.length} pages`}
+              {searchStatus === "searching"
+                ? "Searching PDF…"
+                : searchStatus === "error"
+                  ? "PDF search failed"
+                  : searchStatus === "truncated"
+                    ? `First ${matches.length} matching pages`
+                    : matches.length === 0
+                      ? query === "" || searchStatus === "idle"
+                        ? query === ""
+                          ? "Selectable text"
+                          : "Press Enter to search"
+                        : "No matches"
+                      : `${matchIndex + 1} of ${matches.length} pages`}
             </span>
             {syncStatus !== null ? (
               <span
@@ -1116,7 +1401,6 @@ export function PdfViewer({
               </Button>
             </div>
           ) : null}
-          {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The region observes bubbled keyboard/pointer activity to defer PDF replacement; page buttons own keyboard focus. TEX-H-002, review 2027-01-16. */}
           <div
             aria-label="PDF pages"
             className={cn(
@@ -1126,9 +1410,19 @@ export function PdfViewer({
             onScroll={(event) => {
               markInteraction()
               const host = event.currentTarget
-              const page = host.querySelector<HTMLElement>(
-                `[data-page="${viewer.page}"]`
+              const bounds = host.getBoundingClientRect()
+              const target = document.elementFromPoint(
+                bounds.left + bounds.width / 2,
+                bounds.top + Math.min(40, bounds.height / 2)
               )
+              const visiblePage = target?.closest<HTMLElement>("[data-page]")
+              const pageNumber = Number(visiblePage?.dataset.page)
+              const page =
+                Number.isFinite(pageNumber) && visiblePage !== undefined
+                  ? visiblePage
+                  : host.querySelector<HTMLElement>(
+                      `[data-page="${viewer.page}"]`
+                    )
               if (page === null) return
               const available = Math.max(
                 1,
@@ -1139,34 +1433,17 @@ export function PdfViewer({
                 Math.min(1, (host.scrollTop - page.offsetTop) / available)
               )
               setViewer((current) =>
+                current.page === pageNumber &&
                 Math.abs(current.position - position) < 0.01
                   ? current
-                  : { ...current, position }
+                  : {
+                      ...current,
+                      page: Number.isFinite(pageNumber)
+                        ? pageNumber
+                        : current.page,
+                      position,
+                    }
               )
-            }}
-            onPointerDown={() => markInteraction(1_000)}
-            onPointerUp={() => markInteraction()}
-            onKeyDown={(event) => {
-              const modifier = event.ctrlKey || event.metaKey
-              if (modifier && event.key.toLocaleLowerCase() === "f") {
-                event.preventDefault()
-                event.stopPropagation()
-                searchInputRef.current?.focus()
-              } else if (modifier && (event.key === "+" || event.key === "=")) {
-                event.preventDefault()
-                event.stopPropagation()
-                updateViewer({ zoom: Math.min(5, viewer.zoom + 0.1) })
-              } else if (modifier && event.key === "-") {
-                event.preventDefault()
-                event.stopPropagation()
-                updateViewer({ zoom: Math.max(0.25, viewer.zoom - 0.1) })
-              } else if (event.key === "PageDown") {
-                event.preventDefault()
-                goToPage(viewer.page + 1)
-              } else if (event.key === "PageUp") {
-                event.preventDefault()
-                goToPage(viewer.page - 1)
-              }
             }}
             ref={scrollRef}
             role="region"
@@ -1174,14 +1451,20 @@ export function PdfViewer({
             <div className="flex min-h-full min-w-max flex-col items-center gap-5 p-5">
               {pages.map((page) => (
                 <PdfPage
+                  active={
+                    viewer.layout === "single" ||
+                    shouldRenderPdfPage(page, viewer.page)
+                  }
                   document={loadState.document}
                   key={page}
                   onInverseSearch={(pageNumber, x, y) =>
-                    void inverseSearch(pageNumber, x, y)
+                    runDetached(inverseSearch(pageNumber, x, y))
                   }
+                  onTextLayerReady={handleTextLayerReady}
                   pageNumber={page}
                   rotation={viewer.rotation}
                   scale={viewer.zoom}
+                  searchNeedle={matchPages.has(page) ? query.trim() : null}
                   syncMarker={syncMarker}
                 />
               ))}
