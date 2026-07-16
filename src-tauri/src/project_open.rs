@@ -293,7 +293,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{map_io_error, open_project_path, ProjectOpenErrorCode};
+    use super::{map_io_error, open_project_path, ProjectEntryKind, ProjectOpenErrorCode};
 
     #[test]
     fn maps_permission_errors_without_exposing_a_path() {
@@ -323,6 +323,7 @@ mod tests {
         fs::create_dir_all(fixture.join(".git"))?;
         fs::create_dir_all(fixture.join("chapters"))?;
         fs::write(fixture.join("main.tex"), r"\documentclass{article}")?;
+        fs::write(fixture.join("main.pdf"), "PDF fixture")?;
         fs::write(fixture.join("main.aux"), "generated")?;
         fs::write(
             fixture.join("chapters/introduction.tex"),
@@ -345,6 +346,14 @@ mod tests {
             .children
             .iter()
             .any(|entry| entry.name == "main.aux"));
+        let pdf = project
+            .tree
+            .children
+            .iter()
+            .find(|entry| entry.name == "main.pdf")
+            .ok_or("PDF missing from project tree")?;
+        assert!(matches!(pdf.kind, ProjectEntryKind::File));
+        assert!(pdf.children.is_empty());
 
         fs::remove_dir_all(&fixture)?;
         Ok(())

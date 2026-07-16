@@ -3,7 +3,6 @@ import { FileCode2, FileStack, LoaderCircle } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AsyncDocumentState, ProjectEntry } from "@/domain/project"
 import { ProjectTree } from "@/features/projects/project-tree"
-import { SourceHoverPreview } from "@/features/projects/source-hover-preview"
 import {
   isReadableSource,
   texDependencies,
@@ -24,13 +23,11 @@ function DependenciesPanel({
   documentState,
   onPinFile,
   onPreviewFile,
-  projectPath,
   tree,
 }: {
   documentState: AsyncDocumentState
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
-  projectPath: string
   tree: ProjectEntry
 }) {
   if (documentState.status === "loading") {
@@ -83,55 +80,32 @@ function DependenciesPanel({
         const readable = available && isReadableSource(dependency.path)
         return (
           <li key={`${dependency.command}:${dependency.path}`}>
-            {readable ? (
-              <SourceHoverPreview
-                path={dependency.path}
-                projectPath={projectPath}
-              >
-                <button
-                  className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-default"
-                  disabled={!readable}
-                  onClick={() => onPreviewFile(dependency.path)}
-                  onDoubleClick={() => onPinFile(dependency.path)}
-                  title={
-                    readable
-                      ? `Open ${dependency.path}`
-                      : available
-                        ? `${dependency.path} cannot be previewed`
-                        : `${dependency.path} is not available in this project`
-                  }
-                  type="button"
-                >
-                  <FileCode2 aria-hidden="true" className="size-3.5 shrink-0" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px]">
-                      {dependency.path}
-                    </span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
-                      {dependencyDescription(dependency)} · \\
-                      {dependency.command}
-                      {available ? "" : " · Not in project"}
-                    </span>
-                  </span>
-                </button>
-              </SourceHoverPreview>
-            ) : (
-              <button
-                className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-muted-foreground"
-                disabled
-                type="button"
-              >
-                <FileCode2 aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">
-                    {dependency.path}
-                  </span>
-                  <span className="block truncate text-[11px]">
-                    {dependencyDescription(dependency)} · Not in project
-                  </span>
+            <button
+              className="flex min-h-11 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:cursor-default"
+              disabled={!readable}
+              onClick={() => onPreviewFile(dependency.path)}
+              onDoubleClick={() => onPinFile(dependency.path)}
+              title={
+                readable
+                  ? `Open ${dependency.path}`
+                  : available
+                    ? `${dependency.path} cannot be previewed`
+                    : `${dependency.path} is not available in this project`
+              }
+              type="button"
+            >
+              <FileCode2 aria-hidden="true" className="size-3.5 shrink-0" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px]">
+                  {dependency.path}
                 </span>
-              </button>
-            )}
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {dependencyDescription(dependency)} · \\
+                  {dependency.command}
+                  {available ? "" : " · Not in project"}
+                </span>
+              </span>
+            </button>
           </li>
         )
       })}
@@ -147,7 +121,6 @@ export function ProjectSidebar({
   onPinFile,
   onPreviewFile,
   onRename,
-  projectPath,
   rootFiles,
   selectedFile,
   selectedRoot,
@@ -163,7 +136,6 @@ export function ProjectSidebar({
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
   onRename: (path: string, name: string) => Promise<void>
-  projectPath: string
   rootFiles: string[]
   selectedFile: string | null
   selectedRoot: string | null
@@ -198,7 +170,6 @@ export function ProjectSidebar({
           onPreviewFile={onPreviewFile}
           onRename={onRename}
           rootFiles={rootFiles}
-          projectPath={projectPath}
           selectedFile={selectedFile}
           selectedRoot={selectedRoot}
           tree={tree}
@@ -209,7 +180,6 @@ export function ProjectSidebar({
           documentState={documentState}
           onPinFile={onPinFile}
           onPreviewFile={onPreviewFile}
-          projectPath={projectPath}
           tree={tree}
         />
       </TabsContent>

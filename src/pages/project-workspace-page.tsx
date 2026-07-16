@@ -166,7 +166,6 @@ export function ProjectWorkspacePage({
               onPreviewFile={onPreviewFile}
               onCreate={onCreateProjectEntry}
               onRename={onRenameProjectEntry}
-              projectPath={session.project.path}
               onDelete={onDeleteProjectEntry}
               documentState={session.documentState}
               rootFiles={session.project.rootCandidates.map(
@@ -209,9 +208,12 @@ export function ProjectWorkspacePage({
             <SourceViewer
               fontSize={session.workspace.editorFontSize}
               onChange={onEditDocument}
+              onOpenReference={onPinFile}
               onResolveConflict={onResolveExternalChange}
               onResolveRecovery={onResolveRecovery}
               onSave={onSaveDocument}
+              projectPath={session.project.path}
+              projectTree={session.project.tree}
               retainedPaths={session.workspace.pinnedFiles}
               state={session.documentState}
               target={

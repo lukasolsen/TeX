@@ -27,23 +27,30 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import type { AsyncDocumentState } from "@/domain/project"
+import type { ProjectEntry } from "@/domain/project"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 
 export function SourceViewer({
   fontSize,
   onChange,
+  onOpenReference,
   onResolveConflict,
   onResolveRecovery,
   onSave,
+  projectPath,
+  projectTree,
   retainedPaths,
   state,
   target,
 }: {
   fontSize: number
   onChange: (path: string, content: string) => void
+  onOpenReference: (path: string) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onSave: () => void
+  projectPath: string
+  projectTree: ProjectEntry
   retainedPaths: string[]
   state: AsyncDocumentState
   target: EditorTarget | null
@@ -160,8 +167,11 @@ export function SourceViewer({
         fontSize={fontSize}
         label={`Edit ${state.document.path}`}
         onChange={(content) => onChange(state.document.path, content)}
+        onOpenReference={onOpenReference}
         onSave={onSave}
         path={state.document.path}
+        projectPath={projectPath}
+        projectTree={projectTree}
         retainedPaths={retainedPaths}
         target={target}
       />

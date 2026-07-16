@@ -3,8 +3,8 @@ import {
   Copy,
   ChevronDown,
   ChevronRight,
-  FileArchive,
   FileCode2,
+  File,
   FileText,
   FilePlus,
   Folder,
@@ -30,7 +30,6 @@ import {
   projectTreeNodes,
 } from "@/features/projects/project-model"
 import { cn } from "@/lib/utils"
-import { SourceHoverPreview } from "@/features/projects/source-hover-preview"
 
 function EntryIcon({
   expanded,
@@ -52,7 +51,7 @@ function EntryIcon({
     return <FileCode2 aria-hidden="true" className="size-3.5" />
   if (isReadableSource(path))
     return <FileText aria-hidden="true" className="size-3.5" />
-  return <FileArchive aria-hidden="true" className="size-3.5" />
+  return <File aria-hidden="true" className="size-3.5" />
 }
 
 function TreeBranch({
@@ -64,7 +63,6 @@ function TreeBranch({
   onRename,
   onDelete,
   rootFiles,
-  projectPath,
   selectedFile,
   selectedRoot,
 }: {
@@ -80,7 +78,6 @@ function TreeBranch({
   onRename: (path: string, name: string) => Promise<void>
   onDelete: (path: string) => Promise<void>
   rootFiles: string[]
-  projectPath: string
   selectedFile: string | null
   selectedRoot: string | null
 }) {
@@ -98,81 +95,50 @@ function TreeBranch({
     <li>
       <ContextMenu>
         <ContextMenuTrigger>
-          {readable ? (
-            <SourceHoverPreview path={entry.path} projectPath={projectPath}>
-              <button
-                aria-expanded={isDirectory ? expanded : undefined}
-                className={cn(
-                  "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
-                  selectedFile === entry.path &&
-                    "bg-sidebar-accent text-foreground"
-                )}
-                disabled={!isDirectory && !readable}
-                onClick={() => {
-                  if (isDirectory) setExpanded((current) => !current)
-                  else if (readable) onPreviewFile(entry.path)
-                }}
-                onDoubleClick={() => {
-                  if (readable) onPinFile(entry.path)
-                }}
-                style={{ paddingInlineStart: `${8 + level * 14}px` }}
-                title={
-                  !isDirectory && !readable
-                    ? "Preview is unavailable for this file type"
-                    : entry.path
-                }
-                type="button"
-              >
-                {isDirectory ? (
-                  expanded ? (
-                    <ChevronDown
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0"
-                    />
-                  ) : (
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0"
-                    />
-                  )
-                ) : (
-                  <span className="size-4 shrink-0" aria-hidden="true" />
-                )}
-                <EntryIcon
-                  expanded={expanded}
-                  isDirectory={isDirectory}
-                  path={entry.path}
-                />
-                <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-                {rootLabel !== null ? (
-                  <Badge variant="secondary">{rootLabel}</Badge>
-                ) : null}
-              </button>
-            </SourceHoverPreview>
-          ) : (
-            <button
-              aria-expanded={isDirectory ? expanded : undefined}
-              className={cn(
-                "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
-                selectedFile === entry.path &&
-                  "bg-sidebar-accent text-foreground"
-              )}
-              onClick={() => isDirectory && setExpanded((current) => !current)}
-              style={{ paddingInlineStart: `${8 + level * 14}px` }}
-              type="button"
-            >
-              {expanded ? (
+          <button
+            aria-expanded={isDirectory ? expanded : undefined}
+            className={cn(
+              "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
+              selectedFile === entry.path && "bg-sidebar-accent text-foreground"
+            )}
+            disabled={!isDirectory && !readable}
+            onClick={() => {
+              if (isDirectory) setExpanded((current) => !current)
+              else if (readable) onPreviewFile(entry.path)
+            }}
+            onDoubleClick={() => {
+              if (readable) onPinFile(entry.path)
+            }}
+            style={{ paddingInlineStart: `${8 + level * 14}px` }}
+            title={
+              !isDirectory && !readable
+                ? "Preview is unavailable for this file type"
+                : entry.path
+            }
+            type="button"
+          >
+            {isDirectory ? (
+              expanded ? (
                 <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
               ) : (
                 <ChevronRight
                   aria-hidden="true"
                   className="size-3.5 shrink-0"
                 />
-              )}
-              <EntryIcon expanded={expanded} isDirectory path={entry.path} />
-              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-            </button>
-          )}
+              )
+            ) : (
+              <span className="size-4 shrink-0" aria-hidden="true" />
+            )}
+            <EntryIcon
+              expanded={expanded}
+              isDirectory={isDirectory}
+              path={entry.path}
+            />
+            <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+            {rootLabel !== null ? (
+              <Badge variant="secondary">{rootLabel}</Badge>
+            ) : null}
+          </button>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem
@@ -252,7 +218,6 @@ function TreeBranch({
               onRename={onRename}
               onDelete={onDelete}
               rootFiles={rootFiles}
-              projectPath={projectPath}
               selectedFile={selectedFile}
               selectedRoot={selectedRoot}
             />
@@ -270,7 +235,6 @@ export function ProjectTree({
   onRename,
   onDelete,
   rootFiles,
-  projectPath,
   selectedFile,
   selectedRoot,
   tree,
@@ -285,7 +249,6 @@ export function ProjectTree({
   onRename: (path: string, name: string) => Promise<void>
   onDelete: (path: string) => Promise<void>
   rootFiles: string[]
-  projectPath: string
   selectedFile: string | null
   selectedRoot: string | null
   tree: ProjectEntry
@@ -310,7 +273,6 @@ export function ProjectTree({
                   onRename={onRename}
                   onDelete={onDelete}
                   rootFiles={rootFiles}
-                  projectPath={projectPath}
                   selectedFile={selectedFile}
                   selectedRoot={selectedRoot}
                 />
