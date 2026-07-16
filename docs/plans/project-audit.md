@@ -33,11 +33,11 @@ performance/accessibility/platform qualification.
 | --- | --- | --- |
 | Local-first operation without accounts, uploads, telemetry, or cloud storage | **Implemented** | Tauri capabilities are limited to core, dialog, and logging; project operations are validated Rust commands. No network, account, upload, telemetry, or AI capability exists. See `src-tauri/capabilities/default.json` and `src-tauri/src/lib.rs`. |
 | React is presentation/state coordination; Rust owns filesystem, process execution, persistence, and validation | **Implemented** | IPC wrappers are in `src/services/`; filesystem and process work is in `src-tauri/src/`. |
-| Supported-platform and TeX-distribution policy | **Partial** | Platform bundles and executable detection exist, but supported OS/TeX versions and distribution policy are not published. |
-| Privacy statement and known limitations | **Partial** | Local-first rules are documented, but there is no user-facing release privacy/limitations document. |
-| Representative fixture suite | **Partial** | Simple, multi-root, Unicode, broken, and realistic NASA report fixtures exist. Dedicated BibLaTeX/biber, custom-class, large-performance, and file-watch storm fixtures are missing. |
-| Performance protocol and measured budgets | **Missing — larger work** | `docs/phase-0.md` defines a protocol, but the repository contains no p50/p95/p99 results, reference machine, benchmark harness, or release budget. |
-| Target-user research | **Missing — external work** | The requested 8–12 observed user sessions cannot be evidenced in the repository. |
+| Supported-platform and TeX-distribution policy | **Partial** | `docs/support.md` publishes the pre-release OS, distribution, command-version, Rust, and Bun policy. Windows/macOS smoke qualification and biber evidence remain open before it becomes a release support claim. |
+| Privacy statement and known limitations | **Implemented** | `docs/privacy.md` and `docs/known-limitations.md` publish the local data boundary and current release caveats without implying unavailable behavior. |
+| Representative fixture suite | **Implemented** | `tests/fixtures/manifest.json` defines and Rust tests validate simple, multi-root, Unicode, broken, NASA report, BibLaTeX/biber, custom-class, large-project, output-directory, invalid-PDF, and file-watch-storm fixtures. |
+| Performance protocol and measured budgets | **Partial** | `docs/benchmarks/` defines reference-environment fields, scenario boundaries, raw-sample retention, and nearest-rank p50/p95/p99 procedures. Instrumented results and release budgets remain qualification work. |
+| Target-user research | **Missing — external work** | `docs/research/target-user-study.md` defines recruitment, consent, redaction, observation, and issue thresholds, but no sessions are claimed. The required 8–12 observed sessions remain an external milestone gate. |
 
 ### Phase 1 — project home and safe persistence
 
@@ -101,7 +101,7 @@ performance/accessibility/platform qualification.
 | Helpful outline/reference navigation | **Implemented** | Source outline and direct project/package references are available without claiming full semantic certainty. |
 | Bibliography assistance, configurable snippets, Git-aware status, import/export | **Not scheduled** | These are optional Phase 5 items and should remain behind the reliability work above. |
 | No advertising, engagement loops, uploads, or hidden remote behavior | **Implemented** | No such product surfaces or runtime capabilities exist. |
-| Supported versions, limitations, and test conditions published | **Missing — larger work** | README development instructions exist, but release support and qualification documentation does not. |
+| Supported versions, limitations, and test conditions published | **Partial** | `docs/support.md`, `docs/known-limitations.md`, and `docs/benchmarks/` publish the pre-release policy and reproducible procedure. Cross-platform qualification results are not yet published. |
 | “Small cruelties” regression suite | **Partial** | Tests cover parsing, workspace path restoration, PDF state models, external-write protection, build serialization, and logs/diagnostics. Focus theft, selected-text preservation, watch loops, disabled-shortcut audits, and repeated PDF replacement are not covered. |
 
 ## Small changes completed during this audit

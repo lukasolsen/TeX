@@ -11,8 +11,11 @@ security decisions are in [docs/phase-0.md](docs/phase-0.md).
 
 ## Development
 
+Install the pinned Rust and Bun versions from
+[the support policy](docs/support.md), then use the committed lockfiles:
+
 ```sh
-bun install
+bun install --frozen-lockfile
 bun run tauri dev
 ```
 
@@ -27,4 +30,11 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-Read [AGENTS.md](AGENTS.md) and [docs/code-quality.md](docs/code-quality.md) before contributing.
+Release and user-facing policies:
+
+- [Supported systems and tool versions](docs/support.md)
+- [Privacy](docs/privacy.md)
+- [Known limitations](docs/known-limitations.md)
+
+Read [AGENTS.md](AGENTS.md) and [docs/code-quality.md](docs/code-quality.md)
+before contributing.
