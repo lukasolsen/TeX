@@ -2,7 +2,7 @@
 
 Model revision: 1  
 Review date: 2026-07-16  
-Architecture revision: `12a8355`  
+Architecture revision: `579730a`
 Scope: local desktop application, build toolchain, project files, application
 state, webview, dependencies, CI, and release automation
 
@@ -102,40 +102,39 @@ all listed tests already exist.
 | `read_project_pdf` | approved root, PDF path | extension, canonical containment, file type, 256 MiB limit | traversal/symlink/oversize; replacement race; malformed PDF handled in viewer |
 | `project_pdf_revision` | approved root, PDF path | same PDF resolution; metadata-only revision hint | same-size/timestamp collision; replacement race |
 | `read_project_source` | approved root, relative path | extension allowlist, canonical containment/file type, 2 MiB, UTF-8 | traversal/symlink, invalid UTF-8, permission loss, replacement race |
-| `save_project_source` | approved root, content, expected revision, overwrite mode | 2 MiB; contained existing source; SHA-256 revision conflict; atomic replacement | stale revision, external replacement, disk failure, symlink/ancestor race |
+| `save_project_source` | approved root, content, expected revision | 2 MiB; contained existing source; mandatory SHA-256 revision conflict; atomic replacement | stale revision, external replacement, disk failure, ancestor race |
 | `save_recovery_draft` | approved root, source identity/content | source existence, 2 MiB, app-data hashed key, atomic replacement | malformed revision, path alias, disk failure, recovery confidentiality |
 | `load_recovery_draft` | approved root, source identity | approved root; hashed app-data key; embedded identity equality | oversized/corrupt record and alias handling |
 | `discard_recovery_draft` | approved root, source identity | approved root; exact hashed app-data file only | forged identity, missing file, permission failure |
 | `search_project_sources` | approved root, query/mode | literal escaped regex; 2,048 files, 500 returned matches, source size limits | query length, Unicode/case behavior, event-time changes |
 | `replace_project_sources` | query, replacement, expected revisions/files | approved root; 128 files/32 MiB transaction/64 KiB replacement; revisions; atomic per-file writes and rollback | crash mid-transaction, rollback failure, symlink race, duplicate paths |
-| `undo_project_replace` | transaction identifier | hex transaction key; approved recorded project; post-replace revisions | empty/oversized ID, corrupt/oversized transaction, partial undo rollback |
+| `undo_project_replace` | transaction identifier | fixed 64-hex transaction key; approved canonical project; post-replace revisions; reverse rollback | corrupt/oversized transaction, rollback failure, ancestor race |
 | `preview_build` | approved root, root, engine | Rust-loaded persisted configuration; same validator as start; fixed/consented executable | forged request configuration regression; executable replacement; PATH trust |
 | `get_build_profiles` | host tool availability | fixed engine list; executable discovery only | PATH edge cases, executable permission, no project execution |
-| `start_build` | approved root, root, engine | Rust config, path/consent validation, separate arguments, one active build, bounded retained entries/runs | command boundaries, forged config, output bounds, timeout/tree cancellation |
-| `stop_build` | approved root | approved root and active build identity; sets stop request | descendant termination, repeated stop, exactly-one terminal event |
-| `get_build_history` | approved root | approved root; 20 runs and 10,000 retained entries | aggregate payload/byte bound and redaction |
-| `preview_clean_auxiliary_files` | approved root | no symlink traversal; extension allowlist; 12 depth/4,096 files | generated-name ambiguity, event changes, byte overflow |
-| `clean_auxiliary_files` | approved root, preview list | revalidates containment/file type/allowlist and count before deletion | symlink/ancestor race, partial failure, source/PDF exclusion |
-| `reveal_project_output` | approved root and root file | Rust config; contained source/output PDF; fixed platform executable | output replacement race, process failure, path control characters |
-| `start_project_watch` | approved root | approved identity, Rust configuration, one watcher per root | event storm/overflow, invalid exclusions, thread startup failure |
+| `start_build` | approved root, root, engine | Rust config, path/consent validation, slot reserved before grouped spawn; 30-minute and retained-history budgets | executable replacement; process escaping its OS group/session |
+| `stop_build` | approved root | approved active identity; process-group cancellation and wait | repeated stop, exactly-one terminal event |
+| `get_build_history` | approved root | approved root; 10 runs, 500 entries and 512 KiB log text per run; 16 project histories | diagnostic duplication and redaction |
+| `preview_clean_auxiliary_files` | approved root | no symlink traversal; extension allowlist; depth/file/entry limits and truncation flag | generated-name ambiguity and concurrent replacement |
+| `clean_auxiliary_files` | approved root, preview list | deduplicated contained allowlist; native confirmation before deletion | ancestor race and partial auxiliary deletion |
+| `reveal_project_output` | approved root and root file | Rust config; contained PDF; fixed platform executable; grouped 10-second deadline/wait | output replacement race and desktop-handler trust |
+| `start_project_watch` | approved root | approved identity, validated Rust configuration, bounded active/channel/path state | notify backend loss beyond surfaced overflow |
 | `stop_project_watch` | approved root | approved identity and owned watcher channel | lost receiver, repeated stop, terminal status ordering |
 | `get_project_watch_status` | approved root | approved identity and controller state | stale thread/controller state |
+| `acknowledge_project_watch_build` | approved root and queued state | approved identity; consumes only an active `BuildQueued` state and emits `Watching` | frontend crash between acknowledgement and build request |
 | `start_project_tree_watch` | approved root | approved identity, one watcher per root | event storm/overflow and thread cleanup |
 | `stop_project_tree_watch` | approved root | approved identity and owned stop channel | repeated stop and thread cleanup |
-| `synctex_forward_search` | approved root, source/PDF coordinates | contained `.tex`/`.pdf`; separate fixed `synctex` args; finite integer floor | timeout/output bounds, executable identity, malformed output |
-| `synctex_inverse_search` | approved root, PDF coordinates | finite non-negative coordinates; contained PDF; canonical returned source | NaN/inf/huge coordinates, timeout/output bounds, malicious output path |
+| `synctex_forward_search` | approved root, source/PDF coordinates | strict source/PDF paths; canonical executable; grouped 5-second/512 KiB limits; finite parsed output | executable replacement and malformed but bounded output |
+| `synctex_inverse_search` | approved root, PDF coordinates | finite non-negative input; grouped bounded process; canonical contained `.tex` output | executable replacement and huge finite coordinates |
 
 ## External process map
 
 | Process | Selection and arguments | Authority/consent | Supervision and residual risk |
 | --- | --- | --- | --- |
-| `latexmk`, `pdflatex`, `xelatex`, `lualatex` | fixed engine enum; executable resolved from `PATH`; fixed arguments plus validated root/output | approved project; ordinary TeX build action | direct child supervised; PATH identity, environment reduction, timeout, descendant cancellation, and output-byte bounds remain review items |
-| Custom build executable | existing canonical absolute file; separately supplied bounded/control-character-free arguments | native confirmation bound to changed command; shell escape confirmed separately | persisted exact command loaded in Rust; executable replacement identity and process-tree supervision remain review items |
-| `synctex` | fixed name; separate `view`/`edit` arguments; contained source/PDF | approved project; synchronization action | synchronous output call currently lacks explicit timeout/output-byte limit |
-| `explorer.exe` | platform name plus `/select,<path>` argument | approved contained built PDF | detached system process; Windows argument semantics require platform smoke evidence |
-| `/usr/bin/open` | fixed absolute executable, `-R`, contained PDF | approved contained built PDF | detached system process; spawn failure mapped safely |
-| `/usr/bin/xdg-open` | fixed absolute executable, contained parent directory | approved contained built PDF | detached system process; environment/desktop handler is host-controlled |
-| Fixture TeX processes | fixed test commands against repository fixtures | test-only | temporary output cleanup; CI time/resource bounds remain review items |
+| `latexmk`, `pdflatex`, `xelatex`, `lualatex` | fixed engine enum; canonical executable resolved from `PATH`; fixed arguments plus validated root/output | approved project; ordinary TeX build action | grouped supervision, 30-minute limit, bounded streaming/retention; PATH executable replacement and inherited tool environment remain residual |
+| Custom build executable | existing canonical absolute file; separately supplied bounded/control-character-free arguments | native confirmation bound to changed command; shell escape confirmed separately | same grouped supervision; executable replacement after consent remains residual |
+| `synctex` | canonical `PATH` executable; separate `view`/`edit` arguments; contained source/PDF | approved project; synchronization action | 5-second grouped deadline and 512 KiB per-stream capture; executable replacement remains residual |
+| `explorer.exe`, `/usr/bin/open`, `/usr/bin/xdg-open` | fixed platform executable and contained output argument | approved contained built PDF | grouped 10-second deadline and wait; desktop handler/environment remains host-controlled |
+| Fixture TeX processes | fixed test commands against repository fixtures | test-only | grouped 5-second probes/120-second builds and temporary output cleanup |
 
 ## Abuse-case register
 
@@ -146,28 +145,29 @@ all listed tests already exist.
 | Traversal/symlink escape | canonical containment, extension/type checks, symlink mutation rejection | broad unit coverage; TEX-B-002 fixed | handle-relative/ancestor-race hardening in Wave B |
 | Forged custom command/shell consent | Rust-loaded config and native confirmations | TEX-C-001 fixed in `12a8355`; forged-request regression | test cancellation and command-change confirmation in platform smoke suite |
 | Malicious TeX source | shell escape off by default; explicit shell/custom consent | configuration tests | document ordinary TeX trust limits; reduce inherited environment |
-| Oversized/malformed source/PDF/state/output | source/PDF/search limits | source/PDF tests | add state, process-output, canvas/page, and transaction bounds |
+| Oversized/malformed source/PDF/state/output | bounded open-handle reads, process channels/capture, traversal and transaction budgets | Wave B/C regressions | add canvas/page/text bounds in Wave G |
 | PDF decompression/render bomb | 256 MiB byte cap only | incomplete | bound page/canvas/text work and cancellation in Wave G |
-| Watcher event storm/overflow | debounce/coalesce and re-stat model | fixture/unit tests | bounded channel/reconciliation review in Wave C |
+| Watcher event storm/overflow | bounded callback channel, path set, active count, debounce and surfaced truncated reconciliation | overflow unit test; TEX-C-004 fixed | platform storm smoke evidence |
 | Stale async completion | build IDs and selected frontend guards | partial reducer tests | map every event generation and parser in Waves D–G |
 | Concurrent/partial writes | revisions and per-file atomic replacement | source/replace tests | durable multi-file recovery and ancestor-race review |
-| Compromised dependency/action | lockfiles and frozen install | incomplete; TEX-A-001/002 open | pin Actions and add advisory/licence/source/dependency gates |
+| Compromised dependency/action | immutable Action pins, lockfiles, frozen install, dependency review/audit/licence/source gates | TEX-A-001/002 fixed in `fb47327` | monitor advisories and owned exceptions |
 | Malicious workflow input | restricted current PR permissions; release on tags | incomplete | audit expression interpolation, tag authority, artifact/release provenance |
 
 ## Logging and redaction
 
 User-facing errors use stable codes and generic messages. Build events retain
-compiler text and mapped relative file paths for diagnosis. The model prohibits
+compiler text and validated relative file paths for diagnosis under line,
+channel, byte, run, and project-history budgets. The model prohibits
 document/recovery content, credentials, unrestricted environment values, and
-unnecessary absolute paths in application logs. Wave C must verify byte/line
-bounds and control-character handling; Wave D must ensure raw backend errors
-cannot bypass frontend classification.
+unnecessary absolute paths in application logs. Wave D must ensure malformed
+event data and raw backend errors cannot bypass frontend classification.
 
 ## Phase 3 exit criteria
 
 Every current IPC command and external process has a validation owner and test
-strategy above. Critical findings TEX-B-001, TEX-B-002, and TEX-C-001 are fixed
-with regression evidence. Remaining high/medium risks are owned by Waves A–G
-and must be entered as findings when source review confirms their exact scope.
+strategy above. Critical findings TEX-B-001, TEX-B-002, and TEX-C-001 and all
+confirmed high process/filesystem findings through Wave C are fixed with
+regression evidence. Remaining risks are owned by Waves D–G and must be entered
+as findings when source review confirms their exact scope.
 The threat model must be updated whenever a command, plugin permission, process,
 persisted schema, event contract, or release credential path changes.
