@@ -27,8 +27,8 @@ artifact evidence.
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
-| H | Styles, components, fixtures, assets, and documentation | 147 | Inventoried |
-| **Total** | | **233** | **Inventoried** |
+| H | Styles, components, fixtures, assets, and documentation | 148 | Inventoried |
+| **Total** | | **234** | **Inventoried** |
 
 ## File register
 
@@ -65,6 +65,7 @@ artifact evidence.
 | `docs/reviews/oxlint-migration.md` | H | Inventoried | — |
 | `docs/reviews/rule-decisions.md` | H | Inventoried | — |
 | `docs/reviews/source-register.md` | H | Inventoried | — |
+| `docs/reviews/threat-model.md` | H | In review | Phase 3 command/process map |
 | `docs/support.md` | H | Inventoried | — |
 | `docs/ui-ux-requirements.md` | H | Inventoried | — |
 | `eslint.config.js` | A | Inventoried | — |
