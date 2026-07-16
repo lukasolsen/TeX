@@ -21,6 +21,10 @@ mod watch_system;
 use tauri_plugin_log::{Target, TargetKind};
 
 /// Starts the desktop application and registers its validated local capabilities.
+#[allow(
+    clippy::expect_used,
+    reason = "application bootstrap has no caller or recoverable UI after the event loop fails"
+)]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

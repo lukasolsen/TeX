@@ -32,6 +32,7 @@ import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
 import { selectedBuildRun, type BuildDiagnostic } from "@/domain/build"
 import { revealProjectOutput } from "@/services/build-service"
 import { projectErrorFromUnknown } from "@/services/project-service"
+import { runDetached } from "@/lib/promises"
 
 export function ProjectWorkspacePage({
   feedback,
@@ -341,7 +342,7 @@ export function ProjectWorkspacePage({
         onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onReturnHome={onReturnHome}
-        onSave={onSaveDocument}
+        onSave={() => runDetached(onSaveDocument())}
         onStop={() => void build.stop()}
         pdfOpen={pdfOpen}
         session={session}
@@ -475,7 +476,7 @@ export function ProjectWorkspacePage({
                   onOpenReference={onPinFile}
                   onResolveConflict={onResolveExternalChange}
                   onResolveRecovery={onResolveRecovery}
-                  onSave={onSaveDocument}
+                  onSave={() => runDetached(onSaveDocument())}
                   projectPath={session.project.path}
                   projectTree={session.project.tree}
                   retainedPaths={session.workspace.pinnedFiles}
@@ -679,7 +680,7 @@ export function ProjectWorkspacePage({
         onRevealOutput={() => void revealOutput()}
         onShowLogContext={showLogContext}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
-        onSave={onSaveDocument}
+        onSave={() => runDetached(onSaveDocument())}
         onSearch={() => setSearchOpen(true)}
         onToggleWatch={() => void (watch.active ? watch.stop() : watch.start())}
         onZoomIn={() =>

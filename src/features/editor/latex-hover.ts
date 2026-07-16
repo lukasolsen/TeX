@@ -191,7 +191,10 @@ export function keywordAt(
       position >= from && position <= to && keywordInfo[name] !== undefined
   )
   if (command === undefined) return null
-  return { from: command.from, to: command.to, info: keywordInfo[command.name] }
+  const info = keywordInfo[command.name]
+  return info === undefined
+    ? null
+    : { from: command.from, to: command.to, info }
 }
 
 function classOrPackageAt(

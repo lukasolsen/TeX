@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useId, useState } from "react"
 import {
   CircleAlert,
   FileCode2,
@@ -62,6 +62,8 @@ export function SourceViewer({
   state: AsyncDocumentState
   target: EditorTarget | null
 }) {
+  const editorConflictId = useId()
+  const diskConflictId = useId()
   const [reviewingConflict, setReviewingConflict] = useState(false)
 
   if (state.status === "empty") {
@@ -212,18 +214,26 @@ export function SourceViewer({
             </DialogDescription>
           </DialogHeader>
           <div className="grid min-h-64 gap-4 md:grid-cols-2">
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+            <label
+              className="flex min-w-0 flex-col gap-2 text-xs font-medium"
+              htmlFor={editorConflictId}
+            >
               Your editor
               <Textarea
                 className="min-h-64 resize-none font-mono text-xs"
+                id={editorConflictId}
                 readOnly
                 value={state.content}
               />
             </label>
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+            <label
+              className="flex min-w-0 flex-col gap-2 text-xs font-medium"
+              htmlFor={diskConflictId}
+            >
               File on disk
               <Textarea
                 className="min-h-64 resize-none font-mono text-xs"
+                id={diskConflictId}
                 readOnly
                 value={conflict?.content ?? ""}
               />

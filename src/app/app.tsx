@@ -6,6 +6,7 @@ import { useProjectSession } from "@/features/projects/use-project-session"
 import { StartupScreen } from "@/components/feedback/startup-screen"
 import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
+import { runDetached } from "@/lib/promises"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -76,25 +77,27 @@ export default function App() {
         <ProjectWorkspacePage
           feedback={state.openFeedback}
           key={state.session.project.path}
-          onOpenProject={chooseAndOpenProject}
+          onOpenProject={() => runDetached(chooseAndOpenProject())}
           onOpenPdf={openPdf}
           onOpenSettings={(focus) => {
             setWorkspaceFocus(focus)
             setSettingsOpen(true)
           }}
-          onReturnHome={returnHome}
+          onReturnHome={() => runDetached(returnHome())}
           onResizeSidebar={resizeSidebar}
-          onCloseFile={closeFile}
-          onCloseFiles={closeFiles}
+          onCloseFile={(path) => runDetached(closeFile(path))}
+          onCloseFiles={(paths) => runDetached(closeFiles(paths))}
           onCreateProjectEntry={createProjectEntry}
           onDeleteProjectEntry={deleteProjectEntry}
           onEditDocument={editDocument}
           onPinFile={pinFile}
           onPreviewFile={previewFile}
           onRenameProjectEntry={renameProjectEntry}
-          onResolveExternalChange={resolveExternalChange}
-          onResolveRecovery={resolveRecovery}
-          onProjectFilesChanged={refreshProjectFiles}
+          onResolveExternalChange={(keepMine) =>
+            runDetached(resolveExternalChange(keepMine))
+          }
+          onResolveRecovery={(restore) => runDetached(resolveRecovery(restore))}
+          onProjectFilesChanged={() => runDetached(refreshProjectFiles())}
           onSaveDocument={saveActiveDocument}
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}
@@ -113,9 +116,9 @@ export default function App() {
     <ProjectHomePage
       feedback={state.openFeedback}
       onClearFeedback={clearFeedback}
-      onForgetProject={forgetProject}
-      onOpenProject={chooseAndOpenProject}
-      onOpenRecent={openProjectAtPath}
+      onForgetProject={(path) => runDetached(forgetProject(path))}
+      onOpenProject={() => runDetached(chooseAndOpenProject())}
+      onOpenRecent={(path) => runDetached(openProjectAtPath(path))}
       onOpenSettings={() => setSettingsOpen(true)}
       startup={state.startup}
     />

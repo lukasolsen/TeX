@@ -20,29 +20,31 @@ artifact evidence.
 
 | Wave | Scope | Files | Status |
 | --- | --- | ---: | --- |
-| A | Repository boundary | 24 | Inventoried |
+| A | Repository boundary | 26 ledger rows | Reviewed; 1 removed |
 | B | Rust filesystem and persistence | 10 | Inventoried |
 | C | Rust process, parser, and event boundary | 6 | Inventoried |
 | D | Domain and IPC contracts | 9 | Inventoried |
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
-| H | Styles, components, fixtures, assets, and documentation | 148 | Inventoried |
-| **Total** | | **234** | **Inventoried** |
+| H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
+| **Total** | | **237 ledger rows / 236 maintained** | **Wave A reviewed** |
 
 ## File register
 
 | File | Wave | Status | Finding IDs / evidence |
 | --- | :---: | --- | --- |
-| `.github/workflows/ci.yml` | A | Inventoried | — |
-| `.github/workflows/release.yml` | A | Inventoried | — |
-| `.gitignore` | A | Inventoried | — |
-| `.prettierignore` | A | Inventoried | — |
-| `.prettierrc` | A | Inventoried | — |
-| `AGENTS.md` | A | Inventoried | — |
+| `.github/workflows/ci.yml` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `.github/workflows/release.yml` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `.gitignore` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `.prettierignore` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `.prettierrc` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `.oxlintrc.json` | A | Reviewed | TEX-A-005; Oxlint 1.74.0 typed policy |
+| `AGENTS.md` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
 | `app-icon.png` | H | Inventoried | — |
-| `bun.lock` | A | Inventoried | — |
-| `components.json` | A | Inventoried | — |
+| `bun.lock` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `components.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `deny.toml` | A | Reviewed | TEX-A-002; cargo-deny 0.20.2 policy |
 | `docs/benchmarks/README.md` | H | Inventoried | — |
 | `docs/benchmarks/reference-machines.md` | H | Inventoried | — |
 | `docs/benchmarks/result-template.md` | H | Inventoried | — |
@@ -68,17 +70,17 @@ artifact evidence.
 | `docs/reviews/threat-model.md` | H | In review | Phase 3 command/process map |
 | `docs/support.md` | H | Inventoried | — |
 | `docs/ui-ux-requirements.md` | H | Inventoried | — |
-| `eslint.config.js` | A | Inventoried | — |
-| `index.html` | A | Inventoried | — |
-| `package.json` | A | Inventoried | — |
+| `eslint.config.js` | A | Removed | TEX-A-005; replaced by Oxlint |
+| `index.html` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `package.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
 | `public/vite.svg` | H | Inventoried | — |
-| `README.md` | A | Inventoried | — |
-| `rust-toolchain.toml` | A | Inventoried | — |
-| `src-tauri/.gitignore` | A | Inventoried | — |
-| `src-tauri/build.rs` | A | Inventoried | — |
-| `src-tauri/capabilities/default.json` | A | Inventoried | — |
-| `src-tauri/Cargo.lock` | A | Inventoried | — |
-| `src-tauri/Cargo.toml` | A | Inventoried | — |
+| `README.md` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `rust-toolchain.toml` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `src-tauri/.gitignore` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `src-tauri/build.rs` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `src-tauri/capabilities/default.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `src-tauri/Cargo.lock` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `src-tauri/Cargo.toml` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
 | `src-tauri/icons/128x128.png` | H | Inventoried | — |
 | `src-tauri/icons/128x128@2x.png` | H | Inventoried | — |
 | `src-tauri/icons/32x32.png` | H | Inventoried | — |
@@ -113,7 +115,7 @@ artifact evidence.
 | `src-tauri/src/source_read.rs` | B | Inventoried | — |
 | `src-tauri/src/synctex.rs` | C | Inventoried | — |
 | `src-tauri/src/watch_system.rs` | C | Inventoried | — |
-| `src-tauri/tauri.conf.json` | A | Inventoried | — |
+| `src-tauri/tauri.conf.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
 | `src/app/app.tsx` | E | Inventoried | — |
 | `src/components/brand/app-brand.tsx` | H | Inventoried | — |
 | `src/components/feedback/open-project-feedback.tsx` | H | Inventoried | — |
@@ -179,6 +181,7 @@ artifact evidence.
 | `src/index.css` | H | Inventoried | — |
 | `src/lib/shortcuts.test.ts` | H | Inventoried | — |
 | `src/lib/shortcuts.ts` | H | Inventoried | — |
+| `src/lib/promises.ts` | H | In review | Type-aware promise ownership |
 | `src/lib/utils.ts` | H | Inventoried | — |
 | `src/main.tsx` | H | Inventoried | — |
 | `src/pages/project-home-page.tsx` | E | Inventoried | — |
@@ -263,11 +266,11 @@ artifact evidence.
 | `tests/fixtures/root-detection/main.pdf` | H | Inventoried | — |
 | `tests/fixtures/root-detection/main.synctex.gz` | H | Inventoried | — |
 | `tests/fixtures/root-detection/main.tex` | H | Inventoried | — |
-| `tsconfig.app.json` | A | Inventoried | — |
-| `tsconfig.json` | A | Inventoried | — |
-| `tsconfig.node.json` | A | Inventoried | — |
-| `vite.config.test.ts` | A | Inventoried | — |
-| `vite.config.ts` | A | Inventoried | — |
+| `tsconfig.app.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `tsconfig.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `tsconfig.node.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `vite.config.test.ts` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
+| `vite.config.ts` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
 
 ## Maintenance rule
 

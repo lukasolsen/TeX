@@ -123,7 +123,7 @@ export function preferredRoot(
     return persistedRoot
   }
   return project.rootCandidates.length === 1
-    ? project.rootCandidates[0].path
+    ? (project.rootCandidates[0]?.path ?? null)
     : null
 }
 

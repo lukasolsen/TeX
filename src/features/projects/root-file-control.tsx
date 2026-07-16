@@ -46,6 +46,7 @@ export function RootFileControl({
 
   if (project.rootCandidates.length === 1 && selectedRoot !== null) {
     const candidate = project.rootCandidates[0]
+    if (candidate === undefined) return null
     return (
       <span
         className="flex min-w-0 items-center gap-1.5 text-xs text-status-foreground"

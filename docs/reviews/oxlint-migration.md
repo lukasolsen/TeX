@@ -17,9 +17,12 @@ glob intersections.
 
 The production configuration will use native plugins only. Alpha JavaScript
 plugins are not justified for the currently unsupported React Compiler rules;
-TeX does not configure React Compiler. Type-aware mode remains deferred until a
-pinned `oxlint-tsgolint` is verified with TypeScript 6, timed locally and in CI,
-and reviewed for diagnostic stability.
+TeX does not configure React Compiler. Type-aware mode is enabled with pinned
+`oxlint-tsgolint` 0.24.0. The full repository completed in 0.53 seconds on
+`arch-linux-x86_64-01`, compared with the 3.87-second ESLint baseline, and
+identified thirteen discarded promise callbacks plus one redundant shortcut
+contract. Typed promise ownership and switch exhaustiveness are blocking.
+Experimental Oxlint type checking remains disabled; `tsc` remains independent.
 
 ## Current rule compatibility
 
@@ -161,8 +164,8 @@ risk and migration impact.
 2. Reproduce all adopted mappings above; set every enabled rule to error.
 3. Add the approved native plugin coverage and explicit ignores/overrides.
 4. Run report-only, classify each diagnostic, and fix behavior before style.
-5. Measure untyped Oxlint against the ESLint baseline. Separately test
-   type-aware mode without making it blocking.
+5. Measure untyped and typed Oxlint against the ESLint baseline. Record pinned
+   companion compatibility before making typed rules blocking.
 6. Run Oxlint and ESLint once as a compatibility check. Do not retain the dual
    gate after equivalence is proved.
 7. Change `bun run lint` and CI to Oxlint with zero warnings; remove ESLint
@@ -175,4 +178,3 @@ Delete ESLint only when no applicable baseline rule is lost, unsupported rules
 have the decisions above, Oxlint passes with warnings denied, and the lockfile
 shows no unrelated dependency movement. TypeScript remains a separate required
 gate. Prettier remains a separate formatter.
-

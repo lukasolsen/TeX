@@ -230,7 +230,7 @@ export function SettingsPage({
                 <AlertDescription>{saveError}</AlertDescription>
               </Alert>
             ) : null}
-            {visibleSections.includes(sections[0]) &&
+            {visibleSections.some((section) => section.id === "appearance") &&
             matches(
               "appearance color theme system light dark custom accent"
             ) ? (
@@ -299,7 +299,7 @@ export function SettingsPage({
               </SettingsGroup>
             ) : null}
 
-            {visibleSections.includes(sections[1]) &&
+            {visibleSections.some((section) => section.id === "editor") &&
             matches("editor source font text size writing") ? (
               <SettingsGroup>
                 <SettingRow
@@ -353,7 +353,7 @@ export function SettingsPage({
               </SettingsGroup>
             ) : null}
 
-            {visibleSections.includes(sections[2]) &&
+            {visibleSections.some((section) => section.id === "workspace") &&
             matches("workspace project sidebar files layout width") ? (
               <SettingsGroup>
                 <SettingRow

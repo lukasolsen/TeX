@@ -53,7 +53,9 @@ proposal record. Adoption applies the revised rule in
 | EXT-CM-001 | SRC-CM-001 | **Adopt** | Destroy every owned editor view/plugin and avoid synchronous layout reads in update paths. |
 | EXT-PDF-001 | SRC-PDF-001 | **Adopt** | Cancel/destroy superseded loading/render tasks and preserve last-good output until replacement succeeds. |
 | EXT-OXC-001 | SRC-OXC-001 | **Adopt** | Replace ESLint with explicit native Oxlint coverage and zero warnings. |
-| EXT-OXC-002 | SRC-OXC-003 | **Defer** | Type-aware linting awaits pinned compatibility and measured cost; `tsc` remains authoritative. Review by 2026-10-16. |
+| EXT-OXC-002 | SRC-OXC-003 | **Adopt after measurement** | Oxlint 1.74.0 with `oxlint-tsgolint` 0.24.0 completes the full repository in 0.53 s and cleanly enforces promise ownership/exhaustiveness. `tsc` remains an independent required gate; experimental Oxlint type checking remains rejected. |
+| EXT-DEPS-001 | SRC-DEPS-001 | **Adopt** | Enforce Rust advisories, yanked packages, approved licences, registry-only sources, and wildcard bans; retain duplicate versions as visible review warnings. |
+| EXT-DEPS-002 | SRC-DEPS-002 | **Adopt** | Fail CI for high/critical frontend advisories and retain frozen installation plus dependency-diff review. |
 | EXT-OWASP-001 | SRC-OWASP-001 | **Adopt with revision** | Map applicable ASVS controls to the desktop threat model; do not claim formal ASVS conformance. |
 | EXT-OWASP-002 | SRC-OWASP-002 | **Adopt** | Fixed executable plus separate validated arguments; no shell command construction. |
 | EXT-GH-001 | SRC-GH-001 | **Adopt** | Pin every third-party Action to a verified full commit SHA with a version comment. |

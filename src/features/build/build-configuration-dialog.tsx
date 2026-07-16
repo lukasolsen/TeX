@@ -239,8 +239,8 @@ export function BuildConfigurationDialog({
               <ShieldAlert />
               <AlertTitle>Shell escape expands project trust</AlertTitle>
               <AlertDescription>
-                LaTeX may run programs requested by project source. Saving
-                opens a separate native shell-escape confirmation.
+                LaTeX may run programs requested by project source. Saving opens
+                a separate native shell-escape confirmation.
               </AlertDescription>
             </Alert>
           ) : null}

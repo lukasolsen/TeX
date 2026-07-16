@@ -157,8 +157,9 @@ function PdfPage({
     return <div className="aspect-[0.707] w-lg max-w-full bg-card shadow-sm" />
   }
   const viewport = page.getViewport({ scale, rotation })
+  const pageHeight = page.view[3] ?? 0
   return (
-    <article
+    <div
       aria-label={`Page ${pageNumber}`}
       className="pdf-page relative shrink-0 bg-white shadow-[0_2px_12px_color-mix(in_oklch,var(--foreground)_16%,transparent)]"
       data-page={pageNumber}
@@ -171,9 +172,20 @@ function PdfPage({
           event.clientX - bounds.left,
           event.clientY - bounds.top
         )
-        onInverseSearch(pageNumber, pdfX, page.view[3] - pdfY)
+        onInverseSearch(pageNumber, pdfX, pageHeight - pdfY)
       }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter") return
+        event.preventDefault()
+        const [pdfX, pdfY] = viewport.convertToPdfPoint(
+          viewport.width / 2,
+          viewport.height / 2
+        )
+        onInverseSearch(pageNumber, pdfX, pageHeight - pdfY)
+      }}
+      role="button"
       style={{ width: viewport.width, height: viewport.height }}
+      tabIndex={0}
       title={`${shortcutLabel(["primary"])}-click to synchronize to source`}
     >
       <canvas aria-hidden="true" ref={canvasRef} />
@@ -185,7 +197,7 @@ function PdfPage({
           style={{ left: syncMarker.x * scale, top: syncMarker.y * scale }}
         />
       ) : null}
-    </article>
+    </div>
   )
 }
 
@@ -1041,7 +1053,8 @@ export function PdfViewer({
                     const next =
                       (matchIndex - 1 + matches.length) % matches.length
                     setMatchIndex(next)
-                    goToPage(matches[next])
+                    const pageNumber = matches[next]
+                    if (pageNumber !== undefined) goToPage(pageNumber)
                   }}
                   size="icon-xs"
                   variant="ghost"
@@ -1053,7 +1066,8 @@ export function PdfViewer({
                   onClick={() => {
                     const next = (matchIndex + 1) % matches.length
                     setMatchIndex(next)
-                    goToPage(matches[next])
+                    const pageNumber = matches[next]
+                    if (pageNumber !== undefined) goToPage(pageNumber)
                   }}
                   size="icon-xs"
                   variant="ghost"
@@ -1091,7 +1105,9 @@ export function PdfViewer({
               </Button>
             </div>
           ) : null}
+          {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- The region observes bubbled keyboard/pointer activity to defer PDF replacement; page buttons own keyboard focus. TEX-H-002, review 2027-01-16. */}
           <div
+            aria-label="PDF pages"
             className={cn(
               "min-h-0 flex-1 overflow-auto",
               viewer.layout === "single" && "flex items-start justify-center"
@@ -1142,7 +1158,7 @@ export function PdfViewer({
               }
             }}
             ref={scrollRef}
-            tabIndex={0}
+            role="region"
           >
             <div className="flex min-h-full min-w-max flex-col items-center gap-5 p-5">
               {pages.map((page) => (

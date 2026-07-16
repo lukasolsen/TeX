@@ -42,7 +42,10 @@ describe("project model", () => {
       "main.tex",
       "main.pdf",
     ])
-    expect(projectTreeNodes(rootNodes[0], rootNodes[0].path)[0].path).toBe(
+    const chapters = rootNodes[0]
+    expect(chapters).toBeDefined()
+    if (chapters === undefined) return
+    expect(projectTreeNodes(chapters, chapters.path)[0]?.path).toBe(
       "chapters/intro.tex"
     )
   })
