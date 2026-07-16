@@ -4,6 +4,7 @@ import type {
   RootCandidate,
   RootEvidence,
 } from "@/domain/project"
+import { latexCommands, latexFileReferences } from "@/domain/latex"
 
 const readableSourceExtensions = new Set([
   "tex",
@@ -46,30 +47,40 @@ export function texDependencies(
 ): TexDependency[] {
   const dependencies: TexDependency[] = []
   const seen = new Set<string>()
-  const sourceDirectory = sourcePath.includes("/")
-    ? sourcePath.slice(0, sourcePath.lastIndexOf("/"))
-    : ""
-  const uncommented = source
-    .split("\n")
-    .map((line) => line.replace(/(^|[^\\])%.*$/, "$1"))
-    .join("\n")
-  const commandPattern =
-    /\\(input|include|subfile|bibliography|addbibresource|includegraphics|usepackage|documentclass)\s*(?:\[[^\]]*\]\s*)?\{([^}]*)\}/g
-
-  for (const match of uncommented.matchAll(commandPattern)) {
-    const command = match[1]
-    const values = match[2]
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean)
-    for (const value of values) {
-      const kind = dependencyKind(command)
-      const path = dependencyPath(value, sourceDirectory, kind)
-      const key = `${command}:${path}`
-      if (!seen.has(key)) {
-        seen.add(key)
-        dependencies.push({ command, kind, path })
+  const candidates: Array<TexDependency & { from: number }> =
+    latexFileReferences(source, sourcePath).map((reference) => ({
+      from: reference.from,
+      command: reference.command,
+      kind: dependencyKind(reference.command),
+      path: reference.path,
+    }))
+  for (const parsedCommand of latexCommands(source)) {
+    if (
+      parsedCommand.name !== "usepackage" &&
+      parsedCommand.name !== "documentclass"
+    ) {
+      continue
+    }
+    const group = parsedCommand.groups.find(({ kind }) => kind === "required")
+    if (group === undefined) continue
+    for (const path of group.value.split(",").map((value) => value.trim())) {
+      const command = parsedCommand.name
+      if (path !== "") {
+        candidates.push({
+          from: group.from,
+          command,
+          kind: "package",
+          path,
+        })
       }
+    }
+  }
+  candidates.sort((left, right) => left.from - right.from)
+  for (const { command, kind, path } of candidates) {
+    const key = `${command}:${path}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      dependencies.push({ command, kind, path })
     }
   }
   return dependencies
@@ -81,19 +92,6 @@ function dependencyKind(command: string): TexDependencyKind {
     return "bibliography"
   if (command === "includegraphics") return "asset"
   return "package"
-}
-
-function dependencyPath(
-  value: string,
-  sourceDirectory: string,
-  kind: TexDependencyKind
-): string {
-  const extension =
-    kind === "source" ? ".tex" : kind === "bibliography" ? ".bib" : ""
-  const path =
-    extension !== "" && !value.includes(".") ? `${value}${extension}` : value
-  if (kind === "package") return path
-  return sourceDirectory === "" ? path : `${sourceDirectory}/${path}`
 }
 
 export function preferredRoot(

@@ -1,6 +1,11 @@
 import type { Tooltip } from "@codemirror/view"
 
 import {
+  latexCommands,
+  latexFileReferenceAt,
+  type LatexFileReference,
+} from "@/domain/latex"
+import {
   projectErrorFromUnknown,
   readProjectSource,
 } from "@/services/project-service"
@@ -169,84 +174,45 @@ const keywordInfo: Record<string, KeywordInfo> = {
   },
 }
 
-type FileReference = { from: number; to: number; path: string; command: string }
-
 export function referencedFileAt(
   source: string,
   sourcePath: string,
   position: number
-): FileReference | null {
-  const sourceDirectory = sourcePath.includes("/")
-    ? sourcePath.slice(0, sourcePath.lastIndexOf("/"))
-    : ""
-  const pattern =
-    /\\(input|include|subfile|bibliography|addbibresource|includegraphics)\s*(?:\[[^\]]*\]\s*)?\{([^}]*)\}/g
-  for (const match of source.matchAll(pattern)) {
-    const value = match[2]
-    const command = match[1]
-    const valuesStart = (match.index ?? 0) + match[0].lastIndexOf(value)
-    let offset = 0
-    for (const rawValue of value.split(",")) {
-      const leadingWhitespace = rawValue.length - rawValue.trimStart().length
-      const name = rawValue.trim()
-      const from = valuesStart + offset + leadingWhitespace
-      const to = from + name.length
-      offset += rawValue.length + 1
-      if (name !== "" && position >= from && position <= to) {
-        const extension = ["input", "include", "subfile"].includes(command)
-          ? ".tex"
-          : ["bibliography", "addbibresource"].includes(command)
-            ? ".bib"
-            : ""
-        const path =
-          extension !== "" && !name.includes(".") ? `${name}${extension}` : name
-        return {
-          from,
-          to,
-          command,
-          path: sourceDirectory === "" ? path : `${sourceDirectory}/${path}`,
-        }
-      }
-    }
-  }
-  return null
+): LatexFileReference | null {
+  return latexFileReferenceAt(source, sourcePath, position)
 }
 
 export function keywordAt(
   source: string,
   position: number
 ): { from: number; to: number; info: KeywordInfo } | null {
-  const isCommandCharacter = (character: string | undefined) =>
-    character !== undefined && /[A-Za-z@]/.test(character)
-  const hoveredCharacter = source[position]
-  let from = hoveredCharacter === "\\" ? position + 1 : position
-  let to = from
-  while (isCommandCharacter(source[from - 1])) from -= 1
-  while (isCommandCharacter(source[to])) to += 1
-  if (source[from - 1] !== "\\") return null
-  const info = keywordInfo[source.slice(from, to)]
-  if (info === undefined) return null
-  return { from: from - 1, to, info }
+  const command = latexCommands(source).find(
+    ({ from, to, name }) =>
+      position >= from && position <= to && keywordInfo[name] !== undefined
+  )
+  if (command === undefined) return null
+  return { from: command.from, to: command.to, info: keywordInfo[command.name] }
 }
 
 function classOrPackageAt(
   source: string,
   position: number
 ): { from: number; to: number; title: string; description: string } | null {
-  const pattern =
-    /\\(documentclass|usepackage)\s*(?:\[[^\]]*\]\s*)?\{([^}]*)\}/g
-  for (const match of source.matchAll(pattern)) {
-    const value = match[2]
-    const valuesStart = (match.index ?? 0) + match[0].lastIndexOf(value)
+  for (const command of latexCommands(source)) {
+    if (command.name !== "documentclass" && command.name !== "usepackage") {
+      continue
+    }
+    const group = command.groups.find(({ kind }) => kind === "required")
+    if (group === undefined) continue
     let offset = 0
-    for (const rawValue of value.split(",")) {
+    for (const rawValue of group.value.split(",")) {
       const leadingWhitespace = rawValue.length - rawValue.trimStart().length
       const name = rawValue.trim()
-      const from = valuesStart + offset + leadingWhitespace
+      const from = group.from + offset + leadingWhitespace
       const to = from + name.length
       offset += rawValue.length + 1
-      if (name !== "" && position >= from && position <= to) {
-        const isClass = match[1] === "documentclass"
+      if (name !== "" && position >= from && position < to) {
+        const isClass = command.name === "documentclass"
         return {
           from,
           to,
@@ -327,7 +293,7 @@ export function latexHoverTooltip(projectPath: string, sourcePath: string) {
           create: () => ({
             dom: card(
               document.path,
-              `${document.byteLength.toLocaleString()} bytes · referenced by \\${reference.command}`,
+              `${document.byteLength.toLocaleString()} bytes · referenced by \\${reference.command} · Ctrl/⌘-click to open`,
               excerpt,
               "This is a preview only. Edit the referenced file from the project tree or by opening it in the editor."
             ),

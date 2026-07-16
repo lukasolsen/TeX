@@ -26,4 +26,13 @@ describe("keywordAt", () => {
       command: "input",
     })
   })
+
+  it("does not expose commands or file links inside comments", () => {
+    const source = "% \\input{draft} and \\section{Old}"
+
+    expect(
+      referencedFileAt(source, "main.tex", source.indexOf("draft"))
+    ).toBeNull()
+    expect(keywordAt(source, source.indexOf("section"))).toBeNull()
+  })
 })

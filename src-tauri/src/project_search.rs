@@ -417,7 +417,7 @@ fn unavailable() -> SearchError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, time::SystemTime};
+    use std::{fs, path::Path, time::SystemTime};
 
     use super::{literal_matcher, search};
 
@@ -439,6 +439,27 @@ mod tests {
         assert_eq!(response.results[0].column, 7);
         assert_eq!(response.results[0].path, "main.tex");
         fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn searches_across_a_realistic_multi_file_report() -> Result<(), Box<dyn std::error::Error>> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/latex-projects/nasa-technical-report");
+        let matcher = literal_matcher("fictional", false).map_err(|_| "matcher failed")?;
+        let response = search(&root, &matcher).map_err(|_| "search failed")?;
+
+        assert_eq!(response.searched_files, 11);
+        assert_eq!(response.total_matches, 7);
+        assert!(response
+            .results
+            .iter()
+            .any(|result| result.path == "main.tex"));
+        assert!(response
+            .results
+            .iter()
+            .any(|result| result.path == "sections/results.tex"));
+        assert!(!response.truncated);
         Ok(())
     }
 }

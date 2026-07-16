@@ -141,9 +141,18 @@ fn unavailable() -> SourceReadError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
 
     use super::read_source;
+
+    fn fixture(name: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/latex-projects")
+            .join(name)
+    }
 
     #[test]
     fn reads_fixture_source_with_a_project_relative_path() -> Result<(), Box<dyn std::error::Error>>
@@ -168,6 +177,27 @@ mod tests {
         fs::remove_file(outside)?;
 
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn reads_utf8_source_from_a_non_ascii_project_path() -> Result<(), Box<dyn std::error::Error>> {
+        let root = fixture("unicode-project");
+        let source = read_source(&root, Path::new("Måneanalyse/hoveddokument.tex"))
+            .map_err(|_| "Unicode source read failed")?;
+
+        assert!(source.content.contains("Sigrid Ødegård"));
+        assert_eq!(source.path, "Måneanalyse/hoveddokument.tex");
+        Ok(())
+    }
+
+    #[test]
+    fn reads_project_local_style_files() -> Result<(), Box<dyn std::error::Error>> {
+        let root = fixture("nasa-technical-report");
+        let source = read_source(&root, Path::new("styles/nasa-report.sty"))
+            .map_err(|_| "style source read failed")?;
+
+        assert!(source.content.contains("\\ProvidesPackage{nasa-report}"));
         Ok(())
     }
 }

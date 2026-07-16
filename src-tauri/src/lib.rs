@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+#[cfg(test)]
+mod latex_fixtures;
 mod persistence;
 mod project_files;
 mod project_open;

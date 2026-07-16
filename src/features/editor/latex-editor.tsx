@@ -16,13 +16,10 @@ import {
 } from "@codemirror/commands"
 import {
   bracketMatching,
-  defaultHighlightStyle,
-  HighlightStyle,
   indentOnInput,
   syntaxHighlighting,
   StreamLanguage,
 } from "@codemirror/language"
-import { tags } from "@lezer/highlight"
 import { stex } from "@codemirror/legacy-modes/mode/stex"
 import {
   highlightSelectionMatches,
@@ -53,6 +50,11 @@ import {
   tooltips,
 } from "@codemirror/view"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
+import { latexHighlightStyle } from "@/features/editor/latex-highlighting"
+import {
+  latexSemanticHighlighting,
+  setLatexSemanticContext,
+} from "@/features/editor/latex-semantic-highlighting"
 import type { ProjectEntry } from "@/domain/project"
 import {
   isReadableSource,
@@ -86,12 +88,18 @@ const projectReferenceField = StateField.define({
   provide: (field) => EditorView.decorations.from(field),
 })
 
-const latexHighlightStyle = HighlightStyle.define([
-  { tag: tags.comment, color: "var(--editor-comment)", fontStyle: "italic" },
-  { tag: tags.keyword, color: "var(--editor-command)", fontWeight: "600" },
-  { tag: tags.string, color: "var(--editor-string)" },
-  { tag: [tags.number, tags.bool, tags.atom], color: "var(--editor-atom)" },
-])
+function projectFilePaths(
+  entry: ProjectEntry,
+  parentPath = "",
+  paths = new Set<string>()
+): Set<string> {
+  for (const child of entry.children) {
+    const path = parentPath === "" ? child.name : `${parentPath}/${child.name}`
+    if (child.kind === "file") paths.add(path)
+    projectFilePaths(child, path, paths)
+  }
+  return paths
+}
 
 function sourceEditorTheme(fontSize: number) {
   return EditorView.theme({
@@ -126,10 +134,12 @@ function sourceEditorTheme(fontSize: number) {
     ".cm-scroller": { overflow: "auto" },
     ".cm-project-reference": {
       cursor: "pointer",
-      textDecoration: "underline",
-      textDecorationColor: "var(--primary)",
-      textDecorationThickness: "1px",
-      textUnderlineOffset: "0.18em",
+      backgroundImage: "linear-gradient(var(--primary), var(--primary))",
+      backgroundPosition: "left calc(100% - 0.08em)",
+      backgroundRepeat: "no-repeat",
+      backgroundSize: "0 1.5px",
+      animation:
+        "tex-reference-underline 160ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards",
     },
     ".cm-tooltip:has(.tex-hover-card)": {
       border: "1px solid var(--border)",
@@ -263,6 +273,12 @@ export function LatexEditor({
 
   useEffect(() => {
     projectTreeRef.current = projectTree
+    view.current?.dispatch({
+      effects: setLatexSemanticContext.of({
+        sourcePath: activePath.current,
+        projectFiles: projectFilePaths(projectTree),
+      }),
+    })
   }, [projectTree])
 
   useEffect(() => {
@@ -302,6 +318,22 @@ export function LatexEditor({
       activeReference = reference
       editor.dispatch({ effects: setProjectReference.of(reference) })
     }
+    const openReferenceAtSelection = (editor: EditorView) => {
+      const reference = referencedFileAt(
+        editor.state.doc.toString(),
+        activePath.current,
+        editor.state.selection.main.head
+      )
+      if (
+        reference === null ||
+        !isReadableSource(reference.path) ||
+        !treeContainsPath(projectTreeRef.current, reference.path)
+      ) {
+        return false
+      }
+      onOpenReferenceRef.current(reference.path)
+      return true
+    }
     const editorExtensions: Extension[] = [
       lineNumbers(),
       highlightActiveLineGutter(),
@@ -311,8 +343,12 @@ export function LatexEditor({
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+      StreamLanguage.define(stex),
       syntaxHighlighting(latexHighlightStyle),
+      latexSemanticHighlighting({
+        sourcePath: activePath.current,
+        projectFiles: projectFilePaths(projectTreeRef.current),
+      }),
       bracketMatching(),
       closeBrackets(),
       rectangularSelection(),
@@ -363,7 +399,6 @@ export function LatexEditor({
           return true
         },
       }),
-      StreamLanguage.define(stex),
       EditorState.languageData.of(() => [
         {
           commentTokens: { line: "%" },
@@ -377,6 +412,7 @@ export function LatexEditor({
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },
         { key: "Mod-/", run: toggleComment },
+        { key: "Mod-Enter", run: openReferenceAtSelection },
         indentWithTab,
         ...closeBracketsKeymap,
         ...completionKeymap,
@@ -482,6 +518,12 @@ export function LatexEditor({
     })
     editor.scrollDOM.scrollTop = restored?.scrollTop ?? 0
     activePath.current = path
+    editor.dispatch({
+      effects: setLatexSemanticContext.of({
+        sourcePath: path,
+        projectFiles: projectFilePaths(projectTreeRef.current),
+      }),
+    })
   }, [path])
 
   useEffect(() => {

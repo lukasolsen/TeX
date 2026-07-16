@@ -1,0 +1,14 @@
+% !TeX root = ../main.tex
+\chapter{Apparatus and Method}
+The sensor was placed in a simulated thermal-vacuum chamber. Chamber temperature
+was sampled every 10~s at five plateaus between 220 and 320~K. Voltage was
+recorded in volts and time was recorded in coordinated universal time (UTC).
+
+The calibration model was
+\begin{equation}
+  T(V) = a_0 + a_1 V + a_2 V^2,
+  \label{eq:calibration}
+\end{equation}
+where the coefficients were estimated by least squares. The uncertainty budget
+included reference-probe accuracy, voltage quantization, and repeatability.
+

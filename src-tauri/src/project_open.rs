@@ -358,4 +358,25 @@ mod tests {
         fs::remove_dir_all(&fixture)?;
         Ok(())
     }
+
+    #[test]
+    fn opens_a_multi_root_fixture_without_selecting_a_root(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../tests/fixtures/latex-projects/multiple-roots");
+
+        let project = open_project_path(&fixture)?;
+        let candidate_paths: Vec<&str> = project
+            .root_candidates
+            .iter()
+            .map(|candidate| candidate.path.as_str())
+            .collect();
+
+        assert_eq!(
+            candidate_paths,
+            vec!["paper/main.tex", "presentation/slides.tex"]
+        );
+        assert!(project.root_detection_note.is_none());
+        Ok(())
+    }
 }

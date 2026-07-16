@@ -1,0 +1,26 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{nasa-report}[2026/07/16 Fixture technical-report style]
+
+\RequirePackage[margin=1in]{geometry}
+\RequirePackage{array}
+
+\setlength{\parindent}{0.25in}
+\setlength{\parskip}{0pt}
+\renewcommand{\arraystretch}{1.15}
+
+\makeatletter
+\renewcommand{\maketitle}{%
+  \begin{titlepage}
+    \centering
+    {\small TECHNICAL MEMORANDUM TEST FIXTURE\par}
+    \vspace{0.5in}
+    {\Large\bfseries \@title\par}
+    \vspace{0.4in}
+    {\large \@author\par}
+    \vfill
+    {\reportnumber\par}
+    {\@date\par}
+  \end{titlepage}%
+}
+\makeatother
+

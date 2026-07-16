@@ -82,10 +82,24 @@
   --source-foreground: oklch(0.22 0.018 250);
   --status: oklch(0.22 0.025 252);
   --status-foreground: oklch(0.94 0.008 250);
-  --editor-command: oklch(0.46 0.16 280);
-  --editor-comment: oklch(0.45 0.07 154);
-  --editor-string: oklch(0.46 0.13 40);
-  --editor-atom: oklch(0.47 0.14 220);
+  --editor-command: oklch(0.48 0.16 274);
+  --editor-delimiter: oklch(0.5 0.18 322);
+  --editor-argument: oklch(0.47 0.12 201);
+  --editor-math: oklch(0.47 0.13 238);
+  --editor-string: oklch(0.5 0.15 52);
+  --editor-number: oklch(0.5 0.15 40);
+  --editor-comment: oklch(0.5 0.045 155);
+  --editor-bracket: oklch(0.43 0.025 250);
+  --editor-invalid: oklch(0.5 0.19 28);
+  --editor-environment: oklch(0.45 0.15 315);
+  --editor-option: oklch(0.46 0.07 250);
+  --editor-label: oklch(0.44 0.12 155);
+  --editor-reference: oklch(0.44 0.14 230);
+  --editor-citation: oklch(0.48 0.14 65);
+  --editor-file: oklch(0.44 0.15 252);
+  --editor-package: oklch(0.44 0.11 185);
+  --editor-heading: oklch(0.38 0.11 275);
+  --editor-url: oklch(0.43 0.12 225);
   --editor-preview: oklch(0.975 0.008 250);
   --editor-preview-foreground: oklch(0.25 0.018 250);
 }
@@ -123,10 +137,24 @@
   --source-foreground: oklch(0.92 0.012 250);
   --status: oklch(0.18 0.025 252);
   --status-foreground: oklch(0.93 0.012 250);
-  --editor-command: oklch(0.78 0.13 290);
-  --editor-comment: oklch(0.68 0.09 155);
-  --editor-string: oklch(0.76 0.12 62);
-  --editor-atom: oklch(0.76 0.11 220);
+  --editor-command: oklch(0.79 0.14 285);
+  --editor-delimiter: oklch(0.78 0.16 330);
+  --editor-argument: oklch(0.78 0.11 201);
+  --editor-math: oklch(0.79 0.12 232);
+  --editor-string: oklch(0.8 0.14 70);
+  --editor-number: oklch(0.78 0.14 48);
+  --editor-comment: oklch(0.68 0.055 155);
+  --editor-bracket: oklch(0.74 0.025 250);
+  --editor-invalid: oklch(0.7 0.18 28);
+  --editor-environment: oklch(0.79 0.14 322);
+  --editor-option: oklch(0.69 0.07 250);
+  --editor-label: oklch(0.76 0.12 155);
+  --editor-reference: oklch(0.78 0.12 225);
+  --editor-citation: oklch(0.8 0.13 72);
+  --editor-file: oklch(0.78 0.13 250);
+  --editor-package: oklch(0.78 0.1 182);
+  --editor-heading: oklch(0.82 0.1 285);
+  --editor-url: oklch(0.77 0.11 220);
   --editor-preview: oklch(0.16 0.018 250);
   --editor-preview-foreground: oklch(0.9 0.012 250);
 }
@@ -151,6 +179,107 @@ body {
 body {
   min-width: 20rem;
   overflow: hidden;
+}
+
+.cm-editor .cm-latex-command {
+  color: var(--editor-command);
+  font-weight: 600;
+}
+
+.cm-editor .cm-latex-delimiter {
+  color: var(--editor-delimiter);
+  font-weight: 600;
+}
+
+.cm-editor .cm-latex-argument {
+  color: var(--editor-argument);
+}
+
+.cm-editor .cm-latex-math {
+  color: var(--editor-math);
+}
+
+.cm-editor .cm-latex-string {
+  color: var(--editor-string);
+}
+
+.cm-editor .cm-latex-number {
+  color: var(--editor-number);
+}
+
+.cm-editor .cm-latex-bracket {
+  color: var(--editor-bracket);
+}
+
+.cm-editor .cm-latex-comment {
+  color: var(--editor-comment);
+  font-style: italic;
+}
+
+.cm-editor .cm-latex-invalid {
+  color: var(--editor-invalid);
+  text-decoration: wavy underline;
+  text-decoration-color: var(--editor-invalid);
+}
+
+.cm-editor .cm-latex-environment {
+  color: var(--editor-environment);
+  font-weight: 600;
+}
+
+.cm-editor .cm-latex-option {
+  color: var(--editor-option);
+}
+
+.cm-editor .cm-latex-label-definition {
+  color: var(--editor-label);
+  font-weight: 600;
+}
+
+.cm-editor .cm-latex-label-reference {
+  color: var(--editor-reference);
+}
+
+.cm-editor .cm-latex-citation {
+  color: var(--editor-citation);
+}
+
+.cm-editor .cm-latex-file-reference {
+  color: var(--editor-file);
+}
+
+.cm-editor .cm-latex-file-missing {
+  text-decoration: underline dotted var(--editor-invalid);
+  text-underline-offset: 0.18em;
+}
+
+.cm-editor .cm-latex-package {
+  color: var(--editor-package);
+}
+
+.cm-editor .cm-latex-heading {
+  color: var(--editor-heading);
+  font-weight: 600;
+}
+
+.cm-editor .cm-latex-url {
+  color: var(--editor-url);
+  text-decoration: underline;
+  text-decoration-color: color-mix(
+    in oklch,
+    var(--editor-url) 45%,
+    transparent
+  );
+  text-underline-offset: 0.18em;
+}
+
+@keyframes tex-reference-underline {
+  from {
+    background-size: 0 1.5px;
+  }
+  to {
+    background-size: 100% 1.5px;
+  }
 }
 
 #root {
@@ -204,5 +333,23 @@ button,
     --source-foreground: CanvasText;
     --status: Canvas;
     --status-foreground: CanvasText;
+    --editor-command: CanvasText;
+    --editor-delimiter: CanvasText;
+    --editor-argument: CanvasText;
+    --editor-math: CanvasText;
+    --editor-string: CanvasText;
+    --editor-number: CanvasText;
+    --editor-comment: GrayText;
+    --editor-bracket: CanvasText;
+    --editor-invalid: Mark;
+    --editor-environment: CanvasText;
+    --editor-option: CanvasText;
+    --editor-label: CanvasText;
+    --editor-reference: LinkText;
+    --editor-citation: CanvasText;
+    --editor-file: LinkText;
+    --editor-package: CanvasText;
+    --editor-heading: CanvasText;
+    --editor-url: LinkText;
   }
 }

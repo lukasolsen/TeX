@@ -1,0 +1,2 @@
+This existing text file verifies that extension validation happens before a
+root directive can identify a candidate.
