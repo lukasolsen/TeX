@@ -2,7 +2,7 @@
 
 Ledger revision: 1  
 Baseline commit: `eb95280770d2a7b15703f4ebbd3af6ca7e4af767`  
-Inventory state: complete; Waves A–D reviewed
+Inventory state: complete; Waves A–E reviewed
 
 Every maintained file has one primary review wave. `Inventoried` means the
 file's existence, broad owner, and review assignment are recorded; it does not
@@ -24,11 +24,11 @@ artifact evidence.
 | B | Rust filesystem and persistence | 11 | Reviewed |
 | C | Rust process, parser, and event boundary | 7 | Reviewed |
 | D | Domain and IPC contracts | 16 | Reviewed |
-| E | React orchestration | 11 | Inventoried |
+| E | React orchestration | 13 | Reviewed |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
 | H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
-| **Total** | | **246 ledger rows / 245 maintained** | **Waves A–D reviewed** |
+| **Total** | | **248 ledger rows / 247 maintained** | **Waves A–E reviewed** |
 
 ## File register
 
@@ -118,7 +118,7 @@ artifact evidence.
 | `src-tauri/src/synctex.rs` | C | Reviewed | TEX-C-005; bounded process and output validation |
 | `src-tauri/src/watch_system.rs` | C | Reviewed | TEX-C-004, TEX-C-007; bounded channels/state ordering |
 | `src-tauri/tauri.conf.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
-| `src/app/app.tsx` | E | Inventoried | — |
+| `src/app/app.tsx` | E | Reviewed | TEX-E-001; detached UI action ownership and route coordination |
 | `src/components/brand/app-brand.tsx` | H | Inventoried | — |
 | `src/components/feedback/open-project-feedback.tsx` | H | Inventoried | — |
 | `src/components/feedback/startup-screen.tsx` | H | Inventoried | — |
@@ -149,8 +149,8 @@ artifact evidence.
 | `src/features/build/build-configuration-dialog.tsx` | H | Inventoried | — |
 | `src/features/build/build-panel.tsx` | H | Inventoried | — |
 | `src/features/build/clean-auxiliary-dialog.tsx` | H | Inventoried | — |
-| `src/features/build/use-project-build.ts` | E | Inventoried | — |
-| `src/features/build/use-project-watch.ts` | E | Inventoried | — |
+| `src/features/build/use-project-build.ts` | E | Reviewed | TEX-E-002, TEX-E-003; operation epochs, duplicate suppression, serialized configuration writes |
+| `src/features/build/use-project-watch.ts` | E | Reviewed | TEX-E-002; event precedence, teardown-safe queue acknowledgement, lifecycle generations |
 | `src/features/commands/workspace-command-palette.tsx` | F | Inventoried | — |
 | `src/features/editor/latex-editor.tsx` | F | Inventoried | — |
 | `src/features/editor/latex-highlighting.test.ts` | F | Inventoried | — |
@@ -175,22 +175,24 @@ artifact evidence.
 | `src/features/projects/root-file-control.tsx` | F | Inventoried | — |
 | `src/features/projects/source-tabs.tsx` | F | Inventoried | — |
 | `src/features/projects/source-viewer.tsx` | F | Inventoried | — |
-| `src/features/projects/use-project-session.ts` | E | Inventoried | — |
-| `src/features/projects/use-project-tree-watch.ts` | E | Inventoried | — |
-| `src/features/projects/workspace-restoration.test.ts` | E | Inventoried | — |
-| `src/features/projects/workspace-restoration.ts` | E | Inventoried | — |
+| `src/features/projects/use-project-session.ts` | E | Reviewed | TEX-E-002, TEX-E-003; shared saves, request generations, retained persistence failures |
+| `src/features/projects/use-project-tree-watch.ts` | E | Reviewed | TEX-E-002; startup/teardown ordering and listener error ownership |
+| `src/features/projects/workspace-restoration.test.ts` | E | Reviewed | Viewport-clamping and truthful restoration-notice regressions |
+| `src/features/projects/workspace-restoration.ts` | E | Reviewed | Bounded geometry restoration preserving available editor space |
 | `src/features/projects/workspace-toolbar.tsx` | F | Inventoried | — |
 | `src/features/search/project-search-panel.tsx` | F | Inventoried | — |
-| `src/features/settings/use-app-preferences.ts` | E | Inventoried | — |
+| `src/features/settings/use-app-preferences.ts` | E | Reviewed | TEX-E-003; ordered writes, revision-aware load/error handling |
 | `src/index.css` | H | Inventoried | — |
 | `src/lib/shortcuts.test.ts` | H | Inventoried | — |
 | `src/lib/shortcuts.ts` | H | Inventoried | — |
 | `src/lib/promises.ts` | H | In review | Type-aware promise ownership |
+| `src/lib/serial-task-queue.test.ts` | E | Reviewed | TEX-E-003; ordering and post-failure continuation regressions |
+| `src/lib/serial-task-queue.ts` | E | Reviewed | TEX-E-003; minimal ordered mutation owner |
 | `src/lib/utils.ts` | H | Inventoried | — |
 | `src/main.tsx` | H | Inventoried | — |
-| `src/pages/project-home-page.tsx` | E | Inventoried | — |
-| `src/pages/project-workspace-page.tsx` | E | Inventoried | — |
-| `src/pages/settings-page.tsx` | E | Inventoried | — |
+| `src/pages/project-home-page.tsx` | E | Reviewed | Truthful project-entry routes and explicit component contract |
+| `src/pages/project-workspace-page.tsx` | E | Reviewed | TEX-E-001, TEX-E-002; coordinated build/watch actions and focus restoration |
+| `src/pages/settings-page.tsx` | E | Reviewed | Controlled preference/workspace settings with explicit component contract |
 | `src/services/build-contract.test.ts` | D | Reviewed | TEX-D-001; malformed event and bound tests |
 | `src/services/build-contract.ts` | D | Reviewed | TEX-D-001; build/watch/config parsers |
 | `src/services/build-service.ts` | D | Reviewed | TEX-D-001, TEX-D-002; unknown-to-parser gateway |
