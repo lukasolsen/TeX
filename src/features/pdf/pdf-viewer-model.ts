@@ -5,6 +5,12 @@ export const MAX_PDF_SEARCH_MATCH_PAGES = 500
 export const MAX_PDF_PAGE_CSS_DIMENSION = 16_384
 export const MAX_PDF_CANVAS_DIMENSION = 8_192
 export const MAX_PDF_CANVAS_PIXELS = 32 * 1024 * 1024
+export const PDF_TO_CSS_UNITS = 96 / 72
+
+/** Converts the user-facing PDF zoom to PDF.js's CSS-pixel viewport scale. */
+export function pdfViewportScale(zoom: number): number {
+  return zoom * PDF_TO_CSS_UNITS
+}
 
 export function pdfPageSizeSupported(width: number, height: number): boolean {
   return (
@@ -23,9 +29,9 @@ export function boundedPdfOutputScale(
   deviceScale: number
 ): number | null {
   if (!pdfPageSizeSupported(width, height)) return null
-  const requested = Math.min(
-    Number.isFinite(deviceScale) && deviceScale > 0 ? deviceScale : 1,
-    2.5
+  const requested = Math.max(
+    2,
+    Number.isFinite(deviceScale) && deviceScale > 0 ? deviceScale : 1
   )
   return Math.max(
     0.1,

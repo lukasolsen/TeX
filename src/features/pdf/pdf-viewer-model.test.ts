@@ -10,6 +10,7 @@ import {
   MAX_SUPPORTED_PDF_PAGES,
   normalizePdfOutline,
   pdfPageSizeSupported,
+  pdfViewportScale,
   rotatePdfClockwise,
   stateAfterPdfReplacement,
   shouldRenderPdfPage,
@@ -43,6 +44,12 @@ describe("PDF viewer model", () => {
 })
 
 describe("PDF resource limits", () => {
+  it("renders 100% zoom at the CSS 96-DPI reference size", () => {
+    expect(612 * pdfViewportScale(1)).toBe(816)
+    expect(792 * pdfViewportScale(1)).toBe(1_056)
+    expect(pdfViewportScale(1.5)).toBe(2)
+  })
+
   it("rejects invalid page geometry and defines a finite page budget", () => {
     expect(MAX_SUPPORTED_PDF_PAGES).toBe(2_048)
     expect(MAX_PDF_SEARCH_MATCH_PAGES).toBe(500)
@@ -56,6 +63,24 @@ describe("PDF resource limits", () => {
         shouldRenderPdfPage(page, 50)
       )
     ).toEqual([48, 49, 50, 51, 52])
+  })
+
+  it("ensures at least 2× oversampling for text sharpness on 1× displays", () => {
+    const scale = boundedPdfOutputScale(612, 792, 1)
+    expect(scale).toBe(2)
+  })
+
+  it("does not cap 3× device scale when page fits within budgets", () => {
+    const scale = boundedPdfOutputScale(612, 792, 3)
+    expect(scale).toBe(3)
+  })
+
+  it("enforces the pixel budget even when the requested scale is above the budget", () => {
+    const scale = boundedPdfOutputScale(3_060, 3_960, 3)
+    expect(scale).not.toBeNull()
+    if (scale === null) return
+    const canvasPixels = Math.floor(3_060 * scale) * Math.floor(3_960 * scale)
+    expect(canvasPixels).toBeLessThanOrEqual(MAX_PDF_CANVAS_PIXELS)
   })
 
   it("bounds high-density canvas allocation", () => {

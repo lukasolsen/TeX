@@ -61,6 +61,7 @@ import {
   MAX_SUPPORTED_PDF_PAGES,
   normalizePdfOutline,
   pdfPageSizeSupported,
+  pdfViewportScale,
   rotatePdfClockwise,
   shouldRenderPdfPage,
   stateAfterPdfReplacement,
@@ -151,7 +152,10 @@ function PdfPage({
       .getPage(pageNumber)
       .then((value) => {
         if (!requestActive) return
-        const viewport = value.getViewport({ scale: 1, rotation: 0 })
+        const viewport = value.getViewport({
+          scale: pdfViewportScale(1),
+          rotation: 0,
+        })
         if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
           value.cleanup()
           setPageError(true)
@@ -174,25 +178,34 @@ function PdfPage({
       page === null ||
       canvasRef.current === null ||
       textRef.current === null
-    )
+    ) {
       return
+    }
+
     const canvas = canvasRef.current
     const textHost = textRef.current
-    const viewport = page.getViewport({ scale, rotation })
+    const viewport = page.getViewport({
+      scale: pdfViewportScale(scale),
+      rotation,
+    })
     setPageError(false)
+
     if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
       setPageError(true)
       return
     }
+
     const outputScale = boundedPdfOutputScale(
       viewport.width,
       viewport.height,
       window.devicePixelRatio
     )
+
     if (outputScale === null) {
       setPageError(true)
       return
     }
+
     canvas.width = Math.max(1, Math.floor(viewport.width * outputScale))
     canvas.height = Math.max(1, Math.floor(viewport.height * outputScale))
     canvas.style.width = `${viewport.width}px`
@@ -200,14 +213,23 @@ function PdfPage({
     textHost.replaceChildren()
     textHost.style.width = `${viewport.width}px`
     textHost.style.height = `${viewport.height}px`
+
+    // Match the render transform to the allocated integer bitmap exactly. This
+    // avoids a second fractional rescale when the viewport has subpixel edges.
+    const outputScaleX = canvas.width / viewport.width
+    const outputScaleY = canvas.height / viewport.height
+
     const renderTask = page.render({
       canvas,
       transform:
-        outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0],
+        outputScaleX === 1 && outputScaleY === 1
+          ? undefined
+          : [outputScaleX, 0, 0, outputScaleY, 0, 0],
       viewport,
     })
     let textLayer: TextLayer | null = null
     let effectActive = true
+
     void renderTask.promise.catch((error: unknown) => {
       if (
         effectActive &&
@@ -217,15 +239,18 @@ function PdfPage({
         setPageError(true)
       }
     })
+
     void page
       .getTextContent()
       .then((content) => {
         if (!effectActive) return
+
         textLayer = new TextLayer({
           container: textHost,
           textContentSource: content,
           viewport,
         })
+
         return textLayer.render().then(() => {
           if (effectActive) {
             setTextLayerRevision((current) => current + 1)
@@ -236,6 +261,7 @@ function PdfPage({
       .catch(() => {
         // Canvas rendering remains usable when selectable text is unavailable.
       })
+
     return () => {
       effectActive = false
       renderTask.cancel()
@@ -263,7 +289,10 @@ function PdfPage({
     }
   }, [searchNeedle, textLayerRevision])
 
-  const viewport = page?.getViewport({ scale, rotation })
+  const viewport = page?.getViewport({
+    scale: pdfViewportScale(scale),
+    rotation,
+  })
   const rawWidth =
     viewport?.width ??
     (rotation % 180 === 0 ? baseSize.width : baseSize.height) * scale
@@ -288,7 +317,10 @@ function PdfPage({
         if (page === null) return
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
-        const viewport = page.getViewport({ scale, rotation })
+        const viewport = page.getViewport({
+          scale: pdfViewportScale(scale),
+          rotation,
+        })
         const [pdfX, pdfY] = viewport.convertToPdfPoint(
           event.clientX - bounds.left,
           event.clientY - bounds.top
@@ -321,7 +353,10 @@ function PdfPage({
         <span
           aria-label="Synchronized source location"
           className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary bg-primary/25 ring-4 ring-primary/15"
-          style={{ left: syncMarker.x * scale, top: syncMarker.y * scale }}
+          style={{
+            left: syncMarker.x * pdfViewportScale(scale),
+            top: syncMarker.y * pdfViewportScale(scale),
+          }}
         />
       ) : null}
     </div>
@@ -758,7 +793,7 @@ export function PdfViewer({
         const page = await readyDocument.getPage(viewer.page)
         if (readyDocumentRef.current !== readyDocument) return
         const viewport = page.getViewport({
-          scale: 1,
+          scale: pdfViewportScale(1),
           rotation: viewer.rotation,
         })
         if (!pdfPageSizeSupported(viewport.width, viewport.height)) {
