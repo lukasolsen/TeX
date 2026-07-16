@@ -4,6 +4,7 @@ import {
   latexCommands,
   latexFileReferenceAt,
   latexFileReferences,
+  latexFileReferencesFromCommands,
 } from "@/domain/latex"
 import { projectRelativePath } from "@/domain/identifiers"
 
@@ -64,5 +65,14 @@ describe("LaTeX source parsing", () => {
       { path: "appendices/proof.tex", command: "subimport" },
       { path: "examples/main.rs", command: "inputminted" },
     ])
+  })
+
+  it("resolves pre-parsed commands without changing reference semantics", () => {
+    const source = "\\input{chapter}\n\\addbibresource{references.bib}"
+    const sourcePath = projectRelativePath("main.tex")
+
+    expect(
+      latexFileReferencesFromCommands(latexCommands(source), sourcePath)
+    ).toEqual(latexFileReferences(source, sourcePath))
   })
 })

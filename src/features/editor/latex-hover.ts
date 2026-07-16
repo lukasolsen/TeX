@@ -1,10 +1,14 @@
 import type { Tooltip } from "@codemirror/view"
 
-import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 
 import {
   latexCommands,
-  latexFileReferenceAt,
+  latexFileReferencesFromCommands,
+  type LatexCommand,
   type LatexFileReference,
 } from "@/domain/latex"
 import {
@@ -181,14 +185,21 @@ export function referencedFileAt(
   sourcePath: ProjectRelativePath,
   position: number
 ): LatexFileReference | null {
-  return latexFileReferenceAt(source, sourcePath, position)
+  return referenceAt(latexCommands(source), sourcePath, position)
 }
 
 export function keywordAt(
   source: string,
   position: number
 ): { from: number; to: number; info: KeywordInfo } | null {
-  const command = latexCommands(source).find(
+  return keywordFromCommands(latexCommands(source), position)
+}
+
+function keywordFromCommands(
+  commands: readonly LatexCommand[],
+  position: number
+): { from: number; to: number; info: KeywordInfo } | null {
+  const command = commands.find(
     ({ from, to, name }) =>
       position >= from && position <= to && keywordInfo[name] !== undefined
   )
@@ -200,10 +211,10 @@ export function keywordAt(
 }
 
 function classOrPackageAt(
-  source: string,
+  commands: readonly LatexCommand[],
   position: number
 ): { from: number; to: number; title: string; description: string } | null {
-  for (const command of latexCommands(source)) {
+  for (const command of commands) {
     if (command.name !== "documentclass" && command.name !== "usepackage") {
       continue
     }
@@ -230,6 +241,18 @@ function classOrPackageAt(
     }
   }
   return null
+}
+
+function referenceAt(
+  commands: readonly LatexCommand[],
+  sourcePath: ProjectRelativePath,
+  position: number
+): LatexFileReference | null {
+  return (
+    latexFileReferencesFromCommands(commands, sourcePath).find(
+      ({ from, to }) => position >= from && position < to
+    ) ?? null
+  )
 }
 
 function card(
@@ -275,7 +298,8 @@ export function latexHoverTooltip(
     position: number
   ): Promise<Tooltip | null> => {
     const source = view.state.doc.toString()
-    const reference = referencedFileAt(source, sourcePath, position)
+    const commands = latexCommands(source)
+    const reference = referenceAt(commands, sourcePath, position)
     if (reference !== null) {
       if (
         !reference.path.endsWith(".tex") &&
@@ -318,7 +342,7 @@ export function latexHoverTooltip(
       }
     }
 
-    const classOrPackage = classOrPackageAt(source, position)
+    const classOrPackage = classOrPackageAt(commands, position)
     if (classOrPackage !== null) {
       return {
         pos: classOrPackage.from,
@@ -329,7 +353,7 @@ export function latexHoverTooltip(
       }
     }
 
-    const keyword = keywordAt(source, position)
+    const keyword = keywordFromCommands(commands, position)
     if (keyword === null) return null
     return {
       pos: keyword.from,

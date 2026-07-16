@@ -177,8 +177,16 @@ export function latexFileReferences(
   source: string,
   sourcePath: ProjectRelativePath
 ): LatexFileReference[] {
+  return latexFileReferencesFromCommands(latexCommands(source), sourcePath)
+}
+
+/** Resolves file references from one caller-owned command scan. */
+export function latexFileReferencesFromCommands(
+  commands: readonly LatexCommand[],
+  sourcePath: ProjectRelativePath
+): LatexFileReference[] {
   const references: LatexFileReference[] = []
-  for (const command of latexCommands(source)) {
+  for (const command of commands) {
     const spec = fileCommandSpecs[command.name]
     if (spec === undefined) continue
     const requiredGroups = command.groups.filter(
