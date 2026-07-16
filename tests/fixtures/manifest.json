@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "simple-article",
+      "kind": "latexProject",
+      "path": "latex-projects/simple-article",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "directEngines": ["pdfLaTex", "xeLaTex", "luaLaTex"],
+      "requires": []
+    },
+    {
+      "id": "nasa-technical-report",
+      "kind": "latexProject",
+      "path": "latex-projects/nasa-technical-report",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": [],
+      "searchQuery": "radiometer"
+    },
+    {
+      "id": "multiple-roots",
+      "kind": "latexProject",
+      "path": "latex-projects/multiple-roots",
+      "roots": ["paper/main.tex", "presentation/slides.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": []
+    },
+    {
+      "id": "broken-build",
+      "kind": "latexProject",
+      "path": "latex-projects/broken-build",
+      "roots": ["main.tex"],
+      "expectedBuild": "failure",
+      "profile": "latexmkPdf",
+      "requires": []
+    },
+    {
+      "id": "invalid-setup",
+      "kind": "latexProject",
+      "path": "latex-projects/invalid-setup",
+      "roots": [],
+      "expectedBuild": "notBuildable",
+      "requires": []
+    },
+    {
+      "id": "unicode-project",
+      "kind": "latexProject",
+      "path": "latex-projects/unicode-project",
+      "roots": ["Måneanalyse/hoveddokument.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": []
+    },
+    {
+      "id": "biblatex-biber",
+      "kind": "latexProject",
+      "path": "latex-projects/biblatex-biber",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": ["biber"]
+    },
+    {
+      "id": "custom-class",
+      "kind": "latexProject",
+      "path": "latex-projects/custom-class",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": []
+    },
+    {
+      "id": "large-project",
+      "kind": "latexProject",
+      "path": "latex-projects/large-project",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": [],
+      "searchQuery": "calibration marker"
+    },
+    {
+      "id": "output-directory",
+      "kind": "latexProject",
+      "path": "latex-projects/output-directory",
+      "roots": ["main.tex"],
+      "expectedBuild": "success",
+      "profile": "latexmkPdf",
+      "requires": [],
+      "outputDirectory": "build"
+    },
+    {
+      "id": "invalid-pdf",
+      "kind": "invalidPdf",
+      "path": "invalid-pdf",
+      "roots": [],
+      "expectedBuild": "notBuildable",
+      "requires": [],
+      "artifact": "truncated.pdf"
+    },
+    {
+      "id": "file-watch-storm",
+      "kind": "watchStorm",
+      "path": "file-watch-storm",
+      "roots": ["main.tex"],
+      "expectedBuild": "notBuildable",
+      "requires": [],
+      "eventScript": "events.json",
+      "outputDirectory": "output"
+    }
+  ]
+}

@@ -57,6 +57,21 @@ Exit gate:
 - A clean checkout can reproduce all current checks using documented tool
   versions, and support/benchmark claims name their environment.
 
+Progress (2026-07-16):
+
+- Complete in the repository: pinned Rust/Bun policy, frozen CI/release
+  installs, `master` workflow alignment, OS/TeX support target, privacy and
+  known-limitations documents, benchmark/reference-machine protocol, and
+  machine-validated BibLaTeX/biber, custom-class, large-project, invalid-PDF,
+  file-watch-storm, and output-directory fixtures.
+- Open external gate: conduct and synthesize 8–12 target-author sessions using
+  `docs/research/target-user-study.md`; no sessions are currently claimed.
+- Open repository-setting gate: apply and verify the `master` protection rule
+  in `docs/repository-policy.md`. GitHub reported no protection on 2026-07-16.
+- Open qualification evidence: record a successful biber fixture run and
+  target-platform release smoke tests before promoting the pre-release support
+  target to a release support claim.
+
 ## Milestone 1 — complete workspace restoration
 
 Purpose: reopen the workbench exactly where the user left it.

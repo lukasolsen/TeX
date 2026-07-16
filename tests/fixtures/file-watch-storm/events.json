@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "debounceWindowMs": 250,
+  "events": [
+    { "atMs": 0, "kind": "modify", "path": "sections/body.tex" },
+    { "atMs": 4, "kind": "modify", "path": "sections/body.tex" },
+    { "atMs": 9, "kind": "create", "path": "sections/.body.tex.tmp" },
+    { "atMs": 12, "kind": "rename", "path": "sections/.body.tex.tmp", "to": "sections/body.tex" },
+    { "atMs": 30, "kind": "modify", "path": "output/main.aux" },
+    { "atMs": 35, "kind": "modify", "path": "output/main.pdf" },
+    { "atMs": 41, "kind": "remove", "path": "output/main.synctex.gz" },
+    { "atMs": 600, "kind": "modify", "path": "sections/body.tex" }
+  ],
+  "expectedBuildRequests": [250, 850],
+  "ignoredPathPrefixes": ["output/"]
+}
