@@ -225,6 +225,32 @@ Exit gate:
 - A keyboard-only user can build, stop, inspect any run, navigate every mapped
   diagnostic, copy evidence, clean safely, and reveal output.
 
+Progress (2026-07-16):
+
+- Added explicit Build and view to the command palette. It opens the existing
+  PDF pane and starts the normal validated build without changing page, zoom,
+  layout, or source/PDF focus.
+- Added a bounded Rust clean preview for recognized auxiliary extensions. The
+  accessible confirmation lists every project-relative file and total size;
+  execution re-canonicalizes every path and rejects source/PDF/non-auxiliary
+  entries before deletion.
+- Added Reveal built PDF using a validated project-local expected output and a
+  fixed platform file-browser executable with separate arguments.
+- Added first/next/previous diagnostic, copy diagnostic, and corresponding raw
+  log context to the command palette. F8 and Shift+F8 traverse diagnostics;
+  unmapped items remain selectable for copying/log inspection without claiming
+  a reliable source jump.
+- Expanded classification to file-line diagnostics, TeX `!` errors, package/
+  LaTeX warnings, and overfull/underfull notices while retaining raw output.
+- Decision: bounded build history remains process-memory-only. Compiler logs can
+  contain document fragments and sensitive absolute paths, so restart
+  persistence is not required until a redaction and user-controlled retention
+  design justifies that privacy expansion.
+- Automated coverage verifies clean source/PDF exclusion, conservative
+  extension matching, unmapped classification, path validation, and existing
+  build state retention. Packaged keyboard/file-browser smoke qualification
+  remains open.
+
 ## Milestone 5 — PDF replacement and SyncTeX hardening
 
 Purpose: satisfy the complete reading-context contract under repeated updates.

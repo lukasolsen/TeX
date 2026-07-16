@@ -69,12 +69,12 @@ performance/accessibility/platform qualification.
 | --- | --- | --- |
 | Safe common profiles and exact invocation preview | **Implemented** | `build_system.rs` exposes validated latexmk/pdfLaTeX/XeLaTeX/LuaLaTeX profiles and separately supplied process arguments; `build-panel.tsx` shows command, directory, and root before execution. |
 | Project custom command/profile selection with explicit consent | **Implemented; fixture qualification open** | Versioned settings live outside source, canonicalize project paths and absolute executables, keep arguments separate, restrict TeX environment overrides, and persist separate custom-command and shell-escape consent. Configured output and watcher exclusions are active; cross-platform fixture qualification remains open. |
-| Build, Build and view, Watch, Stop, Clean, Reveal output | **Partial** | Manual Build and Stop are implemented; successful output refreshes the selected PDF. Explicit Build and view, Watch, conservative Clean with preview, and Reveal output are missing. |
+| Build, Build and view, Watch, Stop, Clean, Reveal output | **Implemented; platform qualification open** | Manual/automatic Build and Stop, explicit Build and view, visible Watch, exact conservative Clean preview/revalidation, and canonical project-output Reveal routes exist. Packaged file-browser and watcher qualification remains open. |
 | One build controller per project | **Implemented** | `BuildController` rejects overlapping builds and supervises cancellation per canonical project root. |
 | Structured metadata, bounded raw logs, diagnostics, and run selection | **Implemented** | Up to 20 in-memory runs retain timestamps, invocation, status, stdout/stderr, exit code, and parsed diagnostics. |
-| Logs survive panel close, later builds, failures, and app restart | **Partial** | Logs survive panel close and later builds during the process lifetime. Build history is not persisted across application restart. |
-| Diagnostic mapping with uncertainty | **Partial** | File-line diagnostics are mapped conservatively and uncertain paths are labeled. Generated-file/output-directory mapping and broader TeX diagnostic forms remain limited. |
-| First/next/previous diagnostic and copy diagnostic commands | **Missing — larger work** | Diagnostics are keyboard-focusable and individually navigable, but command-level traversal and copying are absent. |
+| Logs survive panel close, later builds, failures, and app restart | **Implemented by documented retention policy** | Twenty bounded runs survive panel close, later builds, and failures during the process lifetime. Restart persistence is deliberately excluded because raw compiler logs may disclose document fragments and paths; no release workflow currently requires it. |
+| Diagnostic mapping with uncertainty | **Implemented** | File-line diagnostics map conservatively through project/output paths; TeX `!` errors, LaTeX/package warnings, and box notices are classified without inventing locations. Uncertain/unmapped diagnostics stay selectable for evidence and raw context. |
+| First/next/previous diagnostic and copy diagnostic commands | **Implemented** | The command palette exposes first/next/previous, copy, and raw-log-context routes; F8 and Shift+F8 provide direct traversal without focus theft. |
 | Visible, safe watch mode | **Implemented; platform qualification open** | `watch_system.rs` owns recursive observation, 350 ms debounce/coalescing, explicit change kinds, path revalidation, and generated-output suppression. The build panel and status bar expose start/queued/building/stop/error states and route automatic builds through the serialized controller. Unsafe custom profiles are not yet available; packaged platform event/race qualification remains open. |
 | Build accessibility announcements | **Implemented** | Build state and diagnostic counts are textual, and completion is announced through a polite live region. |
 | Reproducibility details | **Implemented** | Exact command, canonical executable, working directory, root, timestamps, exit code, restricted environment settings, bibliography intent, and standard-tool version are retained with the run. |
@@ -119,17 +119,14 @@ The following order keeps the plan's reliability-first intent:
 1. **Workspace persistence qualification** — run packaged restart, resize,
    keyboard, focus, migration, corruption, and missing-path smoke tests on each
    supported platform.
-2. **Build command completeness** — add Build and view, conservative Clean with
-   a previewed file list, Reveal output, first/next/previous diagnostic, and Copy
-   diagnostic. Persist bounded build evidence if restart survival is required.
-3. **PDF replacement hardening** — preserve focus/selection, defer swaps during
+2. **PDF replacement hardening** — preserve focus/selection, defer swaps during
    active interaction, attribute external rebuilds, cancel stale SyncTeX work,
    and add the 100-update/100-failure stress harness.
-4. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
+3. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
    build/PDF latency, run keyboard/screen-reader/IME smoke tests on supported
    platforms, and publish versions, machines, percentiles, and known limits.
-5. **Safe deletion recovery** — move deleted project entries to a recoverable
+4. **Safe deletion recovery** — move deleted project entries to a recoverable
    project-local or OS trash workflow where platform/filesystem support permits,
    with explicit fallback behavior.
 
-Phase 5 conveniences should wait until items 1–5 have clear release evidence.
+Phase 5 conveniences should wait until items 1–4 have clear release evidence.

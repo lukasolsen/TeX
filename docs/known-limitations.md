@@ -1,5 +1,10 @@
 # Known limitations
 
+- Build history is intentionally retained only for the current application
+  process. Raw compiler logs can contain document fragments and sensitive paths;
+  TeX does not persist them across restart without a future explicit retention
+  and redaction design.
+
 Revision: 2026-07-16
 
 TeX is pre-release software. Keep independent version control or backups for
