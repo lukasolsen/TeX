@@ -677,7 +677,32 @@ fn finish_run(
 }
 
 fn parse_diagnostic(entry: &BuildLogEntry, project_root: &Path) -> Option<BuildDiagnostic> {
-    let (file, line, message) = file_line_message(&entry.text)?;
+    let Some((file, line, message)) = file_line_message(&entry.text) else {
+        let message = entry.text.trim().trim_start_matches('!').trim();
+        let lowered = message.to_ascii_lowercase();
+        let severity = if entry.text.trim_start().starts_with('!')
+            || lowered.contains("error:")
+            || lowered.contains("fatal error")
+        {
+            DiagnosticSeverity::Error
+        } else if lowered.contains("warning:")
+            || lowered.contains(" warning ")
+            || lowered.starts_with("overfull ")
+            || lowered.starts_with("underfull ")
+        {
+            DiagnosticSeverity::Warning
+        } else {
+            return None;
+        };
+        return Some(BuildDiagnostic {
+            severity,
+            message: message.to_owned(),
+            file: None,
+            line: None,
+            mapping_uncertain: true,
+            log_sequence: entry.sequence,
+        });
+    };
     let message = message.trim();
     let lowered = message.to_ascii_lowercase();
     let severity = if lowered.contains("warning") {
@@ -872,6 +897,32 @@ mod tests {
             file_line_message(r"C:\work\main.tex:12: Undefined control sequence"),
             Some((r"C:\work\main.tex", 12, " Undefined control sequence"))
         );
+    }
+
+    #[test]
+    fn classifies_unmapped_tex_errors_and_warnings() {
+        let root = fixture_root();
+        let error = parse_diagnostic(
+            &BuildLogEntry {
+                sequence: 1,
+                timestamp: 0,
+                stream: BuildLogStream::Stdout,
+                text: "! LaTeX Error: File `missing.sty' not found.".to_owned(),
+            },
+            &root,
+        );
+        let warning = parse_diagnostic(
+            &BuildLogEntry {
+                sequence: 2,
+                timestamp: 0,
+                stream: BuildLogStream::Stdout,
+                text: "LaTeX Warning: Reference undefined.".to_owned(),
+            },
+            &root,
+        );
+
+        assert!(error.is_some_and(|item| matches!(item.severity, DiagnosticSeverity::Error)));
+        assert!(warning.is_some_and(|item| matches!(item.severity, DiagnosticSeverity::Warning)));
     }
 
     #[test]
