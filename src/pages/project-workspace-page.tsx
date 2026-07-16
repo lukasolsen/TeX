@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Hammer, LockKeyhole } from "lucide-react"
+import { FileText, Hammer, LockKeyhole, MapPin } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -78,7 +78,7 @@ export function ProjectWorkspacePage({
   const selectedFile = session.workspace.selectedFile
   const sidebarWidth = useRef(session.workspace.sidebarWidth)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [buildOpen, setBuildOpen] = useState(true)
+  const [buildOpen, setBuildOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const [sourceLocation, setSourceLocation] = useState<{
     path: string
@@ -94,6 +94,17 @@ export function ProjectWorkspacePage({
     rootFile: session.workspace.selectedRoot,
   })
   const latestBuild = build.state.runs[0] ?? null
+  const running = build.state.runs.some((run) => run.status === "running")
+  const profileAvailable =
+    build.profiles.status === "ready" &&
+    build.profiles.profiles.some(
+      (profile) => profile.engine === build.engine && profile.available
+    )
+  const buildEnabled =
+    build.state.preview.status === "ready" &&
+    profileAvailable &&
+    !running &&
+    build.state.action.status !== "pending"
   const activity =
     feedback.status === "choosing"
       ? "Waiting for a folder…"
@@ -154,7 +165,10 @@ export function ProjectWorkspacePage({
   return (
     <main className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace">
       <WorkspaceToolbar
+        buildEnabled={buildEnabled}
+        buildStatus={latestBuild?.status ?? null}
         feedback={feedback}
+        onBuild={() => void build.build()}
         onOpenProject={onOpenProject}
         onOpenCommands={() => setCommandPaletteOpen(true)}
         onOpenBuild={() => setBuildOpen(true)}
@@ -162,6 +176,7 @@ export function ProjectWorkspacePage({
         onOpenSettings={onOpenSettings}
         onReturnHome={onReturnHome}
         onSave={onSaveDocument}
+        onStop={() => void build.stop()}
         session={session}
       />
 
@@ -199,7 +214,21 @@ export function ProjectWorkspacePage({
                 />
               ) : (
                 <ProjectSidebar
+                  activeLine={
+                    sourceLocation?.path === selectedFile
+                      ? sourceLocation.line
+                      : null
+                  }
                   onOpenPdf={onOpenPdf}
+                  onNavigateOutline={(line) => {
+                    if (selectedFile === null) return
+                    setTarget({
+                      path: selectedFile,
+                      line,
+                      column: 1,
+                      token: Date.now(),
+                    })
+                  }}
                   onPinFile={onPinFile}
                   onPreviewFile={onPreviewFile}
                   onCreate={onCreateProjectEntry}
@@ -338,13 +367,13 @@ export function ProjectWorkspacePage({
         ) : null}
       </ResizablePanelGroup>
 
-      <footer className="flex min-w-0 items-center gap-3 border-t bg-status px-3 text-[11px] text-status-foreground">
+      <footer className="flex min-w-0 items-center gap-1 border-t bg-status px-2 text-[11px] text-status-foreground">
         <span className="flex min-w-0 items-center gap-1.5 truncate">
           <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
           Local project
         </span>
         {activity !== null ? (
-          <span className="truncate" role="status">
+          <span className="truncate rounded px-2 py-0.5" role="status">
             {activity}
           </span>
         ) : null}
@@ -353,7 +382,12 @@ export function ProjectWorkspacePage({
             {saveActivity}
           </span>
         ) : null}
-        <Button onClick={() => setBuildOpen(true)} size="xs" variant="ghost">
+        <Button
+          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
+          onClick={() => setBuildOpen(true)}
+          size="xs"
+          variant="ghost"
+        >
           <Hammer data-icon="inline-start" />
           {latestBuild === null
             ? "Build ready"
@@ -361,7 +395,17 @@ export function ProjectWorkspacePage({
               ? "Building"
               : `Build ${latestBuild.status}`}
         </Button>
-        <span className="ml-auto min-w-0">
+        <span className="ml-auto hidden items-center gap-1.5 text-status-foreground/75 md:flex">
+          <FileText aria-hidden="true" className="size-3.5" />
+          {session.workspace.editorFontSize}px
+        </span>
+        {sourceLocation?.path === selectedFile ? (
+          <span className="hidden items-center gap-1.5 text-status-foreground/75 sm:flex">
+            <MapPin aria-hidden="true" className="size-3.5" />
+            Ln {sourceLocation.line}, Col {sourceLocation.column}
+          </span>
+        ) : null}
+        <span className="min-w-0">
           <RootFileControl
             onSelectRoot={onSelectRoot}
             project={session.project}
@@ -370,9 +414,13 @@ export function ProjectWorkspacePage({
         </span>
       </footer>
       <WorkspaceCommandPalette
+        buildEnabled={buildEnabled}
+        onBuild={() => void build.build()}
         onOpenChange={setCommandPaletteOpen}
+        onOpenBuild={() => setBuildOpen(true)}
         onOpenFile={onPinFile}
         onOpenProject={onOpenProject}
+        onOpenSettings={onOpenSettings}
         onSave={onSaveDocument}
         onSearch={() => setSearchOpen(true)}
         onZoomIn={() =>

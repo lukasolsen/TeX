@@ -1,4 +1,5 @@
 import {
+  CircleStop,
   FolderOpen,
   Hammer,
   Home,
@@ -11,10 +12,14 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
+import type { BuildRun } from "@/domain/build"
 
 /** Keeps project-level actions separate from the active document surface. */
 export function WorkspaceToolbar({
+  buildEnabled,
+  buildStatus,
   feedback,
+  onBuild,
   onOpenProject,
   onOpenCommands,
   onOpenBuild,
@@ -22,9 +27,13 @@ export function WorkspaceToolbar({
   onReturnHome,
   onSave,
   onOpenSettings,
+  onStop,
   session,
 }: {
+  buildEnabled: boolean
+  buildStatus: BuildRun["status"] | null
   feedback: OpenProjectFeedback
+  onBuild: () => void
   onOpenProject: () => void
   onOpenCommands: () => void
   onOpenBuild: () => void
@@ -32,6 +41,7 @@ export function WorkspaceToolbar({
   onReturnHome: () => void
   onSave: () => void
   onOpenSettings: () => void
+  onStop: () => void
   session: ProjectSession
 }) {
   const isOpening =
@@ -55,17 +65,43 @@ export function WorkspaceToolbar({
         <Home aria-hidden="true" className="size-6" />
       </Button>
       <Separator className="mx-1" orientation="vertical" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{session.project.name}</p>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <p className="shrink-0 truncate text-sm font-semibold">
+          {session.project.name}
+        </p>
+        {session.workspace.selectedFile !== null ? (
+          <>
+            <span aria-hidden="true" className="text-muted-foreground/60">
+              /
+            </span>
+            <p className="truncate text-xs text-muted-foreground">
+              {session.workspace.selectedFile}
+            </p>
+          </>
+        ) : null}
       </div>
       <Button
-        aria-label="Show build panel"
+        disabled={buildStatus !== "running" && !buildEnabled}
+        onClick={buildStatus === "running" ? onStop : onBuild}
+        size="sm"
+        title={buildStatus === "running" ? "Stop build" : "Build PDF"}
+        variant={buildStatus === "failed" ? "destructive" : "default"}
+      >
+        {buildStatus === "running" ? (
+          <CircleStop data-icon="inline-start" />
+        ) : (
+          <Hammer data-icon="inline-start" />
+        )}
+        {buildStatus === "running" ? "Stop" : "Build PDF"}
+      </Button>
+      <Button
+        aria-label="Show build details"
         onClick={onOpenBuild}
         size="icon-sm"
-        title="Show build panel (Ctrl+Shift+B)"
+        title="Show build details (Ctrl+Shift+B)"
         variant="ghost"
       >
-        <Hammer aria-hidden="true" />
+        <SquareTerminal aria-hidden="true" />
       </Button>
       <Button
         aria-label="Save source"
@@ -96,13 +132,16 @@ export function WorkspaceToolbar({
         <Settings aria-hidden="true" />
       </Button>
       <Button
-        aria-label="Command palette"
         onClick={onOpenCommands}
-        size="icon-sm"
+        size="sm"
         title="Command palette (Ctrl+Shift+P)"
         variant="ghost"
       >
-        <SquareTerminal aria-hidden="true" />
+        <SquareTerminal data-icon="inline-start" />
+        <span className="hidden lg:inline">Commands</span>
+        <kbd className="hidden rounded border bg-muted px-1 py-0.5 font-sans text-[10px] text-muted-foreground xl:inline">
+          Ctrl ⇧ P
+        </kbd>
       </Button>
       <Button
         disabled={isOpening}

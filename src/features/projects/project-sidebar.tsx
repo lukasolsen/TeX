@@ -1,8 +1,9 @@
-import { FileCode2, FileStack, LoaderCircle } from "lucide-react"
+import { FileCode2, FileStack, ListTree, LoaderCircle } from "lucide-react"
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { AsyncDocumentState, ProjectEntry } from "@/domain/project"
 import { ProjectTree } from "@/features/projects/project-tree"
+import { DocumentOutlinePanel } from "@/features/projects/document-outline-panel"
 import {
   isReadableSource,
   texDependencies,
@@ -115,6 +116,7 @@ function DependenciesPanel({
 
 /** Keeps project navigation and the active source file's direct dependencies together. */
 export function ProjectSidebar({
+  activeLine,
   documentState,
   onCreate,
   onDelete,
@@ -122,12 +124,14 @@ export function ProjectSidebar({
   onPreviewFile,
   onOpenPdf,
   onRename,
+  onNavigateOutline,
   rootFiles,
   selectedFile,
   selectedPdf,
   selectedRoot,
   tree,
 }: {
+  activeLine: number | null
   documentState: AsyncDocumentState
   onCreate: (
     parentPath: string | null,
@@ -139,6 +143,7 @@ export function ProjectSidebar({
   onPreviewFile: (path: string) => void
   onOpenPdf: (path: string) => void
   onRename: (path: string, name: string) => Promise<void>
+  onNavigateOutline: (line: number) => void
   rootFiles: string[]
   selectedFile: string | null
   selectedPdf: string | null
@@ -157,6 +162,13 @@ export function ProjectSidebar({
         >
           <FileCode2 data-icon="inline-start" />
           Files
+        </TabsTrigger>
+        <TabsTrigger
+          className="h-full flex-none rounded-none px-3 text-xs"
+          value="outline"
+        >
+          <ListTree data-icon="inline-start" />
+          Outline
         </TabsTrigger>
         <TabsTrigger
           className="h-full flex-none rounded-none px-3 text-xs"
@@ -179,6 +191,13 @@ export function ProjectSidebar({
           selectedPdf={selectedPdf}
           selectedRoot={selectedRoot}
           tree={tree}
+        />
+      </TabsContent>
+      <TabsContent className="min-h-0 overflow-y-auto" value="outline">
+        <DocumentOutlinePanel
+          activeLine={activeLine}
+          documentState={documentState}
+          onNavigate={onNavigateOutline}
         />
       </TabsContent>
       <TabsContent className="min-h-0 overflow-y-auto" value="dependencies">

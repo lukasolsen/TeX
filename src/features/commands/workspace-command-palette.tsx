@@ -1,9 +1,12 @@
 import {
   FileCode2,
   FolderOpen,
+  Hammer,
   MessageSquareText,
+  PanelBottomOpen,
   Search,
   Save,
+  Settings,
   TextSearch,
   ZoomIn,
   ZoomOut,
@@ -32,9 +35,13 @@ function readableFiles(entry: ProjectEntry, parent = ""): string[] {
 }
 
 export function WorkspaceCommandPalette({
+  buildEnabled,
+  onBuild,
   onOpenChange,
+  onOpenBuild,
   onOpenFile,
   onOpenProject,
+  onOpenSettings,
   onSave,
   onSearch,
   onZoomIn,
@@ -42,9 +49,13 @@ export function WorkspaceCommandPalette({
   open,
   tree,
 }: {
+  buildEnabled: boolean
+  onBuild: () => void
   onOpenChange: (open: boolean) => void
+  onOpenBuild: () => void
   onOpenFile: (path: string) => void
   onOpenProject: () => void
+  onOpenSettings: () => void
   onSave: () => void
   onSearch: () => void
   onZoomIn: () => void
@@ -62,6 +73,13 @@ export function WorkspaceCommandPalette({
       <CommandList>
         <CommandEmpty>No matching command or source file.</CommandEmpty>
         <CommandGroup heading="Commands">
+          <CommandItem disabled={!buildEnabled} onSelect={() => run(onBuild)}>
+            <Hammer /> Build PDF
+          </CommandItem>
+          <CommandItem onSelect={() => run(onOpenBuild)}>
+            <PanelBottomOpen /> Show build details
+            <CommandShortcut>Ctrl Shift B</CommandShortcut>
+          </CommandItem>
           <CommandItem onSelect={() => run(onSave)}>
             <Save /> Save source <CommandShortcut>Ctrl S</CommandShortcut>
           </CommandItem>
@@ -87,6 +105,9 @@ export function WorkspaceCommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenProject)}>
             <FolderOpen /> Open project
+          </CommandItem>
+          <CommandItem onSelect={() => run(onOpenSettings)}>
+            <Settings /> Open settings
           </CommandItem>
           <CommandItem onSelect={() => run(onZoomIn)}>
             <ZoomIn /> Increase editor font

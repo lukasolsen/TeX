@@ -94,18 +94,21 @@ export function ProjectHomePage({
       </aside>
 
       <div className="min-h-svh min-w-0 overflow-y-auto bg-background">
-        <div className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-12 lg:px-14">
+        <div className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14 lg:px-14">
           <header className="flex items-start gap-4">
             <div className="pt-0.5 md:hidden">
               <AppBrand compact />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em]">
-                Your projects
+              <p className="mb-2 text-xs font-medium tracking-wide text-primary uppercase">
+                Local LaTeX workbench
+              </p>
+              <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
+                Continue writing
               </h1>
               <p className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">
-                Open a local LaTeX project or continue from a remembered
-                workspace.
+                Open an existing LaTeX project and return to the source, PDF,
+                and layout exactly where you left them.
               </p>
             </div>
             <Button
