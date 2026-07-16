@@ -45,7 +45,10 @@ import { Separator } from "@/components/ui/separator"
 import type { PdfViewerState, ProjectError } from "@/domain/project"
 import { cn } from "@/lib/utils"
 import { shortcutLabel } from "@/lib/shortcuts"
-import { normalizePdfOutline } from "@/features/pdf/pdf-viewer-model"
+import {
+  normalizePdfOutline,
+  stateAfterPdfReplacement,
+} from "@/features/pdf/pdf-viewer-model"
 import {
   projectErrorFromUnknown,
   projectPdfRevision,
@@ -77,6 +80,14 @@ type PdfLoadState =
       updateError: ProjectError | null
     }
   | { status: "error"; error: ProjectError }
+
+type PdfUpdateOrigin = "initial" | "build" | "external"
+type PendingPdfUpdate = {
+  document: PDFDocumentProxy
+  outline: OutlineItem[]
+  origin: PdfUpdateOrigin
+  generation: number
+}
 
 function PdfPage({
   document,
@@ -188,6 +199,23 @@ function pageNumbers(
     : Array.from({ length: count }, (_, index) => index + 1)
 }
 
+function restorePdfSelection(root: HTMLElement, text: string) {
+  if (text === "" || !document.getSelection()?.isCollapsed) return
+  for (const span of root.querySelectorAll<HTMLElement>(".textLayer span")) {
+    const content = span.textContent ?? ""
+    const offset = content.indexOf(text)
+    const node = span.firstChild
+    if (offset < 0 || node === null) continue
+    const range = document.createRange()
+    range.setStart(node, offset)
+    range.setEnd(node, offset + text.length)
+    const selection = document.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    return
+  }
+}
+
 export function PdfViewer({
   initialState,
   onClose,
@@ -222,17 +250,89 @@ export function PdfViewer({
     y: number
   } | null>(null)
   const [syncStatus, setSyncStatus] = useState<string | null>(null)
+  const [pendingUpdate, setPendingUpdate] = useState<PendingPdfUpdate | null>(
+    null
+  )
+  const [updateAnnouncement, setUpdateAnnouncement] = useState("")
+  const sectionRef = useRef<HTMLElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const restoredDocument = useRef<PDFDocumentProxy | null>(null)
+  const readyDocumentRef = useRef<PDFDocumentProxy | null>(null)
   const viewerRef = useRef(viewer)
   const onStateChangeRef = useRef(onStateChange)
   const pathRef = useRef(path)
+  const loadGeneration = useRef(0)
+  const searchGeneration = useRef(0)
+  const outlineGeneration = useRef(0)
+  const syncGeneration = useRef(0)
+  const interactionUntil = useRef(0)
+  const selectionActive = useRef(false)
+  const selectedText = useRef("")
+  const lastBuildToken = useRef("")
+  const pendingUpdateRef = useRef<PendingPdfUpdate | null>(null)
   const readyDocument = loadState.status === "ready" ? loadState.document : null
   const closeViewer = useCallback(() => {
     if (path !== null) onStateChange(viewer)
     onClose()
   }, [onClose, onStateChange, path, viewer])
+
+  const markInteraction = useCallback((duration = 500) => {
+    interactionUntil.current = Date.now() + duration
+  }, [])
+
+  const applyUpdate = useCallback((candidate: PendingPdfUpdate) => {
+    if (candidate.generation !== loadGeneration.current) {
+      void candidate.document.loadingTask.destroy()
+      if (pendingUpdateRef.current === candidate) {
+        pendingUpdateRef.current = null
+        setPendingUpdate(null)
+      }
+      return
+    }
+    searchGeneration.current += 1
+    outlineGeneration.current += 1
+    syncGeneration.current += 1
+    const focused = document.activeElement
+    const restoreFocus =
+      focused instanceof HTMLElement &&
+      sectionRef.current?.contains(focused) === true
+        ? focused
+        : null
+    const selectionToRestore = selectedText.current
+    const replacement = stateAfterPdfReplacement(
+      viewerRef.current,
+      candidate.document.numPages
+    )
+    setViewer(replacement.state)
+    viewerRef.current = replacement.state
+    setLoadState({
+      status: "ready",
+      document: candidate.document,
+      updateError: null,
+    })
+    setOutline(candidate.outline)
+    pendingUpdateRef.current = null
+    setPendingUpdate(null)
+    const source =
+      candidate.origin === "build"
+        ? "Build PDF updated"
+        : candidate.origin === "external"
+          ? "Externally rebuilt PDF updated"
+          : "PDF loaded"
+    setUpdateAnnouncement(
+      replacement.pageClamped
+        ? `${source}; previous page no longer exists; showing page ${replacement.state.page} of ${candidate.document.numPages}.`
+        : `${source}; page ${replacement.state.page} of ${candidate.document.numPages}.`
+    )
+    window.requestAnimationFrame(() => {
+      if (restoreFocus?.isConnected) restoreFocus.focus({ preventScroll: true })
+      window.setTimeout(() => {
+        const root = sectionRef.current
+        if (root !== null) restorePdfSelection(root, selectionToRestore)
+      }, 300)
+    })
+  }, [])
 
   useEffect(() => {
     viewerRef.current = viewer
@@ -251,19 +351,50 @@ export function PdfViewer({
 
   useEffect(() => {
     if (path === null) return
-    let active = true
+    const generation = loadGeneration.current + 1
+    loadGeneration.current = generation
+    const origin: PdfUpdateOrigin =
+      refreshToken !== "" && refreshToken !== lastBuildToken.current
+        ? "build"
+        : externalRefresh > 0
+          ? "external"
+          : "initial"
+    lastBuildToken.current = refreshToken
     void readProjectPdf(projectPath, path)
       .then((data) => getDocument({ data }).promise)
       .then(async (document) => {
-        if (!active) {
+        if (generation !== loadGeneration.current) {
           await document.loadingTask.destroy()
           return
         }
-        setLoadState({ status: "ready", document, updateError: null })
-        setOutline(normalizePdfOutline(await document.getOutline()))
+        const outline = normalizePdfOutline(
+          await document.getOutline().catch(() => null)
+        )
+        if (generation !== loadGeneration.current) {
+          await document.loadingTask.destroy()
+          return
+        }
+        const candidate = { document, outline, origin, generation }
+        if (
+          readyDocumentRef.current !== null &&
+          (selectionActive.current || Date.now() < interactionUntil.current)
+        ) {
+          setPendingUpdate((current) => {
+            if (current !== null) void current.document.loadingTask.destroy()
+            pendingUpdateRef.current = candidate
+            return candidate
+          })
+          setUpdateAnnouncement(
+            origin === "build"
+              ? "Build PDF update ready; waiting for PDF interaction to finish."
+              : "External PDF update ready; waiting for PDF interaction to finish."
+          )
+        } else {
+          applyUpdate(candidate)
+        }
       })
       .catch((error: unknown) => {
-        if (!active) return
+        if (generation !== loadGeneration.current) return
         const projectError = projectErrorFromUnknown(error)
         setLoadState((current) =>
           current.status === "ready"
@@ -272,9 +403,9 @@ export function PdfViewer({
         )
       })
     return () => {
-      active = false
+      loadGeneration.current += 1
     }
-  }, [externalRefresh, path, projectPath, refreshToken])
+  }, [applyUpdate, externalRefresh, path, projectPath, refreshToken])
 
   useEffect(
     () =>
@@ -285,6 +416,52 @@ export function PdfViewer({
           },
     [readyDocument]
   )
+
+  useEffect(() => {
+    readyDocumentRef.current = readyDocument
+  }, [readyDocument])
+
+  useEffect(() => {
+    pendingUpdateRef.current = pendingUpdate
+  }, [pendingUpdate])
+
+  useEffect(
+    () => () => {
+      const pending = pendingUpdateRef.current
+      if (pending !== null) void pending.document.loadingTask.destroy()
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (pendingUpdate === null) return
+    const interval = window.setInterval(() => {
+      if (!selectionActive.current && Date.now() >= interactionUntil.current) {
+        applyUpdate(pendingUpdate)
+      }
+    }, 100)
+    return () => window.clearInterval(interval)
+  }, [applyUpdate, pendingUpdate])
+
+  useEffect(() => {
+    const trackSelection = () => {
+      const selection = document.getSelection()
+      const root = sectionRef.current
+      selectionActive.current =
+        selection !== null &&
+        !selection.isCollapsed &&
+        root !== null &&
+        ((selection.anchorNode !== null &&
+          root.contains(selection.anchorNode)) ||
+          (selection.focusNode !== null && root.contains(selection.focusNode)))
+      if (selectionActive.current) {
+        selectedText.current = selection?.toString() ?? ""
+        markInteraction(1_000)
+      }
+    }
+    document.addEventListener("selectionchange", trackSelection)
+    return () => document.removeEventListener("selectionchange", trackSelection)
+  }, [markInteraction])
 
   useEffect(() => {
     if (path === null) return
@@ -307,7 +484,7 @@ export function PdfViewer({
       active = false
       window.clearInterval(interval)
     }
-  }, [path, projectPath])
+  }, [path, projectPath, refreshToken])
 
   useEffect(() => {
     if (path === null) return
@@ -412,6 +589,8 @@ export function PdfViewer({
   }, [readyDocument, viewer.layout, viewer.rotation, viewer.zoom])
 
   const runSearch = useCallback(async () => {
+    const generation = searchGeneration.current + 1
+    searchGeneration.current = generation
     if (readyDocument === null || query.trim() === "") {
       setMatches([])
       return
@@ -425,12 +604,14 @@ export function PdfViewer({
     ) {
       const page = await readyDocument.getPage(pageNumber)
       const content = await page.getTextContent()
+      if (generation !== searchGeneration.current) return
       const text = content.items
         .map((item) => ("str" in item ? item.str : ""))
         .join(" ")
         .toLocaleLowerCase()
       if (text.includes(needle)) found.push(pageNumber)
     }
+    if (generation !== searchGeneration.current) return
     setMatches(found)
     setMatchIndex(0)
     if (found[0] !== undefined) goToPage(found[0])
@@ -462,16 +643,20 @@ export function PdfViewer({
   const navigateOutline = useCallback(
     async (item: OutlineItem) => {
       if (readyDocument === null || item.dest === null) return
+      const generation = outlineGeneration.current + 1
+      outlineGeneration.current = generation
       const destination =
         typeof item.dest === "string"
           ? await readyDocument.getDestination(item.dest)
           : item.dest
       if (destination === null) return
+      if (generation !== outlineGeneration.current) return
       const reference = destination[0]
       const index =
         typeof reference === "object"
           ? await readyDocument.getPageIndex(reference)
           : 0
+      if (generation !== outlineGeneration.current) return
       goToPage(index + 1)
     },
     [goToPage, readyDocument]
@@ -479,6 +664,8 @@ export function PdfViewer({
 
   const forwardSearch = useCallback(async () => {
     if (path === null || sourceLocation === null) return
+    const generation = syncGeneration.current + 1
+    syncGeneration.current = generation
     setSyncStatus("Synchronizing source to PDF…")
     try {
       const result = await synctexForwardSearch(
@@ -488,10 +675,12 @@ export function PdfViewer({
         sourceLocation.line,
         sourceLocation.column
       )
+      if (generation !== syncGeneration.current) return
       setSyncMarker(result)
       goToPage(result.page)
       setSyncStatus(`Synchronized to page ${result.page}`)
     } catch (error: unknown) {
+      if (generation !== syncGeneration.current) return
       setSyncStatus(projectErrorFromUnknown(error).message)
     }
   }, [goToPage, path, projectPath, sourceLocation])
@@ -499,12 +688,16 @@ export function PdfViewer({
   const inverseSearch = useCallback(
     async (page: number, x: number, y: number) => {
       if (path === null) return
+      const generation = syncGeneration.current + 1
+      syncGeneration.current = generation
       setSyncStatus("Synchronizing PDF to source…")
       try {
         const result = await synctexInverseSearch(projectPath, path, page, x, y)
+        if (generation !== syncGeneration.current) return
         onNavigateSource(result.path, result.line, result.column)
         setSyncStatus(`Synchronized to ${result.path}, line ${result.line}`)
       } catch (error: unknown) {
+        if (generation !== syncGeneration.current) return
         setSyncStatus(projectErrorFromUnknown(error).message)
       }
     },
@@ -609,6 +802,7 @@ export function PdfViewer({
       className="flex size-full min-h-0 min-w-0 flex-col bg-workspace"
       aria-label={`PDF viewer: ${path}`}
       data-workspace-focus="pdf"
+      ref={sectionRef}
       tabIndex={-1}
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b bg-workspace-chrome px-1.5">
@@ -806,7 +1000,10 @@ export function PdfViewer({
               </InputGroupAddon>
               <InputGroupInput
                 aria-label="Find in PDF"
-                onChange={(event) => setQuery(event.target.value)}
+                onChange={(event) => {
+                  searchGeneration.current += 1
+                  setQuery(event.target.value)
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void runSearch()
                 }}
@@ -876,12 +1073,31 @@ export function PdfViewer({
               </AlertDescription>
             </Alert>
           ) : null}
+          {pendingUpdate !== null ? (
+            <div className="flex items-center gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs">
+              <span>
+                {pendingUpdate.origin === "build"
+                  ? "Build PDF update ready"
+                  : "External PDF update ready"}
+                ; waiting for scrolling or text selection to finish.
+              </span>
+              <Button
+                className="ml-auto"
+                onClick={() => applyUpdate(pendingUpdate)}
+                size="xs"
+                variant="outline"
+              >
+                Apply update now
+              </Button>
+            </div>
+          ) : null}
           <div
             className={cn(
               "min-h-0 flex-1 overflow-auto",
               viewer.layout === "single" && "flex items-start justify-center"
             )}
             onScroll={(event) => {
+              markInteraction()
               const host = event.currentTarget
               const page = host.querySelector<HTMLElement>(
                 `[data-page="${viewer.page}"]`
@@ -901,6 +1117,8 @@ export function PdfViewer({
                   : { ...current, position }
               )
             }}
+            onPointerDown={() => markInteraction(1_000)}
+            onPointerUp={() => markInteraction()}
             onKeyDown={(event) => {
               const modifier = event.ctrlKey || event.metaKey
               if (modifier && event.key.toLocaleLowerCase() === "f") {
@@ -945,7 +1163,8 @@ export function PdfViewer({
         </div>
       </div>
       <span className="sr-only" aria-live="polite">
-        Page {viewer.page} of {loadState.document.numPages}
+        {updateAnnouncement ||
+          `Page ${viewer.page} of ${loadState.document.numPages}`}
       </span>
     </section>
   )
