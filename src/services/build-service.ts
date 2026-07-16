@@ -114,6 +114,12 @@ export async function cleanAuxiliaryFiles(
   return invoke<number>("clean_auxiliary_files", { projectPath, files })
 }
 
+export async function acknowledgeProjectWatchBuild(
+  projectPath: string
+): Promise<void> {
+  return invoke("acknowledge_project_watch_build", { projectPath })
+}
+
 export async function revealProjectOutput(
   projectPath: string,
   rootFile: string

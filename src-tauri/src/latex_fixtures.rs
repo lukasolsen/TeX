@@ -7,6 +7,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::process_support::run_status;
+
+const TOOL_PROBE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const FIXTURE_BUILD_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FixtureManifest {
@@ -121,12 +126,7 @@ fn temporary_output_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
 }
 
 fn command_is_available(command: &str) -> Result<bool, io::Error> {
-    match Command::new(command)
-        .arg("--version")
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-    {
+    match run_status(Command::new(command).arg("--version"), TOOL_PROBE_TIMEOUT) {
         Ok(_) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
@@ -317,14 +317,16 @@ fn direct_engine_profiles_build_the_documented_fixture() -> Result<(), Box<dyn s
                 let working_directory = root.parent().ok_or("fixture root has no parent")?;
                 let engine_output = output.join(command);
                 fs::create_dir(&engine_output)?;
-                let status = Command::new(command)
-                    .args(["-halt-on-error", "-interaction=nonstopmode"])
-                    .arg(format!("-output-directory={}", engine_output.display()))
-                    .arg(root.file_name().ok_or("fixture root has no file name")?)
-                    .current_dir(working_directory)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()?;
+                let status = run_status(
+                    Command::new(command)
+                        .args(["-halt-on-error", "-interaction=nonstopmode"])
+                        .arg(format!("-output-directory={}", engine_output.display()))
+                        .arg(root.file_name().ok_or("fixture root has no file name")?)
+                        .current_dir(working_directory)
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null()),
+                    FIXTURE_BUILD_TIMEOUT,
+                )?;
                 if !status.success() {
                     return Err(format!("{command} did not build fixture {}", fixture.id).into());
                 }
@@ -378,14 +380,16 @@ fn fixture_builds_have_the_documented_outcomes() -> Result<(), Box<dyn std::erro
                 case_index += 1;
                 fs::create_dir(&case_output)?;
 
-                let status = Command::new("latexmk")
-                    .args(["-pdf", "-halt-on-error", "-interaction=nonstopmode"])
-                    .arg(format!("-outdir={}", case_output.display()))
-                    .arg(root.file_name().ok_or("fixture root has no file name")?)
-                    .current_dir(working_directory)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .status()?;
+                let status = run_status(
+                    Command::new("latexmk")
+                        .args(["-pdf", "-halt-on-error", "-interaction=nonstopmode"])
+                        .arg(format!("-outdir={}", case_output.display()))
+                        .arg(root.file_name().ok_or("fixture root has no file name")?)
+                        .current_dir(working_directory)
+                        .stdout(Stdio::null())
+                        .stderr(Stdio::null()),
+                    FIXTURE_BUILD_TIMEOUT,
+                )?;
                 let should_succeed = fixture.expected_build == BuildExpectation::Success;
                 if status.success() != should_succeed {
                     return Err(format!(

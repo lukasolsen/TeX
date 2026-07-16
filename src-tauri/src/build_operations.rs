@@ -1,19 +1,24 @@
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    time::Duration,
 };
 
 use serde::Serialize;
 use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::{
+    process_support::run_status,
     project_access::ProjectAccess,
     project_config::{canonical_child, load_configuration_for_project, validate_configuration},
 };
 
 const MAX_CLEAN_FILES: usize = 4_096;
 const MAX_SCAN_DEPTH: usize = 12;
+const MAX_SCAN_ENTRIES: usize = 8_192;
 const AUXILIARY_EXTENSIONS: [&str; 22] = [
     "aux",
     "bbl",
@@ -44,6 +49,7 @@ const AUXILIARY_EXTENSIONS: [&str; 22] = [
 pub struct CleanPreview {
     files: Vec<String>,
     total_bytes: u64,
+    truncated: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -64,6 +70,7 @@ pub fn preview_clean_auxiliary_files(
 
 #[tauri::command]
 pub fn clean_auxiliary_files(
+    app: AppHandle,
     project_path: String,
     files: Vec<String>,
     access: State<'_, ProjectAccess>,
@@ -73,12 +80,35 @@ pub fn clean_auxiliary_files(
         return Err(invalid_clean());
     }
     let mut validated = Vec::with_capacity(files.len());
+    let mut unique = HashSet::with_capacity(files.len());
     for relative in files {
         let path = canonical_child(&root, &relative, false).map_err(|_| invalid_clean())?;
-        if !is_auxiliary(&path) {
+        if !is_auxiliary(&path) || !unique.insert(path.clone()) {
             return Err(invalid_clean());
         }
         validated.push(path);
+    }
+    if validated.is_empty() {
+        return Ok(0);
+    }
+    let approved = app
+        .dialog()
+        .message(format!(
+            "Permanently remove {} generated auxiliary files from this project?\n\nSource files and PDFs are excluded. This operation cannot be undone.",
+            validated.len()
+        ))
+        .title("Remove auxiliary files")
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            "Remove files".to_owned(),
+            "Cancel".to_owned(),
+        ))
+        .blocking_show();
+    if !approved {
+        return Err(BuildOperationError {
+            code: "clean-cancelled",
+            message: "No auxiliary files were removed.",
+        });
     }
     for path in &validated {
         fs::remove_file(path).map_err(|_| BuildOperationError {
@@ -125,7 +155,8 @@ pub fn reveal_project_output(
 
 fn preview_clean(root: &Path) -> Result<CleanPreview, BuildOperationError> {
     let mut paths = Vec::new();
-    collect_auxiliary(root, root, 0, &mut paths)?;
+    let mut visited_entries = 0_usize;
+    let truncated = collect_auxiliary(root, root, 0, &mut visited_entries, &mut paths)?;
     paths.sort();
     let total_bytes = paths.iter().try_fold(0_u64, |total, path| {
         path.metadata()
@@ -142,6 +173,7 @@ fn preview_clean(root: &Path) -> Result<CleanPreview, BuildOperationError> {
             })
             .collect(),
         total_bytes,
+        truncated,
     })
 }
 
@@ -149,11 +181,13 @@ fn collect_auxiliary(
     root: &Path,
     directory: &Path,
     depth: usize,
+    visited_entries: &mut usize,
     paths: &mut Vec<PathBuf>,
-) -> Result<(), BuildOperationError> {
+) -> Result<bool, BuildOperationError> {
     if depth > MAX_SCAN_DEPTH || paths.len() >= MAX_CLEAN_FILES {
-        return Ok(());
+        return Ok(true);
     }
+    let mut truncated = false;
     let entries = fs::read_dir(directory).map_err(|_| unavailable())?;
     for entry in entries {
         let entry = entry.map_err(|_| unavailable())?;
@@ -161,10 +195,14 @@ fn collect_auxiliary(
         if file_type.is_symlink() {
             continue;
         }
+        *visited_entries += 1;
+        if *visited_entries > MAX_SCAN_ENTRIES {
+            return Ok(true);
+        }
         let path = entry.path();
         if file_type.is_dir() {
             if path.file_name().and_then(|value| value.to_str()) != Some(".git") {
-                collect_auxiliary(root, &path, depth + 1, paths)?;
+                truncated |= collect_auxiliary(root, &path, depth + 1, visited_entries, paths)?;
             }
         } else if file_type.is_file() && is_auxiliary(&path) {
             let canonical = path.canonicalize().map_err(|_| unavailable())?;
@@ -173,10 +211,11 @@ fn collect_auxiliary(
             }
         }
         if paths.len() >= MAX_CLEAN_FILES {
+            truncated = true;
             break;
         }
     }
-    Ok(())
+    Ok(truncated)
 }
 
 fn is_auxiliary(path: &Path) -> bool {
@@ -192,40 +231,46 @@ fn is_auxiliary(path: &Path) -> bool {
 
 #[cfg(target_os = "windows")]
 fn reveal_path(path: &Path) -> Result<(), BuildOperationError> {
-    Command::new("explorer.exe")
+    let mut command = Command::new("explorer.exe");
+    command
         .arg(format!("/select,{}", path.to_string_lossy()))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| reveal_failed())
+        .stderr(Stdio::null());
+    spawn_and_reap(&mut command)
 }
 
 #[cfg(target_os = "macos")]
 fn reveal_path(path: &Path) -> Result<(), BuildOperationError> {
-    Command::new("/usr/bin/open")
+    let mut command = Command::new("/usr/bin/open");
+    command
         .args(["-R"])
         .arg(path)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| reveal_failed())
+        .stderr(Stdio::null());
+    spawn_and_reap(&mut command)
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn reveal_path(path: &Path) -> Result<(), BuildOperationError> {
     let parent = path.parent().ok_or_else(reveal_failed)?;
-    Command::new("/usr/bin/xdg-open")
+    let mut command = Command::new("/usr/bin/xdg-open");
+    command
         .arg(parent)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map(|_| ())
-        .map_err(|_| reveal_failed())
+        .stderr(Stdio::null());
+    spawn_and_reap(&mut command)
+}
+
+fn spawn_and_reap(command: &mut Command) -> Result<(), BuildOperationError> {
+    let status = run_status(command, Duration::from_secs(10)).map_err(|_| reveal_failed())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(reveal_failed())
+    }
 }
 
 fn invalid_clean() -> BuildOperationError {

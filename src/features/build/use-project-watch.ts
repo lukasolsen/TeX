@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react"
 import type { WatchStatus } from "@/domain/build"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import {
+  acknowledgeProjectWatchBuild,
   getProjectWatchStatus,
   listenForWatchEvents,
   startProjectWatch,
@@ -36,7 +37,10 @@ export function useProjectWatch({
     let unlisten: (() => void) | null = null
     void getProjectWatchStatus(projectPath)
       .then((status) => {
-        if (active) setState({ status, message: null })
+        if (active) {
+          if (status === "buildQueued") setBuildQueued(true)
+          setState({ status, message: null })
+        }
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -70,10 +74,17 @@ export function useProjectWatch({
     const frame = window.requestAnimationFrame(() => {
       setBuildQueued(false)
       setState({ status: "watching", message: null })
-      void build()
+      void acknowledgeProjectWatchBuild(projectPath)
+        .then(() => build())
+        .catch((error: unknown) => {
+          setState({
+            status: "error",
+            message: projectErrorFromUnknown(error).message,
+          })
+        })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [build, buildQueued, buildRunning, watchActive])
+  }, [build, buildQueued, buildRunning, projectPath, watchActive])
 
   const start = useCallback(async () => {
     setState({ status: "starting", message: null })

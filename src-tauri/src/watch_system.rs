@@ -1,7 +1,10 @@
 use std::{
     collections::{BTreeSet, HashMap},
     path::{Component, Path, PathBuf},
-    sync::{mpsc, Arc, Mutex, MutexGuard},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex, MutexGuard,
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -12,11 +15,17 @@ use notify::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::{project_access::ProjectAccess, project_config::load_configuration_for_project};
+use crate::{
+    project_access::ProjectAccess,
+    project_config::{load_configuration_for_project, validate_configuration},
+};
 
 const WATCH_EVENT: &str = "tex://watch-event";
 const PROJECT_FILES_EVENT: &str = "tex://project-files-event";
 const DEBOUNCE: Duration = Duration::from_millis(350);
+const WATCH_CHANNEL_CAPACITY: usize = 1_024;
+const MAX_PENDING_PATHS: usize = 1_024;
+const MAX_ACTIVE_WATCHES: usize = 16;
 const GENERATED_DIRECTORIES: [&str; 7] =
     [".git", ".cache", "build", "dist", "out", "output", "target"];
 const GENERATED_EXTENSIONS: [&str; 19] = [
@@ -78,6 +87,7 @@ enum WatchEvent {
         project_path: String,
         changes: Vec<ProjectChangeKind>,
         paths: Vec<String>,
+        truncated: bool,
     },
 }
 
@@ -129,11 +139,22 @@ pub fn start_project_tree_watch(
         if projects.contains_key(&root) {
             return Ok(());
         }
+        if projects.len() >= MAX_ACTIVE_WATCHES {
+            return Err(watch_capacity());
+        }
         projects.insert(root.clone(), ActiveTreeWatch { stop: stop_sender });
     }
 
     let owned = controller.inner().clone();
-    thread::spawn(move || run_tree_watch(app, owned, root, stop_receiver));
+    let worker_root = root.clone();
+    if thread::Builder::new()
+        .name("tex-project-tree-watch".to_owned())
+        .spawn(move || run_tree_watch(app, owned, worker_root, stop_receiver))
+        .is_err()
+    {
+        remove_tree_watch(&controller, &root);
+        return Err(watch_unavailable());
+    }
     Ok(())
 }
 
@@ -146,12 +167,11 @@ pub fn stop_project_tree_watch(
     let root = access
         .resolve(&project_path)
         .map_err(|_| watch_unavailable())?;
-    let watch = controller
+    let projects = controller
         .tree_projects
         .lock()
-        .map_err(|_| watch_unavailable())?
-        .remove(&root);
-    if let Some(watch) = watch {
+        .map_err(|_| watch_unavailable())?;
+    if let Some(watch) = projects.get(&root) {
         let _ = watch.stop.send(());
     }
     Ok(())
@@ -169,6 +189,7 @@ pub fn start_project_watch(
         .map_err(|_| watch_unavailable())?;
     let configuration =
         load_configuration_for_project(&app, &root).map_err(|_| watch_unavailable())?;
+    validate_configuration(&root, &configuration).map_err(|_| watch_unavailable())?;
     let mut excluded_directories = configuration.generated_directories;
     if let Some(output) = configuration.output_directory {
         excluded_directories.push(output);
@@ -178,6 +199,9 @@ pub fn start_project_watch(
         let mut projects = lock_projects(&controller)?;
         if projects.contains_key(&root) {
             return Ok(());
+        }
+        if projects.len() >= MAX_ACTIVE_WATCHES {
+            return Err(watch_capacity());
         }
         projects.insert(
             root.clone(),
@@ -190,7 +214,30 @@ pub fn start_project_watch(
     emit_status(&app, &root, WatchStatus::Starting, None);
 
     let owned = controller.inner().clone();
-    thread::spawn(move || run_watch(app, owned, root, excluded_directories, stop_receiver));
+    let worker_app = app.clone();
+    let worker_root = root.clone();
+    if thread::Builder::new()
+        .name("tex-project-watch".to_owned())
+        .spawn(move || {
+            run_watch(
+                worker_app,
+                owned,
+                worker_root,
+                excluded_directories,
+                stop_receiver,
+            );
+        })
+        .is_err()
+    {
+        remove_watch(&controller, &root);
+        emit_status(
+            &app,
+            &root,
+            WatchStatus::Error,
+            Some("Project watching could not start."),
+        );
+        return Err(watch_unavailable());
+    }
     Ok(())
 }
 
@@ -229,6 +276,29 @@ pub fn get_project_watch_status(
         .map_or(WatchStatus::Off, |watch| watch.status))
 }
 
+/// Acknowledges that the queued change set has been handed to the build controller.
+#[tauri::command]
+pub fn acknowledge_project_watch_build(
+    project_path: String,
+    app: AppHandle,
+    controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
+) -> Result<(), WatchError> {
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
+    let mut projects = lock_projects(&controller)?;
+    let active = projects.get_mut(&root).ok_or(WatchError {
+        code: "watch-not-running",
+        message: "Project watch mode is already off.",
+    })?;
+    if active.status == WatchStatus::BuildQueued {
+        active.status = WatchStatus::Watching;
+        emit_status(&app, &root, WatchStatus::Watching, None);
+    }
+    Ok(())
+}
+
 fn run_watch(
     app: AppHandle,
     controller: WatchController,
@@ -236,10 +306,14 @@ fn run_watch(
     excluded_directories: Vec<String>,
     stop_receiver: mpsc::Receiver<()>,
 ) {
-    let (event_sender, event_receiver) = mpsc::channel();
+    let (event_sender, event_receiver) = mpsc::sync_channel(WATCH_CHANNEL_CAPACITY);
+    let channel_overflowed = Arc::new(AtomicBool::new(false));
+    let callback_overflowed = Arc::clone(&channel_overflowed);
     let watcher = RecommendedWatcher::new(
         move |event| {
-            let _ = event_sender.send(event);
+            if event_sender.try_send(event).is_err() {
+                callback_overflowed.store(true, Ordering::Release);
+            }
         },
         Config::default(),
     );
@@ -272,6 +346,9 @@ fn run_watch(
                 return;
             }
         }
+        if channel_overflowed.swap(false, Ordering::AcqRel) {
+            pending.record_overflow();
+        }
         if pending.is_ready() {
             let build_relevant = pending.build_relevant;
             let event = pending.take_event(&root);
@@ -289,10 +366,14 @@ fn run_tree_watch(
     root: PathBuf,
     stop_receiver: mpsc::Receiver<()>,
 ) {
-    let (event_sender, event_receiver) = mpsc::channel();
+    let (event_sender, event_receiver) = mpsc::sync_channel(WATCH_CHANNEL_CAPACITY);
+    let channel_overflowed = Arc::new(AtomicBool::new(false));
+    let callback_overflowed = Arc::clone(&channel_overflowed);
     let watcher = RecommendedWatcher::new(
         move |event| {
-            let _ = event_sender.send(event);
+            if event_sender.try_send(event).is_err() {
+                callback_overflowed.store(true, Ordering::Release);
+            }
         },
         Config::default(),
     );
@@ -324,6 +405,9 @@ fn run_tree_watch(
                 return;
             }
         }
+        if channel_overflowed.swap(false, Ordering::AcqRel) {
+            last_event = Some(Instant::now());
+        }
         if last_event.is_some_and(|event| event.elapsed() >= DEBOUNCE) {
             last_event = None;
             let _ = app.emit(
@@ -342,6 +426,7 @@ struct PendingChanges {
     paths: BTreeSet<String>,
     build_relevant: bool,
     last_event: Option<Instant>,
+    truncated: bool,
 }
 
 impl PendingChanges {
@@ -363,14 +448,19 @@ impl PendingChanges {
                 continue;
             }
             self.build_relevant |= is_build_input(relative);
-            self.paths.insert(relative.to_string_lossy().into_owned());
+            if self.paths.len() < MAX_PENDING_PATHS {
+                self.paths.insert(relative.to_string_lossy().into_owned());
+            } else {
+                self.truncated = true;
+                self.build_relevant = true;
+            }
             self.kinds.insert(kind);
             self.last_event = Some(Instant::now());
         }
     }
 
     fn is_ready(&self) -> bool {
-        !self.paths.is_empty()
+        (!self.paths.is_empty() || self.truncated)
             && self
                 .last_event
                 .is_some_and(|last_event| last_event.elapsed() >= DEBOUNCE)
@@ -381,11 +471,20 @@ impl PendingChanges {
         let paths = std::mem::take(&mut self.paths).into_iter().collect();
         self.last_event = None;
         self.build_relevant = false;
+        let truncated = std::mem::take(&mut self.truncated);
         WatchEvent::Changed {
             project_path: root.to_string_lossy().into_owned(),
             changes,
             paths,
+            truncated,
         }
+    }
+
+    fn record_overflow(&mut self) {
+        self.kinds.insert(ProjectChangeKind::Modify);
+        self.build_relevant = true;
+        self.truncated = true;
+        self.last_event = Some(Instant::now());
     }
 }
 
@@ -479,6 +578,13 @@ fn watch_unavailable() -> WatchError {
     }
 }
 
+fn watch_capacity() -> WatchError {
+    WatchError {
+        code: "watch-capacity-reached",
+        message: "Too many projects are being watched. Stop one watcher before starting another.",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -488,7 +594,25 @@ mod tests {
         EventKind,
     };
 
-    use super::{classify_event, is_build_input, is_ignored, ProjectChangeKind};
+    use super::{
+        classify_event, is_build_input, is_ignored, PendingChanges, ProjectChangeKind, WatchEvent,
+    };
+
+    #[test]
+    fn overflow_produces_a_truthful_refresh_and_build_event() {
+        let mut pending = PendingChanges::default();
+        pending.record_overflow();
+        assert!(pending.build_relevant);
+
+        let event = pending.take_event(Path::new("/project"));
+        assert!(matches!(
+            event,
+            WatchEvent::Changed {
+                truncated: true,
+                ..
+            }
+        ));
+    }
 
     #[test]
     fn ignores_generated_outputs_and_cache_directories() {

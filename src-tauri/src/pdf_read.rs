@@ -59,7 +59,10 @@ fn read_pdf(project_path: &Path, relative_path: &Path) -> Result<Vec<u8>, PdfRea
     })
 }
 
-fn resolve_pdf(project_path: &Path, relative_path: &Path) -> Result<PathBuf, PdfReadError> {
+pub(crate) fn resolve_pdf(
+    project_path: &Path,
+    relative_path: &Path,
+) -> Result<PathBuf, PdfReadError> {
     if relative_path.as_os_str().is_empty()
         || relative_path.is_absolute()
         || !relative_path

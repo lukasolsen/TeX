@@ -28,6 +28,7 @@ export type WatchEvent =
       projectPath: string
       changes: Array<"create" | "modify" | "remove" | "rename">
       paths: string[]
+      truncated: boolean
     }
 
 export type BuildRequest = {
@@ -58,6 +59,7 @@ export type ProjectBuildConfigurationState =
 export type CleanPreview = {
   files: string[]
   totalBytes: number
+  truncated: boolean
 }
 
 export type BuildInvocation = {

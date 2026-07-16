@@ -95,6 +95,16 @@ export function CleanAuxiliaryDialog({
               <p className="text-sm">
                 {preview.files.length} files · {formatBytes(preview.totalBytes)}
               </p>
+              {preview.truncated ? (
+                <Alert>
+                  <AlertCircle />
+                  <AlertTitle>Preview limit reached</AlertTitle>
+                  <AlertDescription>
+                    Only the bounded preview below will be removed. Run clean
+                    again to inspect any remaining generated files.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
               <ScrollArea className="h-64 rounded-md border bg-source p-2">
                 <ul className="font-mono text-xs" aria-label="Files to remove">
                   {preview.files.map((file) => (
