@@ -144,6 +144,10 @@ and user-work protections in `docs/ui-ux-requirements.md` remain binding.
 - Keep test-only support behind test configuration. Fixtures MUST state purpose,
   expected behavior, provenance, and licence where they include third-party
   material.
+- Do not commit incidental compiler output, absolute build paths, timestamps,
+  caches, or generated databases as fixtures. A generated artifact MAY be
+  committed only when its exact bytes are a declared test input, its producer
+  and provenance are documented, and tests do not rewrite it in place.
 
 ## 4. Comments and documentation
 
@@ -214,6 +218,19 @@ and user-work protections in `docs/ui-ux-requirements.md` remain binding.
 - Test changed workflows by keyboard and at least one screen-reader path. Test
   focus restoration, accessible name/state, reduced motion, and high-contrast
   behavior when affected.
+- Shared controls MUST preserve native naming, description, state, focus, and
+  ownership relationships through composition. Informational updates use
+  polite status semantics; assertive alerts are reserved for failures requiring
+  immediate attention.
+- Semantic tokens MUST map every rendered surface and foreground to system
+  colors under forced-colors mode. User-selectable accent values MUST NOT
+  override that mapping. Declare supported `color-scheme` values so
+  browser-owned controls match the active theme.
+- Changed primary workflows MUST pass user-centric DOM assertions and an
+  automated accessibility scan. Simulated-DOM scans are an early regression
+  gate, not WCAG evidence: contrast, platform accessibility trees, focus
+  appearance, screen-reader output, zoom, and forced colors require a real
+  browser or packaged-app smoke test.
 
 ## 6. Tauri and webview security
 

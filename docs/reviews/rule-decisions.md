@@ -62,6 +62,9 @@ proposal record. Adoption applies the revised rule in
 | EXT-GH-002 | SRC-GH-002 | **Adopt** | Set job-level minimum token permissions; release write authority exists only in the publishing job. |
 | EXT-GH-003 | SRC-GH-003 | **Adopt with fallback** | Add dependency review when available and retain ecosystem-native audit/licence/source gates. |
 | EXT-A11Y-001 | SRC-A11Y-001 | **Adopt** | WCAG 2.2 AA is the target; native semantics precede ARIA and changed workflows require keyboard/AT evidence. |
+| EXT-A11Y-002 | SRC-A11Y-002 | **Adopt** | Every semantic surface/foreground token maps to CSS system colors in forced-colors mode; custom accent values cannot outrank that mapping, and browser-owned controls receive an explicit color scheme. |
+| EXT-A11Y-003 | SRC-A11Y-003 | **Adopt with limitation** | Run axe-core against changed primary DOM workflows. JSDOM may disable only rules the tool documents as unsupported; every such omission remains assigned to real-browser and packaged-app qualification. A zero-violation scan is not a WCAG conformance claim. |
+| EXT-TEST-001 | SRC-TEST-001, SRC-TEST-002 | **Adopt** | Component tests query accessible roles, names, descriptions, and states and drive complete user interactions in file-scoped JSDOM. Keep implementation-state assertions and test IDs out of public workflow contracts unless no user-observable locator exists. |
 
 ## Approval and migration decision
 
