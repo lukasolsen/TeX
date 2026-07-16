@@ -38,8 +38,28 @@ export type WorkspaceState = {
   selectedFile: string | null
   sidebarWidth: number
   editorFontSize: number
+  pdfPaneOpen: boolean
+  pdfPaneWidth: number
+  buildPanelOpen: boolean
+  buildPanelHeight: number
+  sidebarTab: ProjectSidebarTab
+  buildPanelTab: BuildPanelTab
+  buildProfile: BuildProfile
   selectedPdf: string | null
   pdfViewerStates: Record<string, PdfViewerState>
+  editorViewerStates: Record<string, EditorViewerState>
+}
+
+export type ProjectSidebarTab = "files" | "outline" | "references"
+export type BuildPanelTab = "output" | "problems"
+export type BuildProfile = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
+export type WorkspaceFocus = "source" | "pdf"
+
+export type EditorViewerState = {
+  line: number
+  column: number
+  scrollTop: number
+  scrollLeft: number
 }
 
 export type PdfLayoutMode = "continuous" | "single"

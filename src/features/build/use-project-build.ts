@@ -24,10 +24,14 @@ const saveRequiredError = {
 
 export function useProjectBuild({
   beforeBuild,
+  initialEngine,
+  onEngineChange,
   projectPath,
   rootFile,
 }: {
   beforeBuild: () => Promise<boolean>
+  initialEngine: BuildEngine
+  onEngineChange: (engine: BuildEngine) => void
   projectPath: string
   rootFile: string | null
 }) {
@@ -35,7 +39,7 @@ export function useProjectBuild({
     projectBuildReducer,
     initialProjectBuildState
   )
-  const [engine, setEngine] = useState<BuildEngine>("latexmkPdf")
+  const [engine, setEngineState] = useState<BuildEngine>(initialEngine)
   const [profiles, setProfiles] = useState<BuildProfilesState>({
     status: "loading",
   })
@@ -46,15 +50,6 @@ export function useProjectBuild({
       .then((availableProfiles) => {
         if (!active) return
         setProfiles({ status: "ready", profiles: availableProfiles })
-        setEngine((current) => {
-          const currentAvailable = availableProfiles.some(
-            (profile) => profile.engine === current && profile.available
-          )
-          return currentAvailable
-            ? current
-            : (availableProfiles.find((profile) => profile.available)?.engine ??
-                current)
-        })
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -66,6 +61,14 @@ export function useProjectBuild({
       active = false
     }
   }, [])
+
+  const setEngine = useCallback(
+    (next: BuildEngine) => {
+      setEngineState(next)
+      onEngineChange(next)
+    },
+    [onEngineChange]
+  )
 
   useEffect(() => {
     let active = true

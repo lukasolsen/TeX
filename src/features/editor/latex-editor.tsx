@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import {
   autocompletion,
   closeBrackets,
@@ -55,7 +55,7 @@ import {
   latexSemanticHighlighting,
   setLatexSemanticContext,
 } from "@/features/editor/latex-semantic-highlighting"
-import type { ProjectEntry } from "@/domain/project"
+import type { EditorViewerState, ProjectEntry } from "@/domain/project"
 import {
   isReadableSource,
   treeContainsPath,
@@ -65,6 +65,20 @@ import { referencedFileAt } from "@/features/editor/latex-hover"
 export type EditorTarget = { line: number; column: number; token: number }
 
 type ProjectReference = { from: number; to: number } | null
+
+function viewerSelectionPosition(
+  content: string,
+  viewerState: EditorViewerState | undefined
+): number {
+  const document = EditorState.create({ doc: content }).doc
+  const line = document.line(
+    Math.max(1, Math.min(viewerState?.line ?? 1, document.lines))
+  )
+  return Math.min(
+    line.to,
+    line.from + Math.max(0, (viewerState?.column ?? 1) - 1)
+  )
+}
 
 const setProjectReference = StateEffect.define<ProjectReference>()
 const projectReferenceField = StateField.define({
@@ -221,10 +235,12 @@ export function LatexEditor({
   content,
   fontSize,
   label,
+  initialViewerState,
   onChange,
   onCursorChange,
   onOpenReference,
   onSave,
+  onViewerStateChange,
   path,
   projectPath,
   projectTree,
@@ -234,10 +250,12 @@ export function LatexEditor({
   content: string
   fontSize: number
   label: string
+  initialViewerState: EditorViewerState | undefined
   onChange: (content: string) => void
   onCursorChange: (line: number, column: number) => void
   onOpenReference: (path: string) => void
   onSave: () => void
+  onViewerStateChange: (path: string, state: EditorViewerState) => void
   path: string
   projectPath: string
   projectTree: ProjectEntry
@@ -250,6 +268,9 @@ export function LatexEditor({
   const onCursorChangeRef = useRef(onCursorChange)
   const onOpenReferenceRef = useRef(onOpenReference)
   const onSaveRef = useRef(onSave)
+  const onViewerStateChangeRef = useRef(onViewerStateChange)
+  const viewerStateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialViewerStateRef = useRef(initialViewerState)
   const applyingExternalContent = useRef(false)
   const contentRef = useRef(content)
   const fontSizeRef = useRef(fontSize)
@@ -261,7 +282,34 @@ export function LatexEditor({
   const activePath = useRef(path)
   const extensions = useRef<Extension[]>([])
   const documentStates = useRef(
-    new Map<string, { state: EditorState; scrollTop: number }>()
+    new Map<
+      string,
+      { state: EditorState; scrollTop: number; scrollLeft: number }
+    >()
+  )
+
+  const emitViewerState = useCallback((editor: EditorView) => {
+    const head = editor.state.selection.main.head
+    const line = editor.state.doc.lineAt(head)
+    onViewerStateChangeRef.current(activePath.current, {
+      line: line.number,
+      column: head - line.from + 1,
+      scrollTop: Math.max(0, editor.scrollDOM.scrollTop),
+      scrollLeft: Math.max(0, editor.scrollDOM.scrollLeft),
+    })
+  }, [])
+
+  const scheduleViewerState = useCallback(
+    (editor: EditorView) => {
+      if (viewerStateTimer.current !== null) {
+        clearTimeout(viewerStateTimer.current)
+      }
+      viewerStateTimer.current = setTimeout(() => {
+        viewerStateTimer.current = null
+        emitViewerState(editor)
+      }, 250)
+    },
+    [emitViewerState]
   )
 
   useEffect(() => {
@@ -269,7 +317,8 @@ export function LatexEditor({
     onCursorChangeRef.current = onCursorChange
     onOpenReferenceRef.current = onOpenReference
     onSaveRef.current = onSave
-  }, [onChange, onCursorChange, onOpenReference, onSave])
+    onViewerStateChangeRef.current = onViewerStateChange
+  }, [onChange, onCursorChange, onOpenReference, onSave, onViewerStateChange])
 
   useEffect(() => {
     contentRef.current = content
@@ -437,6 +486,13 @@ export function LatexEditor({
           const line = update.state.doc.lineAt(head)
           onCursorChangeRef.current(line.number, head - line.from + 1)
         }
+        if (
+          update.selectionSet ||
+          update.docChanged ||
+          update.viewportChanged
+        ) {
+          scheduleViewerState(update.view)
+        }
       }),
       themeCompartment.current.of(sourceEditorTheme(fontSizeRef.current)),
       attributesCompartment.current.of(
@@ -448,26 +504,43 @@ export function LatexEditor({
       ),
     ]
     extensions.current = editorExtensions
+    const initialPosition = viewerSelectionPosition(
+      contentRef.current,
+      initialViewerStateRef.current
+    )
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
         doc: contentRef.current,
         extensions: editorExtensions,
+        selection: { anchor: initialPosition },
       }),
     })
+    editor.scrollDOM.scrollTop = initialViewerStateRef.current?.scrollTop ?? 0
+    editor.scrollDOM.scrollLeft = initialViewerStateRef.current?.scrollLeft ?? 0
+    const onScroll = () => scheduleViewerState(editor)
+    editor.scrollDOM.addEventListener("scroll", onScroll, { passive: true })
     const toggleLineComment = () => toggleComment(editor)
     const findInFile = () => openSearchPanel(editor)
     window.addEventListener("tex:toggle-comment", toggleLineComment)
     window.addEventListener("tex:find-in-file", findInFile)
     view.current = editor
-    onCursorChangeRef.current(1, 1)
+    onCursorChangeRef.current(
+      initialViewerStateRef.current?.line ?? 1,
+      initialViewerStateRef.current?.column ?? 1
+    )
     return () => {
       window.removeEventListener("tex:toggle-comment", toggleLineComment)
       window.removeEventListener("tex:find-in-file", findInFile)
+      editor.scrollDOM.removeEventListener("scroll", onScroll)
+      if (viewerStateTimer.current !== null) {
+        clearTimeout(viewerStateTimer.current)
+      }
+      emitViewerState(editor)
       editor.destroy()
       view.current = null
     }
-  }, [])
+  }, [emitViewerState, scheduleViewerState])
 
   useEffect(() => {
     fontSizeRef.current = fontSize
@@ -494,9 +567,15 @@ export function LatexEditor({
   useEffect(() => {
     const editor = view.current
     if (editor === null || activePath.current === path) return
+    if (viewerStateTimer.current !== null) {
+      clearTimeout(viewerStateTimer.current)
+      viewerStateTimer.current = null
+    }
+    emitViewerState(editor)
     documentStates.current.set(activePath.current, {
       state: editor.state,
       scrollTop: editor.scrollDOM.scrollTop,
+      scrollLeft: editor.scrollDOM.scrollLeft,
     })
     const restored = documentStates.current.get(path)
     let nextState =
@@ -504,6 +583,12 @@ export function LatexEditor({
       EditorState.create({
         doc: contentRef.current,
         extensions: extensions.current,
+        selection: {
+          anchor: viewerSelectionPosition(
+            contentRef.current,
+            initialViewerState
+          ),
+        },
       })
     if (nextState.doc.toString() !== contentRef.current) {
       nextState = nextState.update({
@@ -530,7 +615,10 @@ export function LatexEditor({
         ),
       ],
     })
-    editor.scrollDOM.scrollTop = restored?.scrollTop ?? 0
+    editor.scrollDOM.scrollTop =
+      restored?.scrollTop ?? initialViewerState?.scrollTop ?? 0
+    editor.scrollDOM.scrollLeft =
+      restored?.scrollLeft ?? initialViewerState?.scrollLeft ?? 0
     activePath.current = path
     const head = editor.state.selection.main.head
     const activeLine = editor.state.doc.lineAt(head)
@@ -541,7 +629,7 @@ export function LatexEditor({
         projectFiles: projectFilePaths(projectTreeRef.current),
       }),
     })
-  }, [path])
+  }, [emitViewerState, initialViewerState, path])
 
   useEffect(() => {
     const retained = new Set([...retainedPaths, path])
@@ -580,5 +668,12 @@ export function LatexEditor({
     editor.focus()
   }, [target])
 
-  return <div className="min-h-0 flex-1" ref={host} />
+  return (
+    <div
+      className="min-h-0 flex-1"
+      data-workspace-focus="source"
+      ref={host}
+      tabIndex={-1}
+    />
+  )
 }

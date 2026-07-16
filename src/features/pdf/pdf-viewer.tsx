@@ -225,11 +225,29 @@ export function PdfViewer({
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const restoredDocument = useRef<PDFDocumentProxy | null>(null)
+  const viewerRef = useRef(viewer)
+  const onStateChangeRef = useRef(onStateChange)
+  const pathRef = useRef(path)
   const readyDocument = loadState.status === "ready" ? loadState.document : null
   const closeViewer = useCallback(() => {
     if (path !== null) onStateChange(viewer)
     onClose()
   }, [onClose, onStateChange, path, viewer])
+
+  useEffect(() => {
+    viewerRef.current = viewer
+    onStateChangeRef.current = onStateChange
+    pathRef.current = path
+  }, [onStateChange, path, viewer])
+
+  useEffect(
+    () => () => {
+      if (pathRef.current !== null) {
+        onStateChangeRef.current(viewerRef.current)
+      }
+    },
+    []
+  )
 
   useEffect(() => {
     if (path === null) return
@@ -506,6 +524,8 @@ export function PdfViewer({
       <section
         className="relative flex size-full items-center justify-center bg-workspace p-6"
         aria-label="PDF viewer"
+        data-workspace-focus="pdf"
+        tabIndex={-1}
       >
         <Button
           aria-label="Close PDF viewer"
@@ -537,7 +557,9 @@ export function PdfViewer({
       <section
         className="relative flex size-full items-center justify-center gap-2 bg-workspace text-sm text-muted-foreground"
         aria-label="PDF viewer"
+        data-workspace-focus="pdf"
         role="status"
+        tabIndex={-1}
       >
         <Button
           aria-label="Close PDF viewer"
@@ -559,6 +581,8 @@ export function PdfViewer({
       <section
         className="relative flex size-full items-start justify-center bg-workspace p-6"
         aria-label="PDF viewer"
+        data-workspace-focus="pdf"
+        tabIndex={-1}
       >
         <Button
           aria-label="Close PDF viewer"
@@ -584,6 +608,8 @@ export function PdfViewer({
     <section
       className="flex size-full min-h-0 min-w-0 flex-col bg-workspace"
       aria-label={`PDF viewer: ${path}`}
+      data-workspace-focus="pdf"
+      tabIndex={-1}
     >
       <div className="flex h-10 shrink-0 items-center gap-1 border-b bg-workspace-chrome px-1.5">
         <Button

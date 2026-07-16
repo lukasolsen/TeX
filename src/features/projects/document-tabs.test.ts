@@ -14,8 +14,16 @@ const workspace: WorkspaceState = {
   selectedRoot: "main.tex",
   sidebarWidth: 288,
   editorFontSize: 14,
+  pdfPaneOpen: true,
+  pdfPaneWidth: 480,
+  buildPanelOpen: false,
+  buildPanelHeight: 240,
+  sidebarTab: "files",
+  buildPanelTab: "output",
+  buildProfile: "latexmkPdf",
   selectedPdf: null,
   pdfViewerStates: {},
+  editorViewerStates: {},
 }
 
 describe("document tabs", () => {

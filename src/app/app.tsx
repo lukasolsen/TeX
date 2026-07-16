@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react"
+import type { WorkspaceFocus } from "@/domain/project"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
 import { useProjectSession } from "@/features/projects/use-project-session"
@@ -14,6 +15,8 @@ const ProjectWorkspacePage = lazy(() =>
 
 export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>("source")
+  const [focusRestoreToken, setFocusRestoreToken] = useState(0)
   const { preferences, saveError, setAccentColor, setColorTheme } =
     useAppPreferences()
   const {
@@ -40,6 +43,8 @@ export default function App() {
     saveActiveDocument,
     state,
     updatePdfViewerState,
+    updateEditorViewerState,
+    updateWorkspaceView,
   } = useProjectSession()
 
   if (state.status === "starting") return <StartupScreen />
@@ -50,7 +55,12 @@ export default function App() {
       <SettingsPage
         accentColor={preferences.accentColor}
         colorTheme={preferences.colorTheme}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => {
+          setSettingsOpen(false)
+          if (workspace !== null) {
+            setFocusRestoreToken((token) => token + 1)
+          }
+        }}
         onSetColorTheme={setColorTheme}
         onSetAccentColor={setAccentColor}
         onSetEditorFontSize={setEditorFontSize}
@@ -68,7 +78,10 @@ export default function App() {
           key={state.session.project.path}
           onOpenProject={chooseAndOpenProject}
           onOpenPdf={openPdf}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={(focus) => {
+            setWorkspaceFocus(focus)
+            setSettingsOpen(true)
+          }}
           onReturnHome={returnHome}
           onResizeSidebar={resizeSidebar}
           onCloseFile={closeFile}
@@ -87,6 +100,10 @@ export default function App() {
           onSetEditorFontSize={setEditorFontSize}
           session={state.session}
           onUpdatePdfViewerState={updatePdfViewerState}
+          onUpdateEditorViewerState={updateEditorViewerState}
+          onUpdateWorkspaceView={updateWorkspaceView}
+          restoreFocus={workspaceFocus}
+          restoreFocusToken={focusRestoreToken}
         />
       </Suspense>
     )

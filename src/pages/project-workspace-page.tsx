@@ -8,9 +8,12 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import type {
+  EditorViewerState,
   OpenProjectFeedback,
   PdfViewerState,
   ProjectSession,
+  WorkspaceFocus,
+  WorkspaceState,
 } from "@/domain/project"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
@@ -46,13 +49,17 @@ export function ProjectWorkspacePage({
   onSetEditorFontSize,
   onSelectRoot,
   onUpdatePdfViewerState,
+  onUpdateEditorViewerState,
+  onUpdateWorkspaceView,
+  restoreFocus,
+  restoreFocusToken,
   session,
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
   onOpenPdf: (path: string) => void
   onReturnHome: () => void
-  onOpenSettings: () => void
+  onOpenSettings: (focus: WorkspaceFocus) => void
   onResizeSidebar: (width: number, persist: boolean) => void
   onCloseFile: (path: string) => void
   onCloseFiles: (paths: string[]) => void
@@ -73,14 +80,32 @@ export function ProjectWorkspacePage({
   onSetEditorFontSize: (fontSize: number) => void
   onSelectRoot: (path: string) => void
   onUpdatePdfViewerState: (path: string, state: PdfViewerState) => void
+  onUpdateEditorViewerState: (path: string, state: EditorViewerState) => void
+  onUpdateWorkspaceView: (
+    update: Partial<
+      Pick<
+        WorkspaceState,
+        | "pdfPaneOpen"
+        | "pdfPaneWidth"
+        | "buildPanelOpen"
+        | "buildPanelHeight"
+        | "sidebarTab"
+        | "buildPanelTab"
+        | "buildProfile"
+      >
+    >
+  ) => void
+  restoreFocus: WorkspaceFocus
+  restoreFocusToken: number
   session: ProjectSession
 }) {
   const selectedFile = session.workspace.selectedFile
   const sidebarWidth = useRef(session.workspace.sidebarWidth)
+  const pdfPaneWidth = useRef(session.workspace.pdfPaneWidth)
+  const buildPanelHeight = useRef(session.workspace.buildPanelHeight)
+  const lastWorkspaceFocus = useRef<WorkspaceFocus>("source")
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [buildOpen, setBuildOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const [pdfOpen, setPdfOpen] = useState(true)
   const [sourceLocation, setSourceLocation] = useState<{
     path: string
     line: number
@@ -91,9 +116,13 @@ export function ProjectWorkspacePage({
   >(null)
   const build = useProjectBuild({
     beforeBuild: onSaveDocument,
+    initialEngine: session.workspace.buildProfile,
+    onEngineChange: (buildProfile) => onUpdateWorkspaceView({ buildProfile }),
     projectPath: session.project.path,
     rootFile: session.workspace.selectedRoot,
   })
+  const buildOpen = session.workspace.buildPanelOpen
+  const pdfOpen = session.workspace.pdfPaneOpen
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
   const profileAvailable =
@@ -143,7 +172,7 @@ export function ProjectWorkspacePage({
         event.key.toLowerCase() === "b"
       ) {
         event.preventDefault()
-        setBuildOpen(true)
+        onUpdateWorkspaceView({ buildPanelOpen: true })
       } else if (
         modifier &&
         event.shiftKey &&
@@ -161,10 +190,36 @@ export function ProjectWorkspacePage({
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onSetEditorFontSize, session.workspace.editorFontSize])
+  }, [
+    onSetEditorFontSize,
+    onUpdateWorkspaceView,
+    session.workspace.editorFontSize,
+  ])
+
+  useEffect(() => {
+    if (restoreFocusToken === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      const region = document.querySelector<HTMLElement>(
+        `[data-workspace-focus="${restoreFocus}"]`
+      )
+      const editor = region?.querySelector<HTMLElement>(".cm-content")
+      ;(editor ?? region)?.focus({ preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [restoreFocus, restoreFocusToken])
 
   return (
-    <main className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace">
+    <main
+      className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
+      onFocusCapture={(event) => {
+        const focus = event.target.closest<HTMLElement>(
+          "[data-workspace-focus]"
+        )?.dataset.workspaceFocus
+        if (focus === "source" || focus === "pdf") {
+          lastWorkspaceFocus.current = focus
+        }
+      }}
+    >
       <WorkspaceToolbar
         buildEnabled={buildEnabled}
         buildStatus={latestBuild?.status ?? null}
@@ -172,10 +227,10 @@ export function ProjectWorkspacePage({
         onBuild={() => void build.build()}
         onOpenProject={onOpenProject}
         onOpenCommands={() => setCommandPaletteOpen(true)}
-        onOpenBuild={() => setBuildOpen(true)}
+        onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
         onOpenSearch={() => setSearchOpen(true)}
-        onOpenSettings={onOpenSettings}
-        onTogglePdf={() => setPdfOpen((open) => !open)}
+        onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
+        onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onReturnHome={onReturnHome}
         onSave={onSaveDocument}
         onStop={() => void build.stop()}
@@ -183,13 +238,26 @@ export function ProjectWorkspacePage({
         session={session}
       />
 
-      <ResizablePanelGroup className="min-h-0 min-w-0" orientation="vertical">
+      <ResizablePanelGroup
+        className="min-h-0 min-w-0"
+        onLayoutChanged={(_layout, metadata) => {
+          if (metadata.isUserInteraction && buildOpen) {
+            onUpdateWorkspaceView({
+              buildPanelHeight: buildPanelHeight.current,
+            })
+          }
+        }}
+        orientation="vertical"
+      >
         <ResizablePanel id="workspace" minSize="35%">
           <ResizablePanelGroup
             className="min-h-0 min-w-0"
             onLayoutChanged={(_layout, metadata) => {
               if (metadata.isUserInteraction) {
                 onResizeSidebar(sidebarWidth.current, true)
+                if (pdfOpen) {
+                  onUpdateWorkspaceView({ pdfPaneWidth: pdfPaneWidth.current })
+                }
               }
             }}
             orientation="horizontal"
@@ -223,7 +291,7 @@ export function ProjectWorkspacePage({
                       : null
                   }
                   onOpenPdf={(path) => {
-                    setPdfOpen(true)
+                    onUpdateWorkspaceView({ pdfPaneOpen: true })
                     onOpenPdf(path)
                   }}
                   onNavigateOutline={(line) => {
@@ -248,6 +316,10 @@ export function ProjectWorkspacePage({
                   selectedPdf={session.workspace.selectedPdf}
                   selectedRoot={session.workspace.selectedRoot}
                   tree={session.project.tree}
+                  tab={session.workspace.sidebarTab}
+                  onTabChange={(sidebarTab) =>
+                    onUpdateWorkspaceView({ sidebarTab })
+                  }
                 />
               )}
             </ResizablePanel>
@@ -285,6 +357,12 @@ export function ProjectWorkspacePage({
                   onCursorChange={(path, line, column) =>
                     setSourceLocation({ path, line, column })
                   }
+                  initialViewerState={
+                    selectedFile === null
+                      ? undefined
+                      : session.workspace.editorViewerStates[selectedFile]
+                  }
+                  onViewerStateChange={onUpdateEditorViewerState}
                   onOpenReference={onPinFile}
                   onResolveConflict={onResolveExternalChange}
                   onResolveRecovery={onResolveRecovery}
@@ -308,7 +386,15 @@ export function ProjectWorkspacePage({
                   title="Drag to resize PDF viewer"
                   withHandle
                 />
-                <ResizablePanel defaultSize="42%" id="pdf-viewer" minSize="20%">
+                <ResizablePanel
+                  defaultSize={session.workspace.pdfPaneWidth}
+                  groupResizeBehavior="preserve-pixel-size"
+                  id="pdf-viewer"
+                  minSize={240}
+                  onResize={(size) => {
+                    pdfPaneWidth.current = size.inPixels
+                  }}
+                >
                   <PdfViewer
                     key={session.workspace.selectedPdf ?? "empty-pdf-viewer"}
                     initialState={
@@ -318,7 +404,9 @@ export function ProjectWorkspacePage({
                             session.workspace.selectedPdf
                           ]
                     }
-                    onClose={() => setPdfOpen(false)}
+                    onClose={() =>
+                      onUpdateWorkspaceView({ pdfPaneOpen: false })
+                    }
                     onStateChange={(viewerState) => {
                       if (session.workspace.selectedPdf !== null) {
                         onUpdatePdfViewerState(
@@ -353,17 +441,20 @@ export function ProjectWorkspacePage({
               withHandle
             />
             <ResizablePanel
-              defaultSize={240}
+              defaultSize={session.workspace.buildPanelHeight}
               groupResizeBehavior="preserve-pixel-size"
               id="build-panel"
               maxSize="60%"
               minSize={160}
+              onResize={(size) => {
+                buildPanelHeight.current = size.inPixels
+              }}
             >
               <BuildPanel
                 dispatch={build.dispatch}
                 engine={build.engine}
                 onBuild={() => void build.build()}
-                onClose={() => setBuildOpen(false)}
+                onClose={() => onUpdateWorkspaceView({ buildPanelOpen: false })}
                 onNavigate={(path, line) => {
                   setTarget({ path, line, column: 1, token: Date.now() })
                   onPinFile(path)
@@ -372,6 +463,10 @@ export function ProjectWorkspacePage({
                 profiles={build.profiles}
                 setEngine={build.setEngine}
                 state={build.state}
+                tab={session.workspace.buildPanelTab}
+                onTabChange={(buildPanelTab) =>
+                  onUpdateWorkspaceView({ buildPanelTab })
+                }
               />
             </ResizablePanel>
           </>
@@ -395,7 +490,7 @@ export function ProjectWorkspacePage({
         ) : null}
         <Button
           className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
-          onClick={() => setBuildOpen(true)}
+          onClick={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
           size="xs"
           variant="ghost"
         >
@@ -428,11 +523,11 @@ export function ProjectWorkspacePage({
         buildEnabled={buildEnabled}
         onBuild={() => void build.build()}
         onOpenChange={setCommandPaletteOpen}
-        onOpenBuild={() => setBuildOpen(true)}
+        onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
         onOpenFile={onPinFile}
         onOpenProject={onOpenProject}
-        onOpenSettings={onOpenSettings}
-        onTogglePdf={() => setPdfOpen((open) => !open)}
+        onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
+        onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onSave={onSaveDocument}
         onSearch={() => setSearchOpen(true)}
         onZoomIn={() =>
