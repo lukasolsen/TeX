@@ -12,7 +12,7 @@ use notify::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
-use crate::project_config::load_configuration_for_project;
+use crate::{project_access::ProjectAccess, project_config::load_configuration_for_project};
 
 const WATCH_EVENT: &str = "tex://watch-event";
 const PROJECT_FILES_EVENT: &str = "tex://project-files-event";
@@ -115,8 +115,11 @@ pub fn start_project_tree_watch(
     project_path: String,
     app: AppHandle,
     controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), WatchError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
     let (stop_sender, stop_receiver) = mpsc::channel();
     {
         let mut projects = controller
@@ -138,8 +141,11 @@ pub fn start_project_tree_watch(
 pub fn stop_project_tree_watch(
     project_path: String,
     controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), WatchError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
     let watch = controller
         .tree_projects
         .lock()
@@ -156,8 +162,11 @@ pub fn start_project_watch(
     project_path: String,
     app: AppHandle,
     controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), WatchError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
     let configuration =
         load_configuration_for_project(&app, &root).map_err(|_| watch_unavailable())?;
     let mut excluded_directories = configuration.generated_directories;
@@ -190,8 +199,11 @@ pub fn stop_project_watch(
     project_path: String,
     app: AppHandle,
     controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), WatchError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
     let mut projects = lock_projects(&controller)?;
     let active = projects.get_mut(&root).ok_or(WatchError {
         code: "watch-not-running",
@@ -206,8 +218,11 @@ pub fn stop_project_watch(
 pub fn get_project_watch_status(
     project_path: String,
     controller: State<'_, WatchController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<WatchStatus, WatchError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access
+        .resolve(&project_path)
+        .map_err(|_| watch_unavailable())?;
     let projects = lock_projects(&controller)?;
     Ok(projects
         .get(&root)
@@ -449,15 +464,6 @@ fn emit_status(app: &AppHandle, root: &Path, status: WatchStatus, message: Optio
             message,
         },
     );
-}
-
-fn canonical_project_root(path: &Path) -> Result<PathBuf, WatchError> {
-    let root = path.canonicalize().map_err(|_| watch_unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(watch_unavailable())
-    }
 }
 
 fn lock_projects(

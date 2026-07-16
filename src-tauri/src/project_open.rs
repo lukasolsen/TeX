@@ -5,9 +5,11 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::persistence;
+use crate::project_access::ProjectAccess;
 use crate::project_config::load_configuration_for_project;
 use crate::root_detection::{self, RootEvidence};
 
@@ -83,8 +85,32 @@ pub enum ProjectOpenErrorCode {
 
 /// Validates a user-selected directory and returns only bounded metadata.
 #[tauri::command]
-pub fn open_project(path: String, app: AppHandle) -> Result<ProjectSummary, ProjectOpenError> {
-    let mut project = open_project_path(Path::new(&path))?;
+pub async fn choose_project_folder(
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<Option<String>, ProjectOpenError> {
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("Open LaTeX project")
+        .blocking_pick_folder();
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    let path = selected.into_path().map_err(|_| unavailable())?;
+    let root = access.approve(&path).map_err(map_io_error)?;
+    Ok(Some(root.to_string_lossy().into_owned()))
+}
+
+/// Opens metadata only for a project root already approved by Rust.
+#[tauri::command]
+pub fn open_project(
+    path: String,
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<ProjectSummary, ProjectOpenError> {
+    let approved = access.resolve(&path).map_err(map_io_error)?;
+    let mut project = open_project_path(&approved)?;
     let project_path = Path::new(&project.path);
     if let Ok(configuration) = load_configuration_for_project(&app, project_path) {
         if let Some(configured_root) = configuration.root_file {
@@ -301,6 +327,13 @@ fn map_io_error(error: io::Error) -> ProjectOpenError {
     };
 
     ProjectOpenError { code, message }
+}
+
+fn unavailable() -> ProjectOpenError {
+    ProjectOpenError {
+        code: ProjectOpenErrorCode::Unavailable,
+        message: "TeX could not open that folder. Choose it again and retry.",
+    }
 }
 
 #[cfg(test)]

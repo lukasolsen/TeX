@@ -21,14 +21,14 @@ artifact evidence.
 | Wave | Scope | Files | Status |
 | --- | --- | ---: | --- |
 | A | Repository boundary | 24 | Inventoried |
-| B | Rust filesystem and persistence | 9 | Inventoried |
+| B | Rust filesystem and persistence | 10 | Inventoried |
 | C | Rust process, parser, and event boundary | 6 | Inventoried |
 | D | Domain and IPC contracts | 9 | Inventoried |
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
 | H | Styles, components, fixtures, assets, and documentation | 147 | Inventoried |
-| **Total** | | **232** | **Inventoried** |
+| **Total** | | **233** | **Inventoried** |
 
 ## File register
 
@@ -101,6 +101,7 @@ artifact evidence.
 | `src-tauri/src/main.rs` | D | Inventoried | — |
 | `src-tauri/src/pdf_read.rs` | B | Inventoried | — |
 | `src-tauri/src/persistence.rs` | B | Inventoried | — |
+| `src-tauri/src/project_access.rs` | B | In review | TEX-B-001 |
 | `src-tauri/src/project_config.rs` | B | Inventoried | — |
 | `src-tauri/src/project_files.rs` | B | Inventoried | — |
 | `src-tauri/src/project_open.rs` | B | Inventoried | — |

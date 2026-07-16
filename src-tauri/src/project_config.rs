@@ -5,9 +5,9 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
-use crate::source_edit::atomic_write;
+use crate::{project_access::ProjectAccess, source_edit::atomic_write};
 
 const CONFIG_VERSION: u8 = 1;
 const MAX_ARGUMENTS: usize = 128;
@@ -85,8 +85,9 @@ pub struct ProjectConfigError {
 pub fn load_project_build_configuration(
     app: AppHandle,
     project_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ProjectBuildConfiguration, ProjectConfigError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     load_configuration_for_project(&app, &root).and_then(|configuration| {
         validate_configuration(&root, &configuration)?;
         Ok(configuration)
@@ -105,8 +106,9 @@ pub fn save_project_build_configuration(
     app: AppHandle,
     project_path: String,
     configuration: ProjectBuildConfiguration,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ProjectBuildConfiguration, ProjectConfigError> {
-    let root = canonical_project_root(Path::new(&project_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     validate_configuration(&root, &configuration)?;
     let path = configuration_path(&app, &root)?;
     let encoded = serde_json::to_vec_pretty(&configuration).map_err(|_| unavailable())?;
@@ -225,15 +227,6 @@ fn configuration_path(app: &AppHandle, root: &Path) -> Result<PathBuf, ProjectCo
                 .join(format!("{key}.json"))
         })
         .map_err(|_| unavailable())
-}
-
-fn canonical_project_root(path: &Path) -> Result<PathBuf, ProjectConfigError> {
-    let root = path.canonicalize().map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn invalid_configuration() -> ProjectConfigError {

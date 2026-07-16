@@ -15,10 +15,13 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::project_config::{
-    validate_configuration, BibliographyTool, EnvironmentSetting, ProjectBuildConfiguration,
+use crate::{
+    project_access::ProjectAccess,
+    project_config::{
+        validate_configuration, BibliographyTool, EnvironmentSetting, ProjectBuildConfiguration,
+    },
+    source_read::resolve_source_path,
 };
-use crate::source_read::resolve_source_path;
 
 const BUILD_EVENT: &str = "tex://build-event";
 const MAX_RETAINED_RUNS: usize = 20;
@@ -178,7 +181,11 @@ struct ValidatedBuild {
 
 /// Returns the exact safe command TeX will execute without starting a process.
 #[tauri::command]
-pub fn preview_build(request: BuildRequest) -> Result<BuildInvocation, BuildError> {
+pub fn preview_build(
+    request: BuildRequest,
+    access: State<'_, ProjectAccess>,
+) -> Result<BuildInvocation, BuildError> {
+    let request = authorize_request(request, &access)?;
     Ok(validate_build(request)?.invocation)
 }
 
@@ -197,7 +204,9 @@ pub fn start_build(
     request: BuildRequest,
     app: AppHandle,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<BuildRun, BuildError> {
+    let request = authorize_request(request, &access)?;
     let mut validated = validate_build(request)?;
     validated.invocation.tool_version = tool_version(&validated.invocation);
     let mut command = command_for(&validated.invocation);
@@ -266,8 +275,9 @@ pub fn start_build(
 pub fn stop_build(
     project_path: String,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), BuildError> {
-    let project_root = canonical_project_root(Path::new(&project_path))?;
+    let project_root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let projects = lock_projects(&controller)?;
     let active = projects
         .get(&project_root)
@@ -285,12 +295,25 @@ pub fn stop_build(
 pub fn get_build_history(
     project_path: String,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Vec<BuildRun>, BuildError> {
-    let project_root = canonical_project_root(Path::new(&project_path))?;
+    let project_root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let projects = lock_projects(&controller)?;
     Ok(projects
         .get(&project_root)
         .map_or_else(Vec::new, |project| project.runs.iter().cloned().collect()))
+}
+
+fn authorize_request(
+    mut request: BuildRequest,
+    access: &ProjectAccess,
+) -> Result<BuildRequest, BuildError> {
+    request.project_path = access
+        .resolve(&request.project_path)
+        .map_err(|_| unavailable())?
+        .to_string_lossy()
+        .into_owned();
+    Ok(request)
 }
 
 fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {

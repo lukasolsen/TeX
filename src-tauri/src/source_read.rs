@@ -2,6 +2,9 @@ use std::{fs, io, path::Path};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tauri::State;
+
+use crate::project_access::ProjectAccess;
 
 pub(crate) const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
 pub(crate) const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
@@ -34,8 +37,10 @@ pub struct SourceReadError {
 pub fn read_project_source(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<SourceDocument, SourceReadError> {
-    read_source(Path::new(&project_path), Path::new(&relative_path))
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    read_source(&root, Path::new(&relative_path))
 }
 
 pub(crate) fn read_source(

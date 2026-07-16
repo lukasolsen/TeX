@@ -5,10 +5,11 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
 
-use crate::project_config::{
-    canonical_child, load_configuration_for_project, validate_configuration,
+use crate::{
+    project_access::ProjectAccess,
+    project_config::{canonical_child, load_configuration_for_project, validate_configuration},
 };
 
 const MAX_CLEAN_FILES: usize = 4_096;
@@ -55,8 +56,9 @@ pub struct BuildOperationError {
 #[tauri::command]
 pub fn preview_clean_auxiliary_files(
     project_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<CleanPreview, BuildOperationError> {
-    let root = canonical_root(Path::new(&project_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     preview_clean(&root)
 }
 
@@ -64,8 +66,9 @@ pub fn preview_clean_auxiliary_files(
 pub fn clean_auxiliary_files(
     project_path: String,
     files: Vec<String>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<usize, BuildOperationError> {
-    let root = canonical_root(Path::new(&project_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     if files.len() > MAX_CLEAN_FILES {
         return Err(invalid_clean());
     }
@@ -91,8 +94,9 @@ pub fn reveal_project_output(
     app: AppHandle,
     project_path: String,
     root_file: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), BuildOperationError> {
-    let root = canonical_root(Path::new(&project_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let configuration = load_configuration_for_project(&app, &root).map_err(|_| unavailable())?;
     validate_configuration(&root, &configuration).map_err(|_| unavailable())?;
     let configured_root = configuration.root_file.as_deref().unwrap_or(&root_file);
@@ -222,15 +226,6 @@ fn reveal_path(path: &Path) -> Result<(), BuildOperationError> {
         .spawn()
         .map(|_| ())
         .map_err(|_| reveal_failed())
-}
-
-fn canonical_root(path: &Path) -> Result<PathBuf, BuildOperationError> {
-    let root = path.canonicalize().map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn invalid_clean() -> BuildOperationError {

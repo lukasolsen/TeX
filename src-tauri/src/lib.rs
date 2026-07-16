@@ -6,6 +6,7 @@ mod build_system;
 mod latex_fixtures;
 mod pdf_read;
 mod persistence;
+mod project_access;
 mod project_config;
 mod project_files;
 mod project_open;
@@ -24,6 +25,7 @@ use tauri_plugin_log::{Target, TargetKind};
 pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
+        .manage(project_access::ProjectAccess::default())
         .manage(watch_system::WatchController::default())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -36,6 +38,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             readiness::phase_zero_readiness,
+            project_open::choose_project_folder,
             project_open::open_project,
             project_files::create_project_entry,
             project_files::rename_project_entry,

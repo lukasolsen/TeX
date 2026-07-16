@@ -8,8 +8,9 @@ use std::{
 use atomic_write_file::AtomicWriteFile;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
+use crate::project_access::ProjectAccess;
 use crate::source_read::{
     resolve_source_path, revision_for_content, SourceDocument, SourceRevision, MAX_SOURCE_BYTES,
 };
@@ -40,11 +41,12 @@ pub fn save_project_source(
     content: String,
     expected_revision: SourceRevision,
     overwrite_external: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<SourceDocument, SourceEditError> {
     if content.len() as u64 > MAX_SOURCE_BYTES {
         return Err(too_large());
     }
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let relative = Path::new(&relative_path);
     let path = resolve_source_path(&root, relative).map_err(|_| unavailable())?;
     let current = fs::read(&path).map_err(|_| unavailable())?;
@@ -74,11 +76,12 @@ pub fn save_recovery_draft(
     relative_path: String,
     content: String,
     base_revision: SourceRevision,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), SourceEditError> {
     if content.len() as u64 > MAX_SOURCE_BYTES {
         return Err(too_large());
     }
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     resolve_source_path(&root, Path::new(&relative_path)).map_err(|_| unavailable())?;
     let draft = RecoveryDraft {
         project_path,
@@ -97,7 +100,9 @@ pub fn load_recovery_draft(
     app: AppHandle,
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Option<RecoveryDraft>, SourceEditError> {
+    access.resolve(&project_path).map_err(|_| unavailable())?;
     let path = recovery_path(&app, &project_path, &relative_path)?;
     let encoded = match fs::read(path) {
         Ok(encoded) => encoded,
@@ -117,7 +122,9 @@ pub fn discard_recovery_draft(
     app: AppHandle,
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), SourceEditError> {
+    access.resolve(&project_path).map_err(|_| unavailable())?;
     remove_recovery(&app, &project_path, &relative_path)
 }
 
@@ -128,17 +135,6 @@ pub(crate) fn atomic_write(path: &Path, content: &[u8]) -> Result<(), SourceEdit
     let mut file = AtomicWriteFile::open(path).map_err(|_| unavailable())?;
     file.write_all(content).map_err(|_| unavailable())?;
     file.commit().map_err(|_| unavailable())
-}
-
-fn canonical_project(project_path: &str) -> Result<PathBuf, SourceEditError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn recovery_path(

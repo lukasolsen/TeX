@@ -7,9 +7,10 @@ use std::{
 
 use regex::{NoExpand, Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
+    project_access::ProjectAccess,
     source_edit::atomic_write,
     source_read::{
         is_readable_source, read_source, revision_for_content, SourceRevision, MAX_SOURCE_BYTES,
@@ -94,8 +95,9 @@ pub fn search_project_sources(
     project_path: String,
     query: String,
     case_sensitive: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ProjectSearchResponse, SearchError> {
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let matcher = literal_matcher(&query, case_sensitive)?;
     search(&root, &matcher)
 }
@@ -109,8 +111,9 @@ pub fn replace_project_sources(
     replacement: String,
     case_sensitive: bool,
     expected_files: Vec<FileRevisionExpectation>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ReplaceResponse, SearchError> {
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let matcher = literal_matcher(&query, case_sensitive)?;
     if replacement.len() > MAX_REPLACEMENT_BYTES || expected_files.len() > MAX_REPLACE_FILES {
         return Err(replace_too_large());
@@ -201,6 +204,7 @@ pub fn replace_project_sources(
 pub fn undo_project_replace(
     app: AppHandle,
     transaction_id: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ReplaceResponse, SearchError> {
     if !transaction_id
         .chars()
@@ -212,7 +216,9 @@ pub fn undo_project_replace(
     let encoded = fs::read(&path).map_err(|_| unavailable())?;
     let transaction: ReplaceTransaction =
         serde_json::from_slice(&encoded).map_err(|_| unavailable())?;
-    let root = canonical_project(&transaction.project_path)?;
+    let root = access
+        .resolve(&transaction.project_path)
+        .map_err(|_| unavailable())?;
 
     let mut targets = Vec::new();
     for backup in &transaction.files {
@@ -324,17 +330,6 @@ fn compact_context(line: &str) -> String {
         context.push('…');
     }
     context
-}
-
-fn canonical_project(project_path: &str) -> Result<PathBuf, SearchError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn persist_transaction(

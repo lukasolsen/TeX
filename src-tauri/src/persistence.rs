@@ -9,7 +9,9 @@ use std::{
 
 use atomic_write_file::AtomicWriteFile;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
+
+use crate::project_access::ProjectAccess;
 
 const STATE_FILE_NAME: &str = "workspace-state.json";
 const STATE_VERSION: u8 = 2;
@@ -253,8 +255,13 @@ fn is_hex_color(value: &str) -> bool {
 
 /// Loads local application metadata and validates restorable paths before exposing them.
 #[tauri::command]
-pub fn load_startup_state(app: AppHandle) -> Result<StartupState, PersistenceError> {
-    load_startup_state_from_path(&state_path(&app)?)
+pub fn load_startup_state(
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<StartupState, PersistenceError> {
+    let startup = load_startup_state_from_path(&state_path(&app)?)?;
+    approve_restorable_projects(&access, &startup);
+    Ok(startup)
 }
 
 /// Removes a project from local recents without touching its source directory.
@@ -262,6 +269,7 @@ pub fn load_startup_state(app: AppHandle) -> Result<StartupState, PersistenceErr
 pub fn forget_recent_project(
     app: AppHandle,
     project_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<StartupState, PersistenceError> {
     let path = state_path(&app)?;
     let mut state = read_state(&path)?;
@@ -276,6 +284,7 @@ pub fn forget_recent_project(
         state.last_workspace = None;
     }
     write_state(&path, &state)?;
+    access.revoke(&project_path);
     startup_state_from_persisted(state)
 }
 
@@ -284,13 +293,11 @@ pub fn forget_recent_project(
 pub fn save_workspace_state(
     app: AppHandle,
     workspace: WorkspaceState,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), PersistenceError> {
-    let canonical_root = Path::new(&workspace.project_path)
-        .canonicalize()
+    let canonical_root = access
+        .resolve(&workspace.project_path)
         .map_err(|_| unavailable())?;
-    if !canonical_root.is_dir() {
-        return Err(unavailable());
-    }
 
     validate_optional_file(&canonical_root, workspace.selected_root.as_deref())?;
     validate_optional_file(&canonical_root, workspace.selected_file.as_deref())?;
@@ -325,6 +332,17 @@ pub fn save_workspace_state(
         ..workspace
     });
     write_state(&path, &state)
+}
+
+fn approve_restorable_projects(access: &ProjectAccess, startup: &StartupState) {
+    for project in &startup.recent_projects {
+        if matches!(project.availability, ProjectAvailability::Available) {
+            let _ = access.approve(Path::new(&project.path));
+        }
+    }
+    if let Some(workspace) = &startup.last_workspace {
+        let _ = access.approve(Path::new(&workspace.project_path));
+    }
 }
 
 pub fn record_project_opened(

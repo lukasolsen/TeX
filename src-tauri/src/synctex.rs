@@ -1,6 +1,9 @@
 use std::{path::Path, process::Command};
 
 use serde::Serialize;
+use tauri::State;
+
+use crate::project_access::ProjectAccess;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,8 +35,9 @@ pub fn synctex_forward_search(
     source_path: String,
     line: u32,
     column: u32,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ForwardSearchResult, SyncTexError> {
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let pdf = project_file(&root, &pdf_path, "pdf")?;
     let source = project_file(&root, &source_path, "tex")?;
     let input = format!("{}:{}:{}", line.max(1), column.max(1), source.display());
@@ -61,11 +65,12 @@ pub fn synctex_inverse_search(
     page: u32,
     x: f64,
     y: f64,
+    access: State<'_, ProjectAccess>,
 ) -> Result<InverseSearchResult, SyncTexError> {
     if !x.is_finite() || !y.is_finite() || x < 0.0 || y < 0.0 {
         return Err(stale());
     }
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let pdf = project_file(&root, &pdf_path, "pdf")?;
     let output_spec = format!("{}:{x}:{y}:{}", page.max(1), pdf.display());
     let output = Command::new("synctex")
@@ -90,15 +95,6 @@ pub fn synctex_inverse_search(
             .and_then(|value| value.parse::<i32>().ok())
             .map_or(1, |value| if value >= 0 { value as u32 + 1 } else { 1 }),
     })
-}
-
-fn project_root(path: &str) -> Result<std::path::PathBuf, SyncTexError> {
-    let root = Path::new(path).canonicalize().map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn project_file(

@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core"
-import { open } from "@tauri-apps/plugin-dialog"
 
 import type {
   ProjectError,
@@ -21,11 +20,7 @@ const unexpectedProjectError: ProjectError = {
 }
 
 export async function chooseProjectFolder(): Promise<string | null> {
-  return open({
-    directory: true,
-    multiple: false,
-    title: "Open LaTeX project",
-  })
+  return invoke<string | null>("choose_project_folder")
 }
 
 export async function openProjectFolder(path: string): Promise<ProjectSummary> {

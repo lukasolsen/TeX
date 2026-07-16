@@ -4,6 +4,9 @@ use std::{
 };
 
 use serde::Serialize;
+use tauri::State;
+
+use crate::project_access::ProjectAccess;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,8 +22,9 @@ pub fn create_project_entry(
     parent_path: Option<String>,
     name: String,
     directory: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let parent = resolve_directory(&root, parent_path.as_deref())?;
     create_entry(&root, &parent, &name, directory)
 }
@@ -31,12 +35,10 @@ fn create_entry(
     name: &str,
     directory: bool,
 ) -> Result<(), ProjectFileError> {
-    let relative = entry_path(name)?;
-    let target = parent.join(relative);
-    let target_parent = target.parent().ok_or_else(invalid)?;
-    fs::create_dir_all(target_parent).map_err(|_| unavailable())?;
-    let verified_parent = target_parent.canonicalize().map_err(|_| unavailable())?;
-    if !verified_parent.is_dir() || !verified_parent.starts_with(root) {
+    let target = parent.join(entry_name(name)?);
+    let verified_parent = parent.canonicalize().map_err(|_| unavailable())?;
+    if verified_parent != parent || !verified_parent.is_dir() || !verified_parent.starts_with(root)
+    {
         return Err(invalid());
     }
 
@@ -58,11 +60,16 @@ pub fn rename_project_entry(
     project_path: String,
     relative_path: String,
     name: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
-    let source = resolve_entry(&root, &relative_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    rename_entry(&root, &relative_path, &name)
+}
+
+fn rename_entry(root: &Path, relative_path: &str, name: &str) -> Result<(), ProjectFileError> {
+    let source = resolve_entry(root, relative_path)?;
     let parent = source.parent().ok_or_else(unavailable)?.to_path_buf();
-    let target = parent.join(entry_name(&name)?);
+    let target = parent.join(entry_name(name)?);
     if target.exists() {
         return Err(unavailable());
     }
@@ -74,8 +81,9 @@ pub fn rename_project_entry(
 pub fn delete_project_entry(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let target = resolve_entry(&root, &relative_path)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable())?;
     if metadata.is_dir() {
@@ -84,17 +92,6 @@ pub fn delete_project_entry(
         fs::remove_file(target)
     }
     .map_err(|_| unavailable())
-}
-
-fn project_root(project_path: &str) -> Result<PathBuf, ProjectFileError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn resolve_entry(root: &Path, relative: &str) -> Result<PathBuf, ProjectFileError> {
@@ -110,12 +107,31 @@ fn resolve_entry(root: &Path, relative: &str) -> Result<PathBuf, ProjectFileErro
     {
         return Err(invalid());
     }
+    reject_symlink_components(root, relative)?;
     let path = root.join(relative).canonicalize().map_err(|_| invalid())?;
     if path.starts_with(root) {
         Ok(path)
     } else {
         Err(invalid())
     }
+}
+
+fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), ProjectFileError> {
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(component) = component else {
+            return Err(invalid());
+        };
+        candidate.push(component);
+        if fs::symlink_metadata(&candidate)
+            .map_err(|_| invalid())?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(())
 }
 
 fn resolve_directory(root: &Path, relative: Option<&str>) -> Result<PathBuf, ProjectFileError> {
@@ -135,21 +151,6 @@ fn entry_name(name: &str) -> Result<&str, ProjectFileError> {
         Err(invalid())
     } else {
         Ok(name)
-    }
-}
-
-fn entry_path(name: &str) -> Result<&Path, ProjectFileError> {
-    let path = Path::new(name);
-    if name.contains('\\')
-        || path.as_os_str().is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
-        Err(invalid())
-    } else {
-        Ok(path)
     }
 }
 
@@ -173,7 +174,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{create_entry, entry_name, entry_path, rename_project_entry, resolve_entry};
+    use super::{create_entry, entry_name, rename_entry, resolve_entry};
 
     fn temporary_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -190,18 +191,17 @@ mod tests {
     }
 
     #[test]
-    fn accepts_nested_entry_paths_without_traversal() {
-        assert!(entry_path("chapters/intro.tex").is_ok());
-        assert!(entry_path("../outside.tex").is_err());
-        assert!(entry_path("chapters/../outside.tex").is_err());
-        assert!(entry_path("/outside.tex").is_err());
+    fn rejects_nested_entry_names() {
+        assert!(entry_name("chapters/intro.tex").is_err());
+        assert!(entry_name("../outside.tex").is_err());
+        assert!(entry_name("/outside.tex").is_err());
     }
 
     #[test]
-    fn creates_missing_directories_for_nested_file() -> Result<(), Box<dyn std::error::Error>> {
+    fn creates_a_direct_child() -> Result<(), Box<dyn std::error::Error>> {
         let directory = temporary_directory()?;
-        assert!(create_entry(&directory, &directory, "chapters/intro.tex", false).is_ok());
-        assert!(directory.join("chapters/intro.tex").is_file());
+        assert!(create_entry(&directory, &directory, "intro.tex", false).is_ok());
+        assert!(directory.join("intro.tex").is_file());
         fs::remove_dir_all(directory)?;
         Ok(())
     }
@@ -220,14 +220,30 @@ mod tests {
         fs::write(directory.join("first.tex"), "first")?;
         fs::write(directory.join("second.tex"), "second")?;
 
-        let result = rename_project_entry(
-            directory.to_string_lossy().into_owned(),
-            "first.tex".to_owned(),
-            "second.tex".to_owned(),
-        );
+        let result = rename_entry(&directory, "first.tex", "second.tex");
 
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(directory.join("second.tex"))?, "second");
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_symlink_entry_instead_of_deleting_its_target(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let directory = temporary_directory()?;
+        fs::create_dir(directory.join("target"))?;
+        fs::write(directory.join("target/keep.tex"), "keep")?;
+        symlink(directory.join("target"), directory.join("linked"))?;
+
+        assert!(resolve_entry(&directory, "linked").is_err());
+        assert_eq!(
+            fs::read_to_string(directory.join("target/keep.tex"))?,
+            "keep"
+        );
         fs::remove_dir_all(directory)?;
         Ok(())
     }

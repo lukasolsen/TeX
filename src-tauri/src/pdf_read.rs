@@ -5,7 +5,9 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::ipc::Response;
+use tauri::{ipc::Response, State};
+
+use crate::project_access::ProjectAccess;
 
 const MAX_PDF_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -21,8 +23,10 @@ pub struct PdfReadError {
 pub fn read_project_pdf(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Response, PdfReadError> {
-    let bytes = read_pdf(Path::new(&project_path), Path::new(&relative_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let bytes = read_pdf(&root, Path::new(&relative_path))?;
     Ok(Response::new(bytes))
 }
 
@@ -31,8 +35,10 @@ pub fn read_project_pdf(
 pub fn project_pdf_revision(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<String, PdfReadError> {
-    let path = resolve_pdf(Path::new(&project_path), Path::new(&relative_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let path = resolve_pdf(&root, Path::new(&relative_path))?;
     let metadata = fs::metadata(path).map_err(map_io_error)?;
     let modified = metadata
         .modified()
