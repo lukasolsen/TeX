@@ -27,8 +27,8 @@ artifact evidence.
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
-| H | Styles, components, fixtures, assets, and documentation | 141 | Inventoried |
-| **Total** | | **226** | **Inventoried** |
+| H | Styles, components, fixtures, assets, and documentation | 147 | Inventoried |
+| **Total** | | **232** | **Inventoried** |
 
 ## File register
 
@@ -47,6 +47,7 @@ artifact evidence.
 | `docs/benchmarks/reference-machines.md` | H | Inventoried | — |
 | `docs/benchmarks/result-template.md` | H | Inventoried | — |
 | `docs/code-quality.md` | H | Inventoried | — |
+| `docs/engineering-standard.md` | H | Inventoried | — |
 | `docs/known-limitations.md` | H | Inventoried | — |
 | `docs/phase-0.md` | H | Inventoried | — |
 | `docs/plans/code-review-plan.md` | H | Inventoried | — |
@@ -58,7 +59,12 @@ artifact evidence.
 | `docs/repository-policy.md` | H | Inventoried | — |
 | `docs/research/target-user-study.md` | H | Inventoried | — |
 | `docs/reviews/baseline.md` | H | Inventoried | — |
+| `docs/reviews/exceptions.md` | H | Inventoried | — |
 | `docs/reviews/file-ledger.md` | H | Inventoried | — |
+| `docs/reviews/findings.md` | H | Inventoried | — |
+| `docs/reviews/oxlint-migration.md` | H | Inventoried | — |
+| `docs/reviews/rule-decisions.md` | H | Inventoried | — |
+| `docs/reviews/source-register.md` | H | Inventoried | — |
 | `docs/support.md` | H | Inventoried | — |
 | `docs/ui-ux-requirements.md` | H | Inventoried | — |
 | `eslint.config.js` | A | Inventoried | — |
