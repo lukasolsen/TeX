@@ -2,7 +2,7 @@
 
 Ledger revision: 1  
 Baseline commit: `eb95280770d2a7b15703f4ebbd3af6ca7e4af767`  
-Inventory state: complete; Waves A–C reviewed
+Inventory state: complete; Waves A–D reviewed
 
 Every maintained file has one primary review wave. `Inventoried` means the
 file's existence, broad owner, and review assignment are recorded; it does not
@@ -23,12 +23,12 @@ artifact evidence.
 | A | Repository boundary | 26 ledger rows | Reviewed; 1 removed |
 | B | Rust filesystem and persistence | 11 | Reviewed |
 | C | Rust process, parser, and event boundary | 7 | Reviewed |
-| D | Domain and IPC contracts | 9 | Inventoried |
+| D | Domain and IPC contracts | 16 | Reviewed |
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
 | H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
-| **Total** | | **239 ledger rows / 238 maintained** | **Waves A–C reviewed** |
+| **Total** | | **246 ledger rows / 245 maintained** | **Waves A–D reviewed** |
 
 ## File register
 
@@ -101,8 +101,8 @@ artifact evidence.
 | `src-tauri/src/build_system.rs` | C | Reviewed | TEX-C-002, TEX-C-003, TEX-C-004, TEX-C-008 |
 | `src-tauri/src/bounded_io.rs` | B | Reviewed | TEX-B-003; bounded open-handle reads |
 | `src-tauri/src/latex_fixtures.rs` | C | Reviewed | TEX-C-005; bounded test process execution |
-| `src-tauri/src/lib.rs` | D | Inventoried | — |
-| `src-tauri/src/main.rs` | D | Inventoried | — |
+| `src-tauri/src/lib.rs` | D | Reviewed | Complete command/state/plugin registration |
+| `src-tauri/src/main.rs` | D | Reviewed | Minimal platform entry point |
 | `src-tauri/src/pdf_read.rs` | B | Reviewed | TEX-B-003; bounded reads and symlink rejection |
 | `src-tauri/src/persistence.rs` | B | Reviewed | TEX-B-003; bounded state and collection limits |
 | `src-tauri/src/process_support.rs` | C | Reviewed | TEX-C-003, TEX-C-005; process-group deadlines/capture |
@@ -139,11 +139,13 @@ artifact evidence.
 | `src/components/ui/skeleton.tsx` | H | Inventoried | — |
 | `src/components/ui/tabs.tsx` | H | Inventoried | — |
 | `src/components/ui/textarea.tsx` | H | Inventoried | — |
-| `src/domain/build.test.ts` | D | Inventoried | — |
-| `src/domain/build.ts` | D | Inventoried | — |
-| `src/domain/latex.test.ts` | D | Inventoried | — |
-| `src/domain/latex.ts` | D | Inventoried | — |
-| `src/domain/project.ts` | D | Inventoried | — |
+| `src/domain/build.test.ts` | D | Reviewed | TEX-D-003; ordering and retention regressions |
+| `src/domain/build.ts` | D | Reviewed | TEX-D-002, TEX-D-003; readonly typed state contract |
+| `src/domain/identifiers.test.ts` | D | Reviewed | Opaque path/ID constructor regressions |
+| `src/domain/identifiers.ts` | D | Reviewed | TEX-D-002; canonical/relative/ID/hash brands |
+| `src/domain/latex.test.ts` | D | Reviewed | Parser/reference contract evidence |
+| `src/domain/latex.ts` | D | Reviewed | Linear bounded source/reference parser |
+| `src/domain/project.ts` | D | Reviewed | Readonly project/workspace/source contracts |
 | `src/features/build/build-configuration-dialog.tsx` | H | Inventoried | — |
 | `src/features/build/build-panel.tsx` | H | Inventoried | — |
 | `src/features/build/clean-auxiliary-dialog.tsx` | H | Inventoried | — |
@@ -189,8 +191,13 @@ artifact evidence.
 | `src/pages/project-home-page.tsx` | E | Inventoried | — |
 | `src/pages/project-workspace-page.tsx` | E | Inventoried | — |
 | `src/pages/settings-page.tsx` | E | Inventoried | — |
-| `src/services/build-service.ts` | D | Inventoried | — |
-| `src/services/project-service.ts` | D | Inventoried | — |
+| `src/services/build-contract.test.ts` | D | Reviewed | TEX-D-001; malformed event and bound tests |
+| `src/services/build-contract.ts` | D | Reviewed | TEX-D-001; build/watch/config parsers |
+| `src/services/build-service.ts` | D | Reviewed | TEX-D-001, TEX-D-002; unknown-to-parser gateway |
+| `src/services/ipc-contract.ts` | D | Reviewed | Shared scalar/record/event rejection primitives |
+| `src/services/project-contract.test.ts` | D | Reviewed | TEX-D-001; malformed path/hash/tree/coordinate tests |
+| `src/services/project-contract.ts` | D | Reviewed | TEX-D-001; project/source/persistence parsers |
+| `src/services/project-service.ts` | D | Reviewed | TEX-D-001, TEX-D-002; named request gateways |
 | `tests/fixtures/file-watch-storm/events.json` | H | Inventoried | — |
 | `tests/fixtures/file-watch-storm/main.tex` | H | Inventoried | — |
 | `tests/fixtures/file-watch-storm/output/main.aux` | H | Inventoried | — |

@@ -2,7 +2,7 @@
 
 Model revision: 1  
 Review date: 2026-07-16  
-Architecture revision: `579730a`
+Architecture revision: `59693fb`
 Scope: local desktop application, build toolchain, project files, application
 state, webview, dependencies, CI, and release automation
 
@@ -75,8 +75,9 @@ Boundary rules:
   ancestor-swap resistance remains an operation-specific responsibility.
 - Build configuration is loaded by Rust. Webview-supplied configuration is
   ignored. New or changed custom process authority requires native confirmation.
-- Events and command responses are untrusted at the TypeScript receiver until
-  runtime parsing is implemented under TEX-D-001.
+- Events and non-void command responses enter TypeScript as `unknown` and pass
+  bounded runtime contracts before feature code. Malformed event payloads are
+  rejected without reducer dispatch or payload logging.
 
 ## IPC command review map
 
@@ -148,19 +149,21 @@ all listed tests already exist.
 | Oversized/malformed source/PDF/state/output | bounded open-handle reads, process channels/capture, traversal and transaction budgets | Wave B/C regressions | add canvas/page/text bounds in Wave G |
 | PDF decompression/render bomb | 256 MiB byte cap only | incomplete | bound page/canvas/text work and cancellation in Wave G |
 | Watcher event storm/overflow | bounded callback channel, path set, active count, debounce and surfaced truncated reconciliation | overflow unit test; TEX-C-004 fixed | platform storm smoke evidence |
-| Stale async completion | build IDs and selected frontend guards | partial reducer tests | map every event generation and parser in Waves D–G |
+| Stale async completion | opaque build IDs, operation generations, bounded runtime event parsers and pending-event reconciliation | reducer/parser tests | complete feature-specific review in Waves E–G |
 | Concurrent/partial writes | revisions and per-file atomic replacement | source/replace tests | durable multi-file recovery and ancestor-race review |
 | Compromised dependency/action | immutable Action pins, lockfiles, frozen install, dependency review/audit/licence/source gates | TEX-A-001/002 fixed in `fb47327` | monitor advisories and owned exceptions |
 | Malicious workflow input | restricted current PR permissions; release on tags | incomplete | audit expression interpolation, tag authority, artifact/release provenance |
 
 ## Logging and redaction
 
-User-facing errors use stable codes and generic messages. Build events retain
+User-facing errors pass a bounded code/message classifier; malformed error
+objects collapse to a generic non-destructive message. Build events retain
 compiler text and validated relative file paths for diagnosis under line,
 channel, byte, run, and project-history budgets. The model prohibits
 document/recovery content, credentials, unrestricted environment values, and
-unnecessary absolute paths in application logs. Wave D must ensure malformed
-event data and raw backend errors cannot bypass frontend classification.
+unnecessary absolute paths in application logs. Runtime contracts reject
+unknown security-relevant variants, non-finite numbers, oversized collections,
+and malformed authority-bearing identifiers before presentation code.
 
 ## Phase 3 exit criteria
 
