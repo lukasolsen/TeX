@@ -6,6 +6,30 @@ export type BuildStatus = "running" | "succeeded" | "failed" | "cancelled"
 export type BuildLogStream = "stdout" | "stderr"
 export type DiagnosticSeverity = "error" | "warning"
 
+export type WatchStatus =
+  | "off"
+  | "starting"
+  | "watching"
+  | "buildQueued"
+  | "building"
+  | "stopping"
+  | "error"
+  | "pausedUnsafe"
+
+export type WatchEvent =
+  | {
+      kind: "status"
+      projectPath: string
+      status: WatchStatus
+      message: string | null
+    }
+  | {
+      kind: "changed"
+      projectPath: string
+      changes: Array<"create" | "modify" | "remove" | "rename">
+      paths: string[]
+    }
+
 export type BuildRequest = {
   projectPath: string
   rootFile: string

@@ -7,9 +7,12 @@ import type {
   BuildProfile,
   BuildRequest,
   BuildRun,
+  WatchEvent,
+  WatchStatus,
 } from "@/domain/build"
 
 const BUILD_EVENT = "tex://build-event"
+const WATCH_EVENT = "tex://watch-event"
 
 export async function previewBuild(
   request: BuildRequest
@@ -39,4 +42,24 @@ export async function listenForBuildEvents(
   handler: (event: BuildEvent) => void
 ): Promise<UnlistenFn> {
   return listen<BuildEvent>(BUILD_EVENT, (event) => handler(event.payload))
+}
+
+export async function startProjectWatch(projectPath: string): Promise<void> {
+  return invoke("start_project_watch", { projectPath })
+}
+
+export async function stopProjectWatch(projectPath: string): Promise<void> {
+  return invoke("stop_project_watch", { projectPath })
+}
+
+export async function getProjectWatchStatus(
+  projectPath: string
+): Promise<WatchStatus> {
+  return invoke<WatchStatus>("get_project_watch_status", { projectPath })
+}
+
+export async function listenForWatchEvents(
+  handler: (event: WatchEvent) => void
+): Promise<UnlistenFn> {
+  return listen<WatchEvent>(WATCH_EVENT, (event) => handler(event.payload))
 }

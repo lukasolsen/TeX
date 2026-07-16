@@ -7,6 +7,8 @@ import {
   Hammer,
   Terminal,
   TriangleAlert,
+  Eye,
+  EyeOff,
   X,
 } from "lucide-react"
 
@@ -43,6 +45,7 @@ import {
 } from "@/domain/build"
 import type { ProjectError } from "@/domain/project"
 import type { BuildPanelTab } from "@/domain/project"
+import type { ProjectWatchState } from "@/features/build/use-project-watch"
 
 export function BuildPanel({
   dispatch,
@@ -51,11 +54,14 @@ export function BuildPanel({
   onClose,
   onNavigate,
   onStop,
+  onStartWatch,
+  onStopWatch,
   onTabChange,
   profiles,
   setEngine,
   state,
   tab,
+  watch,
 }: {
   dispatch: Dispatch<ProjectBuildAction>
   engine: BuildEngine
@@ -63,11 +69,14 @@ export function BuildPanel({
   onClose: () => void
   onNavigate: (path: string, line: number) => void
   onStop: () => void
+  onStartWatch: () => void
+  onStopWatch: () => void
   onTabChange: (tab: BuildPanelTab) => void
   profiles: BuildProfilesState
   setEngine: (engine: BuildEngine) => void
   state: ProjectBuildState
   tab: BuildPanelTab
+  watch: ProjectWatchState
 }) {
   const run = selectedBuildRun(state)
   const running = state.runs.some((item) => item.status === "running")
@@ -105,12 +114,31 @@ export function BuildPanel({
           Build
         </h2>
         <BuildStatusBadge run={run} />
+        <WatchStatusBadge state={watch} />
         {run !== null ? (
           <span className="hidden text-xs text-muted-foreground lg:inline">
             {diagnosticSummary(run)}
           </span>
         ) : null}
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          {watch.status === "off" || watch.status === "error" ? (
+            <Button onClick={onStartWatch} size="sm" variant="outline">
+              <Eye data-icon="inline-start" />
+              Watch
+            </Button>
+          ) : (
+            <Button
+              disabled={
+                watch.status === "starting" || watch.status === "stopping"
+              }
+              onClick={onStopWatch}
+              size="sm"
+              variant="outline"
+            >
+              <EyeOff data-icon="inline-start" />
+              Stop watch
+            </Button>
+          )}
           <BuildProfileSelect
             disabled={running || pending}
             engine={engine}
@@ -209,7 +237,33 @@ export function BuildPanel({
             ? "Build started."
             : `Build ${statusLabel(run.status)}. ${diagnosticSummary(run)}.`}
       </p>
+      {watch.message !== null ? (
+        <p className="sr-only" aria-live="polite">
+          {watch.message}
+        </p>
+      ) : null}
     </section>
+  )
+}
+
+function WatchStatusBadge({ state }: { state: ProjectWatchState }) {
+  const labels: Record<ProjectWatchState["status"], string> = {
+    off: "Watch off",
+    starting: "Watch starting",
+    watching: "Watching",
+    buildQueued: "Build queued",
+    building: "Watching · building",
+    stopping: "Watch stopping",
+    error: "Watch error",
+    pausedUnsafe: "Watch paused",
+  }
+  return (
+    <Badge
+      title={state.message ?? labels[state.status]}
+      variant={state.status === "error" ? "destructive" : "outline"}
+    >
+      {labels[state.status]}
+    </Badge>
   )
 }
 
