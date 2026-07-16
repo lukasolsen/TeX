@@ -294,12 +294,12 @@ pub fn get_build_history(
 }
 
 fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {
-    validate_build_with_availability(request, executable_available)
+    validate_build_with_resolver(request, resolve_executable)
 }
 
-fn validate_build_with_availability(
+fn validate_build_with_resolver(
     request: BuildRequest,
-    executable_is_available: impl Fn(&str) -> bool,
+    executable_resolver: impl Fn(&str) -> Option<PathBuf>,
 ) -> Result<ValidatedBuild, BuildError> {
     let project_root = canonical_project_root(Path::new(&request.project_path))?;
     let configuration = request.configuration.unwrap_or_default();
@@ -330,15 +330,10 @@ fn validate_build_with_availability(
             BuildEngine::XeLatex => ("xelatex", Vec::new()),
             BuildEngine::LuaLatex => ("lualatex", Vec::new()),
         };
-        if !executable_is_available(executable_name) {
-            return Err(BuildError {
-                code: "build-tool-unavailable",
-                message:
-                    "The selected LaTeX build tool is not installed or is unavailable on PATH.",
-            });
-        }
-        let executable =
-            resolve_executable(executable_name).unwrap_or_else(|| PathBuf::from(executable_name));
+        let executable = executable_resolver(executable_name).ok_or(BuildError {
+            code: "build-tool-unavailable",
+            message: "The selected LaTeX build tool is not installed or is unavailable on PATH.",
+        })?;
         arguments.extend(["-interaction=nonstopmode", "-file-line-error", "-synctex=1"]);
         let mut arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
         if let Some(output) = &configuration.output_directory {
@@ -760,7 +755,7 @@ mod tests {
 
     use super::{
         executable_available_in, file_line_message, parse_diagnostic, validate_build,
-        validate_build_with_availability, BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream,
+        validate_build_with_resolver, BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream,
         BuildRequest, BuildStatus, DiagnosticSeverity,
     };
     use crate::project_config::{CustomCommand, ProjectBuildConfiguration};
@@ -772,14 +767,14 @@ mod tests {
     #[test]
     fn constructs_a_safe_latexmk_invocation() -> Result<(), Box<dyn std::error::Error>> {
         let root = fixture_root();
-        let validated = validate_build_with_availability(
+        let validated = validate_build_with_resolver(
             BuildRequest {
                 project_path: root.to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
                 configuration: None,
             },
-            |_| true,
+            |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
 
@@ -810,14 +805,14 @@ mod tests {
             custom_command_consent: true,
             ..ProjectBuildConfiguration::default()
         };
-        let validated = validate_build_with_availability(
+        let validated = validate_build_with_resolver(
             BuildRequest {
                 project_path: fixture_root().to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
                 configuration: Some(configuration),
             },
-            |_| true,
+            |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
 
