@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type {
   AppSessionState,
   AsyncDocumentState,
+  EditorDocumentChange,
   OpenProjectFeedback,
   ProjectSession,
   ProjectSummary,
@@ -25,6 +26,10 @@ import {
   preferredSourceFile,
 } from "@/features/projects/project-model"
 import { restoreWorkspaceGeometry } from "@/features/projects/workspace-restoration"
+import {
+  classifyEditorChange,
+  saveStateAfterWrite,
+} from "@/features/editor/editor-change"
 import { runDetached } from "@/lib/promises"
 import {
   chooseProjectFolder,
@@ -210,9 +215,13 @@ export type ProjectSessionController = Readonly<{
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
+  ) => Promise<boolean>
   deleteProjectEntry: (path: ProjectRelativePath) => Promise<void>
-  editDocument: (path: ProjectRelativePath, content: string) => void
+  editDocument: (
+    projectPath: CanonicalProjectPath,
+    path: ProjectRelativePath,
+    change: EditorDocumentChange
+  ) => void
   forgetProject: (path: CanonicalProjectPath) => Promise<void>
   openProjectAtPath: (path: CanonicalProjectPath) => Promise<void>
   openPdf: (path: ProjectRelativePath) => void
@@ -220,7 +229,10 @@ export type ProjectSessionController = Readonly<{
   previewFile: (path: ProjectRelativePath) => void
   refreshActiveDocument: () => Promise<void>
   refreshProjectFiles: () => Promise<void>
-  renameProjectEntry: (path: ProjectRelativePath, name: string) => Promise<void>
+  renameProjectEntry: (
+    path: ProjectRelativePath,
+    name: string
+  ) => Promise<boolean>
   resizeSidebar: (width: number, persist: boolean) => void
   resolveExternalChange: (keepMine: boolean) => Promise<void>
   resolveRecovery: (restore: boolean) => Promise<void>
@@ -261,6 +273,8 @@ export function useProjectSession(): ProjectSessionController {
   const projectRefreshRequest = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const composingDocument = useRef<ProjectRelativePath | null>(null)
+  const conflictResolutionInFlight = useRef(false)
   const saveInFlight = useRef<Promise<boolean> | null>(null)
   const saveActionRef = useRef<() => Promise<boolean>>(async () => true)
   const persistWorkspace = useRef((workspace: WorkspaceState): void => {
@@ -435,6 +449,8 @@ export function useProjectSession(): ProjectSessionController {
       return true
     }
     const active = current.session.documentState
+    if (composingDocument.current === active.document.path) return false
+    if (conflictResolutionInFlight.current) return false
     if (active.saveState.status === "saved") return true
     if (
       active.saveState.status === "saving" ||
@@ -480,7 +496,6 @@ export function useProjectSession(): ProjectSessionController {
         ) {
           return value
         }
-        const unchanged = value.session.documentState.content === content
         return {
           ...value,
           session: {
@@ -492,7 +507,10 @@ export function useProjectSession(): ProjectSessionController {
             documentState: {
               ...value.session.documentState,
               document,
-              saveState: unchanged ? { status: "saved" } : { status: "dirty" },
+              saveState: saveStateAfterWrite(
+                value.session.documentState.content,
+                content
+              ),
             },
           },
         }
@@ -595,34 +613,50 @@ export function useProjectSession(): ProjectSessionController {
   }, [])
 
   const editDocument = useCallback(
-    (path: ProjectRelativePath, content: string) => {
+    (
+      projectPath: CanonicalProjectPath,
+      path: ProjectRelativePath,
+      change: EditorDocumentChange
+    ) => {
       const current = stateRef.current
       if (
         current.status !== "workspace" ||
+        current.session.project.path !== projectPath ||
         current.session.documentState.status !== "ready" ||
-        current.session.documentState.document.path !== path ||
-        current.session.documentState.content === content
+        current.session.documentState.document.path !== path
       ) {
         return
       }
-      const { project } = current.session
-      setState((value) =>
-        value.status !== "workspace" ||
-        value.session.documentState.status !== "ready" ||
-        value.session.documentState.document.path !== path
-          ? value
-          : {
-              ...value,
-              session: {
-                ...value.session,
-                documentState: {
-                  ...value.session.documentState,
-                  content,
-                  saveState: { status: "dirty" },
-                },
-              },
-            }
+      const decision = classifyEditorChange(
+        current.session.documentState.content,
+        composingDocument.current,
+        path,
+        change
       )
+      composingDocument.current = decision.composingDocument
+      if (!decision.accepted) return
+      const { project } = current.session
+      if (decision.contentChanged) {
+        setState((value) =>
+          value.status !== "workspace" ||
+          value.session.documentState.status !== "ready" ||
+          value.session.documentState.document.path !== path
+            ? value
+            : {
+                ...value,
+                session: {
+                  ...value.session,
+                  documentState: {
+                    ...value.session.documentState,
+                    content: change.content,
+                    saveState: { status: "dirty" },
+                  },
+                },
+              }
+        )
+      }
+
+      if (!decision.schedulePersistence) return
 
       if (recoveryTimer.current === null) {
         recoveryTimer.current = setTimeout(() => {
@@ -673,6 +707,7 @@ export function useProjectSession(): ProjectSessionController {
       return
     }
     const { project, documentState } = current.session
+    const path = documentState.document.path
     if (!restore) {
       await discardRecoveryDraft({
         projectPath: project.path,
@@ -681,7 +716,9 @@ export function useProjectSession(): ProjectSessionController {
     }
     setState((value) =>
       value.status !== "workspace" ||
-      value.session.documentState.status !== "ready"
+      value.session.project.path !== project.path ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
         ? value
         : {
             ...value,
@@ -715,14 +752,19 @@ export function useProjectSession(): ProjectSessionController {
     }
     const { project, documentState } = current.session
     if (documentState.saveState.status !== "conflict") return
+    const path = documentState.document.path
+    const content = documentState.content
     const external = documentState.saveState.external
     if (!keepMine) {
       await discardRecoveryDraft({
         projectPath: project.path,
-        relativePath: documentState.document.path,
+        relativePath: path,
       })
       setState((value) =>
-        value.status !== "workspace"
+        value.status !== "workspace" ||
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -734,16 +776,38 @@ export function useProjectSession(): ProjectSessionController {
       )
       return
     }
+    if (conflictResolutionInFlight.current) return
+    conflictResolutionInFlight.current = true
+    let writeSucceeded = false
+    setState((value) =>
+      value.status !== "workspace" ||
+      value.session.project.path !== project.path ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
+        ? value
+        : {
+            ...value,
+            session: {
+              ...value.session,
+              documentState: {
+                ...value.session.documentState,
+                saveState: { status: "saving" },
+              },
+            },
+          }
+    )
     try {
       const document = await saveProjectSource({
         projectPath: project.path,
-        relativePath: documentState.document.path,
-        content: documentState.content,
+        relativePath: path,
+        content,
         expectedRevision: external.revision,
       })
       setState((value) =>
         value.status !== "workspace" ||
-        value.session.documentState.status !== "ready"
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -752,16 +816,22 @@ export function useProjectSession(): ProjectSessionController {
                 documentState: {
                   ...value.session.documentState,
                   document,
-                  saveState: { status: "saved" },
+                  saveState: saveStateAfterWrite(
+                    value.session.documentState.content,
+                    content
+                  ),
                 },
               },
             }
       )
+      writeSucceeded = true
     } catch (error: unknown) {
       const projectError = projectErrorFromUnknown(error)
       setState((value) =>
         value.status !== "workspace" ||
-        value.session.documentState.status !== "ready"
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -774,6 +844,22 @@ export function useProjectSession(): ProjectSessionController {
               },
             }
       )
+    } finally {
+      conflictResolutionInFlight.current = false
+      const latest = stateRef.current
+      if (
+        writeSucceeded &&
+        latest.status === "workspace" &&
+        latest.session.project.path === project.path &&
+        latest.session.documentState.status === "ready" &&
+        latest.session.documentState.document.path === path
+      ) {
+        if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+        saveTimer.current = setTimeout(
+          () => runDetached(saveActionRef.current()),
+          250
+        )
+      }
     }
   }, [])
 
@@ -1077,22 +1163,22 @@ export function useProjectSession(): ProjectSessionController {
       parentPath: ProjectRelativePath | null,
       name: string,
       directory: boolean
-    ) => {
+    ): Promise<boolean> => {
       const currentState = stateRef.current
-      if (currentState.status !== "workspace") return
+      if (currentState.status !== "workspace") return false
+      const projectPath = currentState.session.project.path
 
       try {
         await createProjectEntryRequest({
-          projectPath: currentState.session.project.path,
+          projectPath,
           parentPath,
           name,
           directory,
         })
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+        const project = await openProjectFolder(projectPath)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
@@ -1103,26 +1189,30 @@ export function useProjectSession(): ProjectSessionController {
                 },
               }
         )
+        return true
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
                 session: { ...current.session, notice: projectError.message },
               }
         )
+        return false
       }
     },
     []
   )
 
   const renameProjectEntry = useCallback(
-    async (path: ProjectRelativePath, name: string) => {
-      if (!(await saveActiveDocument())) return
+    async (path: ProjectRelativePath, name: string): Promise<boolean> => {
+      if (!(await saveActiveDocument())) return false
       const currentState = stateRef.current
-      if (currentState.status !== "workspace") return
+      if (currentState.status !== "workspace") return false
+      const projectPath = currentState.session.project.path
 
       const parent = path.includes("/")
         ? path.slice(0, path.lastIndexOf("/"))
@@ -1132,15 +1222,17 @@ export function useProjectSession(): ProjectSessionController {
       )
       try {
         await renameProjectEntryRequest({
-          projectPath: currentState.session.project.path,
+          projectPath,
           relativePath: path,
           name,
         })
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+        const project = await openProjectFolder(projectPath)
         setState((current) => {
-          if (current.status !== "workspace") return current
+          if (
+            current.status !== "workspace" ||
+            current.session.project.path !== projectPath
+          )
+            return current
           const workspace = {
             ...current.session.workspace,
             pinnedFiles: current.session.workspace.pinnedFiles.map((file) =>
@@ -1231,16 +1323,19 @@ export function useProjectSession(): ProjectSessionController {
             },
           }
         })
+        return true
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
                 session: { ...current.session, notice: projectError.message },
               }
         )
+        return false
       }
     },
     [persistWorkspace, saveActiveDocument]
@@ -1251,15 +1346,14 @@ export function useProjectSession(): ProjectSessionController {
       if (!(await saveActiveDocument())) return
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
+      const projectPath = currentState.session.project.path
 
       try {
         await deleteProjectEntryRequest({
-          projectPath: currentState.session.project.path,
+          projectPath,
           relativePath: path,
         })
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+        const project = await openProjectFolder(projectPath)
         const request = ++documentRequest.current
         const previous = currentState.session.workspace
         const pinnedFiles = previous.pinnedFiles.filter(
@@ -1294,7 +1388,11 @@ export function useProjectSession(): ProjectSessionController {
         }
         persistWorkspace(workspace)
         setState((current) => {
-          if (current.status !== "workspace") return current
+          if (
+            current.status !== "workspace" ||
+            current.session.project.path !== projectPath
+          )
+            return current
           return {
             ...current,
             session: {
@@ -1317,13 +1415,11 @@ export function useProjectSession(): ProjectSessionController {
         ) {
           return
         }
-        const documentState = await loadEditableDocument(
-          currentState.session.project.path,
-          nextFile
-        )
+        const documentState = await loadEditableDocument(projectPath, nextFile)
         if (request !== documentRequest.current) return
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
@@ -1336,7 +1432,8 @@ export function useProjectSession(): ProjectSessionController {
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,

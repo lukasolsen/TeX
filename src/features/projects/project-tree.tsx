@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactElement,
+} from "react"
 import {
   Copy,
   ChevronDown,
@@ -33,6 +39,8 @@ import {
   projectTreeNodes,
 } from "@/features/projects/project-model"
 import { cn } from "@/lib/utils"
+import { runDetached } from "@/lib/promises"
+import { useClipboard } from "@/lib/use-clipboard"
 
 type CreationTarget = {
   parentPath: ProjectRelativePath | null
@@ -50,8 +58,8 @@ function CreateEntryInput({
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
-}) {
+  ) => Promise<boolean>
+}): ReactElement {
   const [name, setName] = useState("")
   const input = useRef<HTMLInputElement>(null)
   const submitting = useRef(false)
@@ -68,14 +76,17 @@ function CreateEntryInput({
       return
     }
     submitting.current = true
-    await onCreate(parentPath, value, directory)
-    onCancel()
+    try {
+      if (await onCreate(parentPath, value, directory)) onCancel()
+    } finally {
+      submitting.current = false
+    }
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault()
-      void submit()
+      runDetached(submit())
     } else if (event.key === "Escape") {
       event.preventDefault()
       onCancel()
@@ -90,9 +101,9 @@ function CreateEntryInput({
         <File aria-hidden="true" className="size-3.5 shrink-0" />
       )}
       <Input
-        aria-label={directory ? "New folder path" : "New file path"}
+        aria-label={directory ? "New folder name" : "New file name"}
         className="h-6 rounded-sm px-1.5 text-[13px]"
-        onBlur={() => void submit()}
+        onBlur={() => runDetached(submit())}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={directory ? "Folder name" : "File name"}
@@ -100,6 +111,72 @@ function CreateEntryInput({
         value={name}
       />
     </li>
+  )
+}
+
+function RenameEntryInput({
+  entry,
+  level,
+  onCancel,
+  onRename,
+}: {
+  entry: ProjectEntry & { path: ProjectRelativePath }
+  level: number
+  onCancel: () => void
+  onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
+}): ReactElement {
+  const [name, setName] = useState(entry.name)
+  const input = useRef<HTMLInputElement>(null)
+  const submitting = useRef(false)
+
+  useEffect(() => {
+    input.current?.focus()
+    input.current?.select()
+  }, [])
+
+  const submit = async (): Promise<void> => {
+    if (submitting.current) return
+    const value = name.trim()
+    if (value === "" || value === entry.name) {
+      onCancel()
+      return
+    }
+    submitting.current = true
+    try {
+      if (await onRename(entry.path, value)) onCancel()
+    } finally {
+      submitting.current = false
+    }
+  }
+
+  return (
+    <div
+      className="flex h-7 items-center gap-1.5 pr-2"
+      style={{ paddingInlineStart: `${22 + level * 14}px` }}
+    >
+      <EntryIcon
+        expanded
+        isDirectory={entry.kind === "directory"}
+        path={entry.path}
+      />
+      <Input
+        aria-label={`Rename ${entry.name}`}
+        className="h-6 min-w-0 rounded-sm px-1.5 text-[13px]"
+        onBlur={() => runDetached(submit())}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault()
+            runDetached(submit())
+          } else if (event.key === "Escape") {
+            event.preventDefault()
+            onCancel()
+          }
+        }}
+        ref={input}
+        value={name}
+      />
+    </div>
   )
 }
 
@@ -111,7 +188,7 @@ function EntryIcon({
   expanded: boolean
   isDirectory: boolean
   path: ProjectRelativePath
-}) {
+}): ReactElement {
   if (isDirectory) {
     return expanded ? (
       <FolderOpen aria-hidden="true" className="size-3.5" />
@@ -132,6 +209,7 @@ function TreeBranch({
   entry,
   level,
   onPinFile,
+  onCopyPath,
   onPreviewFile,
   onOpenPdf,
   onCreate,
@@ -148,23 +226,28 @@ function TreeBranch({
   entry: ProjectEntry & { path: ProjectRelativePath }
   level: number
   onPinFile: (path: ProjectRelativePath) => void
+  onCopyPath: (path: ProjectRelativePath) => void
   onPreviewFile: (path: ProjectRelativePath) => void
   onOpenPdf: (path: ProjectRelativePath) => void
   onCreate: (
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
+  ) => Promise<boolean>
   onCancelCreate: () => void
   onStartCreate: (target: CreationTarget) => void
-  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
+  onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
   onDelete: (path: ProjectRelativePath) => Promise<void>
   rootFiles: ProjectRelativePath[]
   selectedFile: ProjectRelativePath | null
   selectedPdf: ProjectRelativePath | null
   selectedRoot: ProjectRelativePath | null
-}) {
-  const [expanded, setExpanded] = useState(true)
+}): ReactElement {
+  const selectedDescendant = [selectedFile, selectedPdf, selectedRoot].some(
+    (path) => path === entry.path || path?.startsWith(`${entry.path}/`) === true
+  )
+  const [expanded, setExpanded] = useState(level < 1 || selectedDescendant)
+  const [renaming, setRenaming] = useState(false)
   const isDirectory = entry.kind === "directory"
   const readable = !isDirectory && isReadableSource(entry.path)
   const pdf = !isDirectory && isPdf(entry.path)
@@ -175,117 +258,122 @@ function TreeBranch({
         ? "Root candidate"
         : null
 
+  useEffect(() => {
+    if (selectedDescendant) setExpanded(true)
+  }, [selectedDescendant])
+
   return (
     <li>
-      <ContextMenu>
-        <ContextMenuTrigger>
-          <button
-            aria-expanded={isDirectory ? expanded : undefined}
-            className={cn(
-              "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
-              (selectedFile === entry.path || selectedPdf === entry.path) &&
-                "bg-sidebar-accent text-foreground"
-            )}
-            disabled={!isDirectory && !readable && !pdf}
-            onClick={() => {
-              if (isDirectory) setExpanded((current) => !current)
-              else if (pdf) onOpenPdf(entry.path)
-              else if (readable) onPreviewFile(entry.path)
-            }}
-            onDoubleClick={() => {
-              if (pdf) onOpenPdf(entry.path)
-              else if (readable) onPinFile(entry.path)
-            }}
-            style={{ paddingInlineStart: `${8 + level * 14}px` }}
-            title={
-              !isDirectory && !readable && !pdf
-                ? "Preview is unavailable for this file type"
-                : entry.path
-            }
-            type="button"
-          >
-            {isDirectory ? (
-              expanded ? (
-                <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
-              ) : (
-                <ChevronRight
-                  aria-hidden="true"
-                  className="size-3.5 shrink-0"
-                />
-              )
-            ) : (
-              <span className="size-4 shrink-0" aria-hidden="true" />
-            )}
-            <EntryIcon
-              expanded={expanded}
-              isDirectory={isDirectory}
-              path={entry.path}
-            />
-            <span className="min-w-0 flex-1 truncate">{entry.name}</span>
-            {rootLabel !== null ? (
-              <Badge variant="secondary">{rootLabel}</Badge>
-            ) : null}
-          </button>
-        </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem
-            onClick={() => void navigator.clipboard.writeText(entry.path)}
-          >
-            <Copy />
-            Copy path
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => void navigator.clipboard.writeText(entry.path)}
-          >
-            <Copy />
-            Copy relative path
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          {isDirectory ? (
-            <>
-              <ContextMenuItem
-                onClick={() => {
-                  setExpanded(true)
-                  onStartCreate({ parentPath: entry.path, directory: false })
-                }}
-              >
-                <FilePlus />
-                New file
-              </ContextMenuItem>
-              <ContextMenuItem
-                onClick={() => {
-                  setExpanded(true)
-                  onStartCreate({ parentPath: entry.path, directory: true })
-                }}
-              >
-                <FolderPlus />
-                New folder
-              </ContextMenuItem>
-              <ContextMenuSeparator />
-            </>
-          ) : null}
-          <ContextMenuItem
-            onClick={() => {
-              const name = window.prompt("Rename project entry", entry.name)
-              if (name !== null && name !== entry.name) {
-                void onRename(entry.path, name)
+      {renaming ? (
+        <RenameEntryInput
+          entry={entry}
+          level={level}
+          onCancel={() => setRenaming(false)}
+          onRename={onRename}
+        />
+      ) : (
+        <ContextMenu>
+          <ContextMenuTrigger>
+            <button
+              aria-expanded={isDirectory ? expanded : undefined}
+              className={cn(
+                "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
+                (selectedFile === entry.path || selectedPdf === entry.path) &&
+                  "bg-sidebar-accent text-foreground"
+              )}
+              disabled={!isDirectory && !readable && !pdf}
+              onClick={() => {
+                if (isDirectory) setExpanded((current) => !current)
+                else if (pdf) onOpenPdf(entry.path)
+                else if (readable) onPreviewFile(entry.path)
+              }}
+              onDoubleClick={() => {
+                if (pdf) onOpenPdf(entry.path)
+                else if (readable) onPinFile(entry.path)
+              }}
+              style={{ paddingInlineStart: `${8 + level * 14}px` }}
+              title={
+                !isDirectory && !readable && !pdf
+                  ? "Preview is unavailable for this file type"
+                  : entry.path
               }
-            }}
-          >
-            <Pencil />
-            Rename
-          </ContextMenuItem>
-          <ContextMenuItem
-            onClick={() => {
-              void onDelete(entry.path)
-            }}
-            variant="destructive"
-          >
-            <Trash2 />
-            Delete
-          </ContextMenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+              type="button"
+            >
+              {isDirectory ? (
+                expanded ? (
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0"
+                  />
+                ) : (
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0"
+                  />
+                )
+              ) : (
+                <span className="size-4 shrink-0" aria-hidden="true" />
+              )}
+              <EntryIcon
+                expanded={expanded}
+                isDirectory={isDirectory}
+                path={entry.path}
+              />
+              <span className="min-w-0 flex-1 truncate">{entry.name}</span>
+              {rootLabel !== null ? (
+                <Badge variant="secondary">{rootLabel}</Badge>
+              ) : null}
+            </button>
+          </ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem
+              onClick={() => {
+                onCopyPath(entry.path)
+              }}
+            >
+              <Copy />
+              Copy relative path
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            {isDirectory ? (
+              <>
+                <ContextMenuItem
+                  onClick={() => {
+                    setExpanded(true)
+                    onStartCreate({ parentPath: entry.path, directory: false })
+                  }}
+                >
+                  <FilePlus />
+                  New file
+                </ContextMenuItem>
+                <ContextMenuItem
+                  onClick={() => {
+                    setExpanded(true)
+                    onStartCreate({ parentPath: entry.path, directory: true })
+                  }}
+                >
+                  <FolderPlus />
+                  New folder
+                </ContextMenuItem>
+                <ContextMenuSeparator />
+              </>
+            ) : null}
+            <ContextMenuItem onClick={() => setRenaming(true)}>
+              <Pencil />
+              Rename
+            </ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => {
+                runDetached(onDelete(entry.path))
+              }}
+              variant="destructive"
+            >
+              <Trash2 />
+              Delete
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      )}
       {isDirectory && expanded ? (
         <ul>
           {projectTreeNodes(entry, entry.path).map((child) => (
@@ -295,6 +383,7 @@ function TreeBranch({
               key={child.path}
               level={level + 1}
               onPinFile={onPinFile}
+              onCopyPath={onCopyPath}
               onPreviewFile={onPreviewFile}
               onOpenPdf={onOpenPdf}
               onCreate={onCreate}
@@ -342,16 +431,20 @@ export function ProjectTree({
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
-  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
+  ) => Promise<boolean>
+  onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
   onDelete: (path: ProjectRelativePath) => Promise<void>
   rootFiles: ProjectRelativePath[]
   selectedFile: ProjectRelativePath | null
   selectedPdf: ProjectRelativePath | null
   selectedRoot: ProjectRelativePath | null
   tree: ProjectEntry
-}) {
+}): ReactElement {
   const [creation, setCreation] = useState<CreationTarget | null>(null)
+  const clipboard = useClipboard()
+  const copyPath = (path: string): void => {
+    runDetached(clipboard.copyText(path))
+  }
 
   return (
     <ContextMenu>
@@ -369,6 +462,7 @@ export function ProjectTree({
                   key={entry.path}
                   level={0}
                   onPinFile={onPinFile}
+                  onCopyPath={copyPath}
                   onPreviewFile={onPreviewFile}
                   onOpenPdf={onOpenPdf}
                   onCreate={onCreate}
@@ -392,6 +486,16 @@ export function ProjectTree({
               ) : null}
             </ul>
           </ScrollArea>
+          {clipboard.status !== null ? (
+            <p
+              className="border-t px-3 py-1.5 text-xs text-muted-foreground"
+              role="status"
+            >
+              {clipboard.status === "copied"
+                ? "Relative path copied."
+                : "Could not copy the relative path."}
+            </p>
+          ) : null}
         </aside>
       </ContextMenuTrigger>
       <ContextMenuContent>
@@ -412,15 +516,7 @@ export function ProjectTree({
           New folder
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          onClick={() => void navigator.clipboard.writeText(".")}
-        >
-          <Copy />
-          Copy path
-        </ContextMenuItem>
-        <ContextMenuItem
-          onClick={() => void navigator.clipboard.writeText(".")}
-        >
+        <ContextMenuItem onClick={() => copyPath(".")}>
           <Copy />
           Copy relative path
         </ContextMenuItem>

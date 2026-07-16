@@ -19,15 +19,16 @@ const readableSourceExtensions = new Set([
   "md",
 ])
 
-export type ProjectTreeNode = ProjectEntry & { path: ProjectRelativePath }
+export type ProjectTreeNode = ProjectEntry &
+  Readonly<{ path: ProjectRelativePath }>
 
 export type TexDependencyKind = "source" | "bibliography" | "asset" | "package"
 
-export type TexDependency = {
+export type TexDependency = Readonly<{
   command: string
   kind: TexDependencyKind
   path: ProjectRelativePath
-}
+}>
 
 export function projectTreeNodes(
   entry: ProjectEntry,
@@ -42,12 +43,12 @@ export function projectTreeNodes(
 }
 
 export function isReadableSource(path: string): boolean {
-  const extension = path.split(".").pop()?.toLocaleLowerCase()
+  const extension = path.split(".").pop()?.toLowerCase()
   return extension !== undefined && readableSourceExtensions.has(extension)
 }
 
 export function isPdf(path: string): boolean {
-  return path.toLocaleLowerCase().endsWith(".pdf")
+  return path.toLowerCase().endsWith(".pdf")
 }
 
 export function preferredPdf(
@@ -160,7 +161,9 @@ export function treeContainsPath(
   return current.kind === "file"
 }
 
-export function rootEvidenceLabel(evidence: ReadonlyArray<RootEvidence>): string {
+export function rootEvidenceLabel(
+  evidence: ReadonlyArray<RootEvidence>
+): string {
   const labels = evidence.map((item) =>
     item === "documentClass"
       ? "document class"

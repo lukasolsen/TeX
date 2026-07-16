@@ -1,4 +1,5 @@
 import { FileCheck2, Info } from "lucide-react"
+import type { ReactElement } from "react"
 
 import {
   Select,
@@ -20,7 +21,7 @@ export function RootFileControl({
   onSelectRoot: (path: ProjectRelativePath) => void
   project: ProjectSummary
   selectedRoot: ProjectRelativePath | null
-}) {
+}): ReactElement | null {
   const selectedCandidate = project.rootCandidates.find(
     (candidate) => candidate.path === selectedRoot
   )

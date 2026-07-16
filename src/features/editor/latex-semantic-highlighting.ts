@@ -14,16 +14,16 @@ import {
 } from "@/domain/latex"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 
-export type LatexSemanticContext = {
+export type LatexSemanticContext = Readonly<{
   sourcePath: ProjectRelativePath
   projectFiles: ReadonlySet<ProjectRelativePath>
-}
+}>
 
-export type LatexSemanticToken = {
+export type LatexSemanticToken = Readonly<{
   from: number
   to: number
   className: string
-}
+}>
 
 const referenceCommands = new Set([
   "ref",

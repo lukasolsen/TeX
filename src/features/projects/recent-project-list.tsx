@@ -1,4 +1,5 @@
 import { Clock3, FileCode2, FileX2, Folder, Trash2 } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -21,7 +22,7 @@ export function RecentProjectList({
   projects: ReadonlyArray<RecentProject>
   onForget: (path: CanonicalProjectPath) => void
   onOpen: (path: CanonicalProjectPath) => void
-}) {
+}): ReactElement {
   if (projects.length === 0) {
     return (
       <Empty className="min-h-56 border bg-card p-8">

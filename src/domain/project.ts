@@ -68,6 +68,11 @@ export type EditorViewerState = Readonly<{
   scrollLeft: number
 }>
 
+export type EditorDocumentChange = Readonly<{
+  content: string
+  composing: boolean
+}>
+
 export type PdfLayoutMode = "continuous" | "single"
 export type PdfSidebarMode = "none" | "outline"
 

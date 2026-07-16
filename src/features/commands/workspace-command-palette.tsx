@@ -22,6 +22,7 @@ import {
   ScrollText,
   Trash2,
 } from "lucide-react"
+import { useMemo, type ReactElement } from "react"
 
 import {
   CommandDialog,
@@ -109,7 +110,11 @@ export function WorkspaceCommandPalette({
   pdfOpen: boolean
   watchActive: boolean
   tree: ProjectEntry
-}) {
+}): ReactElement {
+  const sourceFiles = useMemo(
+    () => (open ? readableFiles(tree) : []),
+    [open, tree]
+  )
   const run = (command: () => void) => {
     onOpenChange(false)
     command()
@@ -221,7 +226,7 @@ export function WorkspaceCommandPalette({
           </CommandItem>
         </CommandGroup>
         <CommandGroup heading="Open source file">
-          {readableFiles(tree).map((path) => (
+          {sourceFiles.map((path) => (
             <CommandItem
               key={path}
               onSelect={() => run(() => onOpenFile(path))}

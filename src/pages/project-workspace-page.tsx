@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/resizable"
 import type {
   EditorViewerState,
+  EditorDocumentChange,
   OpenProjectFeedback,
   PdfViewerState,
   ProjectSession,
@@ -18,6 +19,7 @@ import type {
 } from "@/domain/project"
 import {
   projectRelativePath,
+  type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
@@ -79,15 +81,19 @@ export function ProjectWorkspacePage({
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
+  ) => Promise<boolean>
   onDeleteProjectEntry: (path: ProjectRelativePath) => Promise<void>
-  onEditDocument: (path: ProjectRelativePath, content: string) => void
+  onEditDocument: (
+    projectPath: CanonicalProjectPath,
+    path: ProjectRelativePath,
+    change: EditorDocumentChange
+  ) => void
   onPinFile: (path: ProjectRelativePath) => void
   onPreviewFile: (path: ProjectRelativePath) => void
   onRenameProjectEntry: (
     path: ProjectRelativePath,
     name: string
-  ) => Promise<void>
+  ) => Promise<boolean>
   onResolveExternalChange: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onProjectFilesChanged: () => void
@@ -481,7 +487,9 @@ export function ProjectWorkspacePage({
                 ) : null}
                 <SourceViewer
                   fontSize={session.workspace.editorFontSize}
-                  onChange={onEditDocument}
+                  onChange={(path, change) =>
+                    onEditDocument(session.project.path, path, change)
+                  }
                   onCursorChange={(path, line, column) =>
                     setSourceLocation({ path, line, column })
                   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, type ReactElement } from "react"
 import {
   autocompletion,
   closeBrackets,
@@ -55,7 +55,11 @@ import {
   latexSemanticHighlighting,
   setLatexSemanticContext,
 } from "@/features/editor/latex-semantic-highlighting"
-import type { EditorViewerState, ProjectEntry } from "@/domain/project"
+import type {
+  EditorDocumentChange,
+  EditorViewerState,
+  ProjectEntry,
+} from "@/domain/project"
 import {
   projectRelativePath,
   type CanonicalProjectPath,
@@ -67,7 +71,11 @@ import {
 } from "@/features/projects/project-model"
 import { referencedFileAt } from "@/features/editor/latex-hover"
 
-export type EditorTarget = { line: number; column: number; token: number }
+export type EditorTarget = Readonly<{
+  line: number
+  column: number
+  token: number
+}>
 
 type ProjectReference = { from: number; to: number } | null
 
@@ -258,17 +266,20 @@ export function LatexEditor({
   fontSize: number
   label: string
   initialViewerState: EditorViewerState | undefined
-  onChange: (content: string) => void
+  onChange: (change: EditorDocumentChange) => void
   onCursorChange: (line: number, column: number) => void
   onOpenReference: (path: ProjectRelativePath) => void
   onSave: () => void
-  onViewerStateChange: (path: ProjectRelativePath, state: EditorViewerState) => void
+  onViewerStateChange: (
+    path: ProjectRelativePath,
+    state: EditorViewerState
+  ) => void
   path: ProjectRelativePath
   projectPath: CanonicalProjectPath
   projectTree: ProjectEntry
   retainedPaths: ReadonlyArray<ProjectRelativePath>
   target: EditorTarget | null
-}) {
+}): ReactElement {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
@@ -440,6 +451,15 @@ export function LatexEditor({
       ),
       projectReferenceField,
       EditorView.domEventHandlers({
+        compositionend: (_event, editor) => {
+          queueMicrotask(() => {
+            onChangeRef.current({
+              content: editor.state.doc.toString(),
+              composing: false,
+            })
+          })
+          return false
+        },
         mousemove: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
           updateReferenceDecoration(editor, referenceAtPointer(editor, event))
@@ -486,7 +506,10 @@ export function LatexEditor({
       ]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !applyingExternalContent.current) {
-          onChangeRef.current(update.state.doc.toString())
+          onChangeRef.current({
+            content: update.state.doc.toString(),
+            composing: update.view.composing,
+          })
         }
         if (update.selectionSet || update.docChanged) {
           const head = update.state.selection.main.head

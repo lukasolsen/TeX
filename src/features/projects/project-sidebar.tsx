@@ -7,6 +7,7 @@ import {
   ListTree,
   LoaderCircle,
 } from "lucide-react"
+import { useMemo, type ReactElement } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -35,7 +36,11 @@ function dependencyDescription(dependency: TexDependency): string {
     : "LaTeX package"
 }
 
-function DependencyIcon({ kind }: { kind: TexDependency["kind"] }) {
+function DependencyIcon({
+  kind,
+}: {
+  kind: TexDependency["kind"]
+}): ReactElement {
   if (kind === "asset") return <Image aria-hidden="true" />
   if (kind === "package") return <Library aria-hidden="true" />
   if (kind === "bibliography") return <BookOpenText aria-hidden="true" />
@@ -54,7 +59,23 @@ function DirectReferencesPanel({
   onPinFile: (path: ProjectRelativePath) => void
   onPreviewFile: (path: ProjectRelativePath) => void
   tree: ProjectEntry
-}) {
+}): ReactElement {
+  const dependencyContent =
+    documentState.status === "ready" &&
+    documentState.document.path.toLowerCase().endsWith(".tex")
+      ? documentState.content
+      : null
+  const dependencyPath =
+    dependencyContent === null || documentState.status !== "ready"
+      ? null
+      : documentState.document.path
+  const dependencies = useMemo(
+    () =>
+      dependencyContent === null || dependencyPath === null
+        ? []
+        : texDependencies(dependencyContent, dependencyPath),
+    [dependencyContent, dependencyPath]
+  )
   if (documentState.status === "loading") {
     return (
       <p
@@ -70,10 +91,7 @@ function DirectReferencesPanel({
     )
   }
 
-  if (
-    documentState.status !== "ready" ||
-    !documentState.document.path.toLowerCase().endsWith(".tex")
-  ) {
+  if (documentState.status !== "ready" || dependencyContent === null) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
         Select a TeX source file to inspect the files and packages it references
@@ -82,10 +100,6 @@ function DirectReferencesPanel({
     )
   }
 
-  const dependencies = texDependencies(
-    documentState.content,
-    documentState.document.path
-  )
   if (dependencies.length === 0) {
     return (
       <p className="p-4 text-sm text-muted-foreground">
@@ -196,12 +210,12 @@ export function ProjectSidebar({
     parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
+  ) => Promise<boolean>
   onDelete: (path: ProjectRelativePath) => Promise<void>
   onPinFile: (path: ProjectRelativePath) => void
   onPreviewFile: (path: ProjectRelativePath) => void
   onOpenPdf: (path: ProjectRelativePath) => void
-  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
+  onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
   onNavigateOutline: (line: number) => void
   rootFiles: ProjectRelativePath[]
   selectedFile: ProjectRelativePath | null
@@ -210,7 +224,7 @@ export function ProjectSidebar({
   tree: ProjectEntry
   tab: ProjectSidebarTab
   onTabChange: (tab: ProjectSidebarTab) => void
-}) {
+}): ReactElement {
   return (
     <Tabs
       className="size-full min-h-0 gap-0 bg-sidebar"
