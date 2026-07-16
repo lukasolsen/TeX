@@ -1,4 +1,5 @@
 import { CircleAlert, LoaderCircle } from "lucide-react"
+import type { ReactElement } from "react"
 
 import {
   Alert,
@@ -15,7 +16,7 @@ export function OpenProjectFeedbackView({
 }: {
   feedback: OpenProjectFeedback
   onClear: () => void
-}) {
+}): ReactElement | null {
   if (feedback.status === "idle") return null
   if (feedback.status === "error") {
     return (

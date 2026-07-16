@@ -1,8 +1,13 @@
 import { Braces } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { cn } from "@/lib/utils"
 
-export function AppBrand({ compact = false }: { compact?: boolean }) {
+export function AppBrand({
+  compact = false,
+}: {
+  compact?: boolean
+}): ReactElement {
   return (
     <div className="flex items-center gap-2.5" aria-label="TeX">
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">

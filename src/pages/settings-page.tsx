@@ -94,7 +94,7 @@ function SettingRow({
       )}
     >
       <div className={cn("max-w-xl", modified && "sm:pl-3")}>
-        <h3 className="text-sm font-medium">{title}</h3>
+        <h2 className="text-sm font-medium">{title}</h2>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           {description}
         </p>
