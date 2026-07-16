@@ -17,6 +17,10 @@ const invocation: BuildInvocation = {
   workingDirectory: "/project",
   rootFile: "chapter one.tex",
   engine: "latexmkPdf",
+  environment: [],
+  bibliographyTool: "automatic",
+  custom: false,
+  toolVersion: null,
 }
 
 const running: BuildRun = {

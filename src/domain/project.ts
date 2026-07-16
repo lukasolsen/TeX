@@ -6,7 +6,7 @@ export type ProjectEntry = {
   children: ProjectEntry[]
 }
 
-export type RootEvidence = "documentClass" | "magicComment"
+export type RootEvidence = "documentClass" | "magicComment" | "configured"
 
 export type RootCandidate = {
   path: string

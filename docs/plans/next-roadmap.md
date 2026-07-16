@@ -179,6 +179,26 @@ Exit gate:
 - Safe standard and custom profiles build fixtures without path escape, shell
   injection, hidden privilege expansion, or ambiguous output ownership.
 
+Progress (2026-07-16):
+
+- Implemented schema-v1 project build settings stored atomically in local TeX
+  application data rather than the source tree. The format and user workflow
+  are documented in `docs/project-build-configuration.md`.
+- Root, output, and generated directories are canonicalized inside the project;
+  custom executables are canonical absolute files; arguments remain arrays; and
+  TeX environment overrides are restricted to five named TeX search/output
+  variables with bounded values.
+- The build panel previews and saves configuration, configured roots become
+  root-selection evidence, configured output is passed to standard engines,
+  and watch mode excludes configured output/generated directories.
+- Custom commands require persisted exact-invocation consent. Shell escape is
+  detected in arguments and requires separate persisted consent. Standard tool
+  versions are captured only after the user starts a build.
+- Automated coverage includes path escape, shell-escape consent, custom argument
+  boundaries, canonical executable selection, and configured watcher
+  exclusions. Fixture-level custom/output builds and packaged platform smoke
+  qualification remain open.
+
 ## Milestone 4 — complete build and diagnostic commands
 
 Purpose: make every build outcome understandable and keyboard reachable.

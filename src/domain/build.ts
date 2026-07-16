@@ -34,7 +34,29 @@ export type BuildRequest = {
   projectPath: string
   rootFile: string
   engine: BuildEngine
+  configuration: ProjectBuildConfiguration
 }
+
+export type BibliographyTool = "automatic" | "biber" | "bibtex" | "none"
+
+export type EnvironmentSetting = { name: string; value: string }
+
+export type ProjectBuildConfiguration = {
+  schemaVersion: 1
+  rootFile: string | null
+  outputDirectory: string | null
+  bibliographyTool: BibliographyTool
+  generatedDirectories: string[]
+  environment: EnvironmentSetting[]
+  customCommand: { executable: string; arguments: string[] } | null
+  customCommandConsent: boolean
+  shellEscapeConsent: boolean
+}
+
+export type ProjectBuildConfigurationState =
+  | { status: "loading" }
+  | { status: "ready"; configuration: ProjectBuildConfiguration }
+  | { status: "error"; error: ProjectError }
 
 export type BuildInvocation = {
   executable: string
@@ -42,6 +64,10 @@ export type BuildInvocation = {
   workingDirectory: string
   rootFile: string
   engine: BuildEngine
+  environment: EnvironmentSetting[]
+  bibliographyTool: BibliographyTool
+  custom: boolean
+  toolVersion: string | null
 }
 
 export type BuildProfile = {

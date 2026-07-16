@@ -5,6 +5,7 @@ mod build_system;
 mod latex_fixtures;
 mod pdf_read;
 mod persistence;
+mod project_config;
 mod project_files;
 mod project_open;
 mod project_search;
@@ -43,6 +44,8 @@ pub fn run() {
             persistence::load_app_preferences,
             persistence::save_app_preferences,
             persistence::save_workspace_state,
+            project_config::load_project_build_configuration,
+            project_config::save_project_build_configuration,
             pdf_read::read_project_pdf,
             pdf_read::project_pdf_revision,
             source_read::read_project_source,

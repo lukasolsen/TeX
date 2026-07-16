@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Dispatch } from "react"
 import {
   AlertCircle,
@@ -9,6 +9,7 @@ import {
   TriangleAlert,
   Eye,
   EyeOff,
+  Settings2,
   X,
 } from "lucide-react"
 
@@ -42,13 +43,17 @@ import {
   type BuildRun,
   type ProjectBuildAction,
   type ProjectBuildState,
+  type ProjectBuildConfiguration,
+  type ProjectBuildConfigurationState,
 } from "@/domain/build"
 import type { ProjectError } from "@/domain/project"
 import type { BuildPanelTab } from "@/domain/project"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
+import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 
 export function BuildPanel({
   dispatch,
+  configurationState,
   engine,
   onBuild,
   onClose,
@@ -56,6 +61,7 @@ export function BuildPanel({
   onStop,
   onStartWatch,
   onStopWatch,
+  onSaveConfiguration,
   onTabChange,
   profiles,
   setEngine,
@@ -64,6 +70,7 @@ export function BuildPanel({
   watch,
 }: {
   dispatch: Dispatch<ProjectBuildAction>
+  configurationState: ProjectBuildConfigurationState
   engine: BuildEngine
   onBuild: () => void
   onClose: () => void
@@ -71,6 +78,9 @@ export function BuildPanel({
   onStop: () => void
   onStartWatch: () => void
   onStopWatch: () => void
+  onSaveConfiguration: (
+    configuration: ProjectBuildConfiguration
+  ) => Promise<void>
   onTabChange: (tab: BuildPanelTab) => void
   profiles: BuildProfilesState
   setEngine: (engine: BuildEngine) => void
@@ -78,6 +88,7 @@ export function BuildPanel({
   tab: BuildPanelTab
   watch: ProjectWatchState
 }) {
+  const [configurationOpen, setConfigurationOpen] = useState(false)
   const run = selectedBuildRun(state)
   const running = state.runs.some((item) => item.status === "running")
   const pending = state.action.status === "pending"
@@ -121,6 +132,20 @@ export function BuildPanel({
           </span>
         ) : null}
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          <Button
+            aria-label="Configure project build"
+            disabled={configurationState.status !== "ready"}
+            onClick={() => setConfigurationOpen(true)}
+            size="icon-sm"
+            title={
+              configurationState.status === "error"
+                ? configurationState.error.message
+                : "Configure project build"
+            }
+            variant="ghost"
+          >
+            <Settings2 aria-hidden="true" />
+          </Button>
           {watch.status === "off" || watch.status === "error" ? (
             <Button onClick={onStartWatch} size="sm" variant="outline">
               <Eye data-icon="inline-start" />
@@ -242,6 +267,14 @@ export function BuildPanel({
           {watch.message}
         </p>
       ) : null}
+      {configurationOpen && configurationState.status === "ready" ? (
+        <BuildConfigurationDialog
+          configuration={configurationState.configuration}
+          onOpenChange={setConfigurationOpen}
+          onSave={onSaveConfiguration}
+          open
+        />
+      ) : null}
     </section>
   )
 }
@@ -353,6 +386,9 @@ function SelectedRunMetadata({ run }: { run: BuildRun | null }) {
         ? ""
         : ` · finished ${formatRunTime(run.finishedAt)}`}{" "}
       · exit {run.exitCode ?? "—"}
+      {run.invocation.toolVersion === null
+        ? ""
+        : ` · ${run.invocation.toolVersion}`}
     </p>
   )
 }

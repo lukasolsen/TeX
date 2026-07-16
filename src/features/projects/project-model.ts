@@ -156,7 +156,11 @@ export function treeContainsPath(
 
 export function rootEvidenceLabel(evidence: RootEvidence[]): string {
   const labels = evidence.map((item) =>
-    item === "documentClass" ? "document class" : "magic root comment"
+    item === "documentClass"
+      ? "document class"
+      : item === "magicComment"
+        ? "magic root comment"
+        : "project build configuration"
   )
   return new Intl.ListFormat(undefined, {
     style: "long",

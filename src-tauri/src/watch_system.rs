@@ -12,6 +12,8 @@ use notify::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::project_config::load_configuration_for_project;
+
 const WATCH_EVENT: &str = "tex://watch-event";
 const DEBOUNCE: Duration = Duration::from_millis(350);
 const GENERATED_DIRECTORIES: [&str; 7] =
@@ -102,6 +104,12 @@ pub fn start_project_watch(
     controller: State<'_, WatchController>,
 ) -> Result<(), WatchError> {
     let root = canonical_project_root(Path::new(&project_path))?;
+    let configuration =
+        load_configuration_for_project(&app, &root).map_err(|_| watch_unavailable())?;
+    let mut excluded_directories = configuration.generated_directories;
+    if let Some(output) = configuration.output_directory {
+        excluded_directories.push(output);
+    }
     let (stop_sender, stop_receiver) = mpsc::channel();
     {
         let mut projects = lock_projects(&controller)?;
@@ -119,7 +127,7 @@ pub fn start_project_watch(
     emit_status(&app, &root, WatchStatus::Starting, None);
 
     let owned = controller.inner().clone();
-    thread::spawn(move || run_watch(app, owned, root, stop_receiver));
+    thread::spawn(move || run_watch(app, owned, root, excluded_directories, stop_receiver));
     Ok(())
 }
 
@@ -156,6 +164,7 @@ fn run_watch(
     app: AppHandle,
     controller: WatchController,
     root: PathBuf,
+    excluded_directories: Vec<String>,
     stop_receiver: mpsc::Receiver<()>,
 ) {
     let (event_sender, event_receiver) = mpsc::channel();
@@ -183,7 +192,7 @@ fn run_watch(
             return;
         }
         match event_receiver.recv_timeout(Duration::from_millis(50)) {
-            Ok(Ok(event)) => pending.record(&root, event),
+            Ok(Ok(event)) => pending.record(&root, &excluded_directories, event),
             Ok(Err(_)) => {
                 finish_with_error(&app, &controller, &root);
                 return;
@@ -214,7 +223,7 @@ struct PendingChanges {
 }
 
 impl PendingChanges {
-    fn record(&mut self, root: &Path, event: Event) {
+    fn record(&mut self, root: &Path, excluded_directories: &[String], event: Event) {
         let Some(kind) = classify_event(&event.kind) else {
             return;
         };
@@ -222,7 +231,7 @@ impl PendingChanges {
             let Ok(relative) = path.strip_prefix(root) else {
                 continue;
             };
-            if is_ignored(relative) {
+            if is_ignored(relative, excluded_directories) {
                 continue;
             }
             if matches!(kind, ProjectChangeKind::Create | ProjectChangeKind::Modify)
@@ -268,14 +277,17 @@ fn classify_event(kind: &EventKind) -> Option<ProjectChangeKind> {
     }
 }
 
-fn is_ignored(path: &Path) -> bool {
+fn is_ignored(path: &Path, excluded_directories: &[String]) -> bool {
     path.components().any(|component| match component {
         Component::Normal(value) => GENERATED_DIRECTORIES.iter().any(|name| value == *name),
         _ => false,
-    }) || path
-        .extension()
-        .and_then(|value| value.to_str())
-        .is_some_and(|extension| GENERATED_EXTENSIONS.contains(&extension))
+    }) || excluded_directories
+        .iter()
+        .any(|directory| path.starts_with(Path::new(directory)))
+        || path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|extension| GENERATED_EXTENSIONS.contains(&extension))
 }
 
 fn is_build_input(path: &Path) -> bool {
@@ -358,10 +370,14 @@ mod tests {
 
     #[test]
     fn ignores_generated_outputs_and_cache_directories() {
-        assert!(is_ignored(Path::new(".git/index")));
-        assert!(is_ignored(Path::new("output/main.aux")));
-        assert!(is_ignored(Path::new("main.log")));
-        assert!(!is_ignored(Path::new("sections/results.tex")));
+        assert!(is_ignored(Path::new(".git/index"), &[]));
+        assert!(is_ignored(Path::new("output/main.aux"), &[]));
+        assert!(is_ignored(Path::new("main.log"), &[]));
+        assert!(is_ignored(
+            Path::new("generated/figure.tex"),
+            &["generated".to_owned()]
+        ));
+        assert!(!is_ignored(Path::new("sections/results.tex"), &[]));
     }
 
     #[test]
