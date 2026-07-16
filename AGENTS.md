@@ -30,3 +30,32 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 Do not modify generated bundles, `target/`, or lockfiles by hand. Keep dependency additions justified and minimal.
+
+## Branch and pull-request workflow
+
+Follow [docs/plans/code-review-plan.md](docs/plans/code-review-plan.md) for
+hardening work and use this workflow for every substantial implementation or
+review wave:
+
+1. Inspect `git status`, the current branch, remote, recent history, and
+   overlapping user changes before editing. Never discard or absorb unrelated
+   work.
+2. Do not make substantial review changes directly on the protected default
+   branch. With a clean worktree, create a descriptive branch such as
+   `review/rust-filesystem-boundary` or `feature/workspace-persistence`. If the
+   worktree is dirty or branch ownership is ambiguous, ask before switching or
+   creating a branch.
+3. Keep each branch and PR cohesive. Separate behavior changes, broad cleanup,
+   lint adoption, dependency updates, and performance work unless they are
+   inseparable for correctness.
+4. Run narrow checks during implementation and the full applicable verification
+   before handoff. Inspect the final diff for generated files, permission or
+   dependency expansion, secrets, document content, and unrelated formatting.
+5. Commit intentionally without rewriting user commits. Push and open a draft
+   PR only when the user requested publishing or explicitly invoked this
+   workflow for delivery. Include scope, findings, tests, security/performance/
+   accessibility impact, dependency and permission changes, residual risk, and
+   follow-up work.
+6. Monitor required checks and address branch-caused failures. Never merge,
+   close the PR, force-push, or delete the branch without explicit user
+   authorization.
