@@ -191,15 +191,9 @@ fn collect_tree(
     depth: usize,
     visited_entries: &mut usize,
 ) -> Result<ProjectEntry, ProjectOpenError> {
-    let mut entries = fs::read_dir(directory)
-        .map_err(map_io_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(map_io_error)?;
-    entries.sort_by_key(|entry| entry.file_name());
-
-    let mut directories = Vec::new();
-    let mut files = Vec::new();
-    for entry in entries {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(directory).map_err(map_io_error)? {
+        let entry = entry.map_err(map_io_error)?;
         let file_type = entry.file_type().map_err(map_io_error)?;
         if file_type.is_symlink()
             || ignored_name(entry.file_name().as_os_str())
@@ -207,7 +201,6 @@ fn collect_tree(
         {
             continue;
         }
-
         *visited_entries += 1;
         if *visited_entries > MAX_TREE_ENTRIES {
             return Err(ProjectOpenError {
@@ -215,7 +208,13 @@ fn collect_tree(
                 message: "This folder is too large to open safely. Choose the project folder itself instead.",
             });
         }
+        entries.push((entry, file_type));
+    }
+    entries.sort_by_key(|(entry, _)| entry.file_name());
 
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+    for (entry, file_type) in entries {
         let path = entry.path();
         if file_type.is_dir() {
             if depth < MAX_TREE_DEPTH {

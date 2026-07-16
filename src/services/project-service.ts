@@ -118,15 +118,13 @@ export async function saveProjectSource(
   projectPath: string,
   relativePath: string,
   content: string,
-  expectedRevision: SourceRevision,
-  overwriteExternal = false
+  expectedRevision: SourceRevision
 ): Promise<SourceDocument> {
   return invoke<SourceDocument>("save_project_source", {
     projectPath,
     relativePath,
     content,
     expectedRevision,
-    overwriteExternal,
   })
 }
 

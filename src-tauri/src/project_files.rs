@@ -4,7 +4,8 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
 use crate::project_access::ProjectAccess;
 
@@ -70,15 +71,13 @@ fn rename_entry(root: &Path, relative_path: &str, name: &str) -> Result<(), Proj
     let source = resolve_entry(root, relative_path)?;
     let parent = source.parent().ok_or_else(unavailable)?.to_path_buf();
     let target = parent.join(entry_name(name)?);
-    if target.exists() {
-        return Err(unavailable());
-    }
-    fs::rename(source, target).map_err(|_| unavailable())
+    renamore::rename_exclusive(source, target).map_err(|_| unavailable())
 }
 
 /// Deletes an explicitly selected project file or directory.
 #[tauri::command]
 pub fn delete_project_entry(
+    app: AppHandle,
     project_path: String,
     relative_path: String,
     access: State<'_, ProjectAccess>,
@@ -86,6 +85,25 @@ pub fn delete_project_entry(
     let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let target = resolve_entry(&root, &relative_path)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable())?;
+    let entry_kind = if metadata.is_dir() { "folder" } else { "file" };
+    let approved = app
+        .dialog()
+        .message(format!(
+            "Permanently delete this {entry_kind} from the project?\n\n{relative_path}\n\nThis operation cannot be undone."
+        ))
+        .title(format!("Delete project {entry_kind}"))
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            format!("Delete {entry_kind}"),
+            "Cancel".to_owned(),
+        ))
+        .blocking_show();
+    if !approved {
+        return Err(ProjectFileError {
+            code: "project-delete-cancelled",
+            message: "The project entry was not deleted.",
+        });
+    }
     if metadata.is_dir() {
         fs::remove_dir_all(target)
     } else {

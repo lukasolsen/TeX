@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod bounded_io;
 mod build_operations;
 mod build_system;
 #[cfg(test)]

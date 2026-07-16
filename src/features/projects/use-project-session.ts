@@ -622,8 +622,7 @@ export function useProjectSession() {
         project.path,
         documentState.document.path,
         documentState.content,
-        external.revision,
-        true
+        external.revision
       )
       setState((value) =>
         value.status !== "workspace" ||

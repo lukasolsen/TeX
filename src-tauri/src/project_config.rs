@@ -1,6 +1,6 @@
 use std::{
     fs, io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
@@ -8,12 +8,13 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
-use crate::{project_access::ProjectAccess, source_edit::atomic_write};
+use crate::{bounded_io, project_access::ProjectAccess, source_edit::atomic_write};
 
 const CONFIG_VERSION: u8 = 1;
 const MAX_ARGUMENTS: usize = 128;
 const MAX_ARGUMENT_LENGTH: usize = 4096;
 const MAX_GENERATED_DIRECTORIES: usize = 32;
+const MAX_CONFIGURATION_BYTES: u64 = 1024 * 1024;
 const ALLOWED_ENVIRONMENT_KEYS: [&str; 5] = [
     "BIBINPUTS",
     "BSTINPUTS",
@@ -269,8 +270,27 @@ pub(crate) fn canonical_child(
     directory: bool,
 ) -> Result<PathBuf, ProjectConfigError> {
     let relative = Path::new(relative);
-    if relative.is_absolute() {
+    if relative.as_os_str().is_empty()
+        || relative.is_absolute()
+        || !relative
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+    {
         return Err(invalid_configuration());
+    }
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(component) = component else {
+            return Err(invalid_configuration());
+        };
+        candidate.push(component);
+        if fs::symlink_metadata(&candidate)
+            .map_err(|_| invalid_configuration())?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(invalid_configuration());
+        }
     }
     let path = root
         .join(relative)
@@ -291,7 +311,7 @@ pub(crate) fn uses_shell_escape(arguments: &[String]) -> bool {
 }
 
 fn read_configuration(path: &Path) -> Result<ProjectBuildConfiguration, ProjectConfigError> {
-    match fs::read(path) {
+    match bounded_io::read(path, MAX_CONFIGURATION_BYTES) {
         Ok(bytes) => serde_json::from_slice(&bytes).map_err(|_| ProjectConfigError {
             code: "invalid-project-configuration",
             message: "The saved build configuration is invalid. TeX did not run it.",

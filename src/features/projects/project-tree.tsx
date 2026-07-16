@@ -272,13 +272,7 @@ function TreeBranch({
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() => {
-              if (
-                window.confirm(
-                  `Delete ${entry.path}? This permanently removes it from the project.`
-                )
-              ) {
-                void onDelete(entry.path)
-              }
+              void onDelete(entry.path)
             }}
             variant="destructive"
           >

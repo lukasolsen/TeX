@@ -29,6 +29,7 @@ atomic-write-file = "0.3.0"
 regex = "1"
 sha2 = "0.10"
 notify = "8"
+renamore = "0.3.2"
 
 [lints.rust]
 unsafe_code = "forbid"

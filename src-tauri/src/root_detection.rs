@@ -4,7 +4,11 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+use crate::{bounded_io, source_read::MAX_SOURCE_BYTES};
+
 const MAX_TEX_FILES: usize = 1_024;
+const MAX_SCAN_DEPTH: usize = 32;
+const MAX_SCAN_ENTRIES: usize = 4_096;
 
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
@@ -38,11 +42,12 @@ pub struct RootCandidate {
 /// future explicit root-selection flow without traversing outside the project.
 pub fn detect_root_candidates(project_root: &Path) -> io::Result<Vec<RootCandidate>> {
     let mut tex_files = Vec::new();
-    collect_tex_files(project_root, &mut tex_files)?;
+    let mut visited_entries = 0_usize;
+    collect_tex_files(project_root, 0, &mut visited_entries, &mut tex_files)?;
 
     let mut candidates = BTreeMap::<PathBuf, Vec<RootEvidence>>::new();
     for path in tex_files {
-        let source = fs::read_to_string(&path)?;
+        let source = bounded_io::read_utf8(&path, MAX_SOURCE_BYTES)?;
         let canonical_path = path.canonicalize()?;
 
         if has_document_class(&source) {
@@ -103,13 +108,29 @@ fn latex_code_before_comment(line: &str) -> &str {
     line
 }
 
-fn collect_tex_files(directory: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
+fn collect_tex_files(
+    directory: &Path,
+    depth: usize,
+    visited_entries: &mut usize,
+    files: &mut Vec<PathBuf>,
+) -> io::Result<()> {
+    if depth > MAX_SCAN_DEPTH {
+        return Err(io::Error::other(
+            "project exceeds the root scan depth limit",
+        ));
+    }
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let file_type = entry.file_type()?;
 
         if file_type.is_symlink() {
             continue;
+        }
+        *visited_entries += 1;
+        if *visited_entries > MAX_SCAN_ENTRIES {
+            return Err(io::Error::other(
+                "project exceeds the root scan entry limit",
+            ));
         }
 
         let path = entry.path();
@@ -121,7 +142,7 @@ fn collect_tex_files(directory: &Path, files: &mut Vec<PathBuf>) -> io::Result<(
             {
                 continue;
             }
-            collect_tex_files(&path, files)?;
+            collect_tex_files(&path, depth + 1, visited_entries, files)?;
         } else if path.extension().is_some_and(|extension| extension == "tex") {
             if files.len() == MAX_TEX_FILES {
                 return Err(io::Error::other("project exceeds the root scan file limit"));
