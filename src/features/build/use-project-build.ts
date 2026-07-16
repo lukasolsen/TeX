@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useReducer, useState } from "react"
+import { useCallback, useEffect, useReducer, useRef, useState } from "react"
+import type { Dispatch } from "react"
 
 import {
   initialProjectBuildState,
   projectBuildReducer,
   type BuildEngine,
   type BuildProfilesState,
+  type ProjectBuildAction,
   type BuildRequest,
   type ProjectBuildConfiguration,
   type ProjectBuildConfigurationState,
+  type ProjectBuildState,
 } from "@/domain/build"
 import {
   projectRelativePath,
@@ -25,11 +28,26 @@ import {
   loadProjectBuildConfiguration,
   saveProjectBuildConfiguration,
 } from "@/services/build-service"
+import { createSerialTaskQueue } from "@/lib/serial-task-queue"
 
 const saveRequiredError = {
   code: "build-save-required",
   message: "Save or resolve the active source file before building.",
 }
+
+export type ProjectBuildController = Readonly<{
+  state: ProjectBuildState
+  profiles: BuildProfilesState
+  engine: BuildEngine
+  setEngine: (engine: BuildEngine) => void
+  build: () => Promise<void>
+  stop: () => Promise<void>
+  dispatch: Dispatch<ProjectBuildAction>
+  configurationState: ProjectBuildConfigurationState
+  saveConfiguration: (
+    configuration: ProjectBuildConfiguration
+  ) => Promise<ProjectBuildConfiguration>
+}>
 
 export function useProjectBuild({
   beforeBuild,
@@ -43,7 +61,7 @@ export function useProjectBuild({
   onEngineChange: (engine: BuildEngine) => void
   projectPath: CanonicalProjectPath
   rootFile: ProjectRelativePath | null
-}) {
+}): ProjectBuildController {
   const [state, dispatch] = useReducer(
     projectBuildReducer,
     initialProjectBuildState
@@ -54,6 +72,21 @@ export function useProjectBuild({
   })
   const [configurationState, setConfigurationState] =
     useState<ProjectBuildConfigurationState>({ status: "loading" })
+  const activeProject = useRef(projectPath)
+  const operationRevision = useRef(0)
+  const buildInFlight = useRef(false)
+  const configurationSaveRevision = useRef(0)
+  const configurationSaveQueue = useRef(createSerialTaskQueue())
+  activeProject.current = projectPath
+
+  useEffect(() => {
+    operationRevision.current += 1
+    buildInFlight.current = false
+    return () => {
+      operationRevision.current += 1
+      configurationSaveRevision.current += 1
+    }
+  }, [projectPath])
 
   useEffect(() => {
     let active = true
@@ -142,13 +175,19 @@ export function useProjectBuild({
   useEffect(() => {
     if (!buildRunning) return
     let active = true
-    const reconcile = () => {
+    let reconciliationInFlight = false
+    const reconcile = (): void => {
+      if (reconciliationInFlight) return
+      reconciliationInFlight = true
       void getBuildHistory(projectPath)
         .then((runs) => {
           if (active) dispatch({ type: "historyLoaded", runs })
         })
         .catch(() => {
           // The visible run and its retained output remain available for retry.
+        })
+        .finally(() => {
+          reconciliationInFlight = false
         })
     }
     const interval = window.setInterval(reconcile, 1_000)
@@ -204,52 +243,78 @@ export function useProjectBuild({
     }
   }, [configurationState, engine, projectPath, rootFile])
 
-  const build = useCallback(async () => {
+  const build = useCallback(async (): Promise<void> => {
+    if (buildInFlight.current) return
     if (configurationState.status !== "ready") return
     const effectiveRoot = configurationState.configuration.rootFile ?? rootFile
     if (effectiveRoot === null) return
+    buildInFlight.current = true
+    const revision = operationRevision.current
+    const remainsCurrent = (): boolean =>
+      revision === operationRevision.current &&
+      activeProject.current === projectPath
     dispatch({ type: "actionPending" })
     try {
       if (!(await beforeBuild())) {
-        dispatch({ type: "actionError", error: saveRequiredError })
+        if (remainsCurrent()) {
+          dispatch({ type: "actionError", error: saveRequiredError })
+        }
         return
       }
+      if (!remainsCurrent()) return
       const request: BuildRequest = {
         projectPath,
         rootFile: projectRelativePath(effectiveRoot),
         engine,
       }
       const run = await startBuild(request)
-      dispatch({ type: "runStarted", run })
+      if (remainsCurrent()) dispatch({ type: "runStarted", run })
     } catch (error: unknown) {
-      dispatch({
-        type: "actionError",
-        error: projectErrorFromUnknown(error),
-      })
+      if (remainsCurrent()) {
+        dispatch({
+          type: "actionError",
+          error: projectErrorFromUnknown(error),
+        })
+      }
+    } finally {
+      if (remainsCurrent()) buildInFlight.current = false
     }
   }, [beforeBuild, configurationState, engine, projectPath, rootFile])
 
   const saveConfiguration = useCallback(
-    async (configuration: ProjectBuildConfiguration) => {
-      const saved = await saveProjectBuildConfiguration(
-        projectPath,
-        configuration
+    async (
+      configuration: ProjectBuildConfiguration
+    ): Promise<ProjectBuildConfiguration> => {
+      const revision = ++configurationSaveRevision.current
+      const saved = await configurationSaveQueue.current.enqueue(() =>
+        saveProjectBuildConfiguration(projectPath, configuration)
       )
-      setConfigurationState({ status: "ready", configuration: saved })
+      if (
+        activeProject.current === projectPath &&
+        revision === configurationSaveRevision.current
+      ) {
+        setConfigurationState({ status: "ready", configuration: saved })
+      }
       return saved
     },
     [projectPath]
   )
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(async (): Promise<void> => {
+    const revision = operationRevision.current
     dispatch({ type: "actionPending" })
     try {
       await stopBuild(projectPath)
     } catch (error: unknown) {
-      dispatch({
-        type: "actionError",
-        error: projectErrorFromUnknown(error),
-      })
+      if (
+        revision === operationRevision.current &&
+        activeProject.current === projectPath
+      ) {
+        dispatch({
+          type: "actionError",
+          error: projectErrorFromUnknown(error),
+        })
+      }
     }
   }, [projectPath])
 

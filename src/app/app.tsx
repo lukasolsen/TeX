@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState } from "react"
+import type { ReactElement } from "react"
 import type { WorkspaceFocus } from "@/domain/project"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
@@ -14,7 +15,7 @@ const ProjectWorkspacePage = lazy(() =>
   }))
 )
 
-export default function App() {
+export default function App(): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>("source")
   const [focusRestoreToken, setFocusRestoreToken] = useState(0)

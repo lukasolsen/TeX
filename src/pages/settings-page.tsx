@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useState, type ReactElement, type ReactNode } from "react"
 import {
   ArrowLeft,
   Check,
@@ -66,7 +66,7 @@ const themeOptions: {
   },
 ]
 
-function SettingsGroup({ children }: { children: ReactNode }) {
+function SettingsGroup({ children }: { children: ReactNode }): ReactElement {
   return (
     <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="px-5 sm:px-6">{children}</div>
@@ -84,7 +84,7 @@ function SettingRow({
   description: string
   modified?: boolean
   title: string
-}) {
+}): ReactElement {
   return (
     <div
       className={cn(
@@ -124,7 +124,7 @@ export function SettingsPage({
   onSetSidebarWidth: (width: number) => void
   saveError: string | null
   workspace: WorkspaceState | null
-}) {
+}): ReactElement {
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("appearance")
   const [query, setQuery] = useState("")

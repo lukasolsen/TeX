@@ -6,6 +6,7 @@ import {
   Settings,
   ShieldCheck,
 } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { AppBrand } from "@/components/brand/app-brand"
 import { OpenProjectFeedbackView } from "@/components/feedback/open-project-feedback"
@@ -40,7 +41,7 @@ export function ProjectHomePage({
   onOpenRecent: (path: CanonicalProjectPath) => void
   onOpenSettings: () => void
   startup: StartupState
-}) {
+}): ReactElement {
   const isOpening =
     feedback.status === "choosing" || feedback.status === "opening"
 
