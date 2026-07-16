@@ -6,6 +6,8 @@ import {
   type BuildEngine,
   type BuildProfilesState,
   type BuildRequest,
+  type ProjectBuildConfiguration,
+  type ProjectBuildConfigurationState,
 } from "@/domain/build"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import {
@@ -15,6 +17,8 @@ import {
   previewBuild,
   startBuild,
   stopBuild,
+  loadProjectBuildConfiguration,
+  saveProjectBuildConfiguration,
 } from "@/services/build-service"
 
 const saveRequiredError = {
@@ -43,6 +47,27 @@ export function useProjectBuild({
   const [profiles, setProfiles] = useState<BuildProfilesState>({
     status: "loading",
   })
+  const [configurationState, setConfigurationState] =
+    useState<ProjectBuildConfigurationState>({ status: "loading" })
+
+  useEffect(() => {
+    let active = true
+    void loadProjectBuildConfiguration(projectPath)
+      .then((configuration) => {
+        if (active) setConfigurationState({ status: "ready", configuration })
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setConfigurationState({
+            status: "error",
+            error: projectErrorFromUnknown(error),
+          })
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [projectPath])
 
   useEffect(() => {
     let active = true
@@ -130,7 +155,20 @@ export function useProjectBuild({
 
   useEffect(() => {
     let active = true
-    if (rootFile === null) {
+    if (configurationState.status !== "ready") {
+      dispatch({
+        type: "rootUnavailable",
+        reason:
+          configurationState.status === "loading"
+            ? "Loading project build settings…"
+            : configurationState.error.message,
+      })
+      return () => {
+        active = false
+      }
+    }
+    const effectiveRoot = configurationState.configuration.rootFile ?? rootFile
+    if (effectiveRoot === null) {
       dispatch({
         type: "rootUnavailable",
         reason: "Choose a LaTeX root file to prepare a build.",
@@ -140,7 +178,12 @@ export function useProjectBuild({
       }
     }
     dispatch({ type: "previewLoading" })
-    void previewBuild({ projectPath, rootFile, engine })
+    void previewBuild({
+      projectPath,
+      rootFile: effectiveRoot,
+      engine,
+      configuration: configurationState.configuration,
+    })
       .then((invocation) => {
         if (active) dispatch({ type: "previewReady", invocation })
       })
@@ -155,17 +198,24 @@ export function useProjectBuild({
     return () => {
       active = false
     }
-  }, [engine, projectPath, rootFile])
+  }, [configurationState, engine, projectPath, rootFile])
 
   const build = useCallback(async () => {
-    if (rootFile === null) return
+    if (configurationState.status !== "ready") return
+    const effectiveRoot = configurationState.configuration.rootFile ?? rootFile
+    if (effectiveRoot === null) return
     dispatch({ type: "actionPending" })
     try {
       if (!(await beforeBuild())) {
         dispatch({ type: "actionError", error: saveRequiredError })
         return
       }
-      const request: BuildRequest = { projectPath, rootFile, engine }
+      const request: BuildRequest = {
+        projectPath,
+        rootFile: effectiveRoot,
+        engine,
+        configuration: configurationState.configuration,
+      }
       const run = await startBuild(request)
       dispatch({ type: "runStarted", run })
     } catch (error: unknown) {
@@ -174,7 +224,19 @@ export function useProjectBuild({
         error: projectErrorFromUnknown(error),
       })
     }
-  }, [beforeBuild, engine, projectPath, rootFile])
+  }, [beforeBuild, configurationState, engine, projectPath, rootFile])
+
+  const saveConfiguration = useCallback(
+    async (configuration: ProjectBuildConfiguration) => {
+      const saved = await saveProjectBuildConfiguration(
+        projectPath,
+        configuration
+      )
+      setConfigurationState({ status: "ready", configuration: saved })
+      return saved
+    },
+    [projectPath]
+  )
 
   const stop = useCallback(async () => {
     dispatch({ type: "actionPending" })
@@ -188,5 +250,15 @@ export function useProjectBuild({
     }
   }, [projectPath])
 
-  return { state, profiles, engine, setEngine, build, stop, dispatch }
+  return {
+    state,
+    profiles,
+    engine,
+    setEngine,
+    build,
+    stop,
+    dispatch,
+    configurationState,
+    saveConfiguration,
+  }
 }

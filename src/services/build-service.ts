@@ -9,6 +9,7 @@ import type {
   BuildRun,
   WatchEvent,
   WatchStatus,
+  ProjectBuildConfiguration,
 } from "@/domain/build"
 
 const BUILD_EVENT = "tex://build-event"
@@ -62,4 +63,22 @@ export async function listenForWatchEvents(
   handler: (event: WatchEvent) => void
 ): Promise<UnlistenFn> {
   return listen<WatchEvent>(WATCH_EVENT, (event) => handler(event.payload))
+}
+
+export async function loadProjectBuildConfiguration(
+  projectPath: string
+): Promise<ProjectBuildConfiguration> {
+  return invoke<ProjectBuildConfiguration>("load_project_build_configuration", {
+    projectPath,
+  })
+}
+
+export async function saveProjectBuildConfiguration(
+  projectPath: string,
+  configuration: ProjectBuildConfiguration
+): Promise<ProjectBuildConfiguration> {
+  return invoke<ProjectBuildConfiguration>("save_project_build_configuration", {
+    projectPath,
+    configuration,
+  })
 }

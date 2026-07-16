@@ -458,6 +458,7 @@ export function ProjectWorkspacePage({
               }}
             >
               <BuildPanel
+                configurationState={build.configurationState}
                 dispatch={build.dispatch}
                 engine={build.engine}
                 onBuild={() => void build.build()}
@@ -469,6 +470,10 @@ export function ProjectWorkspacePage({
                 onStop={() => void build.stop()}
                 onStartWatch={() => void watch.start()}
                 onStopWatch={() => void watch.stop()}
+                onSaveConfiguration={async (configuration) => {
+                  const saved = await build.saveConfiguration(configuration)
+                  if (saved.rootFile !== null) onSelectRoot(saved.rootFile)
+                }}
                 profiles={build.profiles}
                 setEngine={build.setEngine}
                 state={build.state}
