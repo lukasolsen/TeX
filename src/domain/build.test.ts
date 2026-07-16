@@ -10,22 +10,30 @@ import {
   type BuildLogEntry,
   type BuildRun,
 } from "@/domain/build"
+import {
+  buildId,
+  canonicalProjectPath,
+  projectRelativePath,
+} from "@/domain/identifiers"
+
+const projectPath = canonicalProjectPath("/project")
+const rootFile = projectRelativePath("chapter one.tex")
+const runId = buildId("1-1")
 
 const invocation: BuildInvocation = {
   executable: "latexmk",
   arguments: ["-pdf", "chapter one.tex"],
-  workingDirectory: "/project",
-  rootFile: "chapter one.tex",
+  workingDirectory: projectPath,
+  rootFile,
   engine: "latexmkPdf",
   environment: [],
   bibliographyTool: "automatic",
   custom: false,
-  toolVersion: null,
 }
 
 const running: BuildRun = {
-  id: "run-1",
-  projectPath: "/project",
+  id: runId,
+  projectPath,
   invocation,
   status: "running",
   startedAt: 1,
@@ -45,13 +53,13 @@ describe("projectBuildReducer", () => {
       type: "eventReceived",
       event: {
         kind: "log",
-        projectPath: "/project",
-        runId: "run-1",
+        projectPath,
+        runId,
         entry: { sequence: 1, timestamp: 2, stream: "stderr", text: "error" },
         diagnostic: {
           severity: "error",
           message: "Undefined control sequence",
-          file: "main.tex",
+          file: projectRelativePath("main.tex"),
           line: 4,
           mappingUncertain: false,
           logSequence: 1,
@@ -79,8 +87,8 @@ describe("projectBuildReducer", () => {
       type: "eventReceived",
       event: {
         kind: "finished",
-        projectPath: "/project",
-        runId: "run-1",
+        projectPath,
+        runId,
         status: "failed",
         finishedAt: 3,
         exitCode: 1,
@@ -97,8 +105,8 @@ describe("projectBuildReducer", () => {
   it("applies output that arrives before the start response", () => {
     const event: BuildEvent = {
       kind: "log",
-      projectPath: "/project",
-      runId: "run-1",
+      projectPath,
+      runId,
       entry: { sequence: 1, timestamp: 2, stream: "stdout", text: "fast" },
       diagnostic: null,
     }
@@ -143,6 +151,48 @@ describe("projectBuildReducer", () => {
       exitCode: 0,
     })
     expect(selectedBuildRun(state)?.entries).toHaveLength(1)
+  })
+
+  it("bounds live log and pre-response event retention", () => {
+    let runningState = projectBuildReducer(initialProjectBuildState, {
+      type: "runStarted",
+      run: running,
+    })
+    for (let sequence = 1; sequence <= 600; sequence += 1) {
+      runningState = projectBuildReducer(runningState, {
+        type: "eventReceived",
+        event: {
+          kind: "log",
+          projectPath,
+          runId,
+          entry: {
+            sequence,
+            timestamp: sequence,
+            stream: "stdout",
+            text: "line",
+          },
+          diagnostic: null,
+        },
+      })
+    }
+    expect(selectedBuildRun(runningState)?.entries).toHaveLength(500)
+    expect(selectedBuildRun(runningState)?.entries[0]?.sequence).toBe(101)
+
+    let pendingState = initialProjectBuildState
+    for (let sequence = 1; sequence <= 600; sequence += 1) {
+      pendingState = projectBuildReducer(pendingState, {
+        type: "eventReceived",
+        event: {
+          kind: "finished",
+          projectPath,
+          runId: buildId(`2-${sequence}`),
+          status: "failed",
+          finishedAt: sequence,
+          exitCode: 1,
+        },
+      })
+    }
+    expect(pendingState.pendingEvents).toHaveLength(512)
   })
 })
 

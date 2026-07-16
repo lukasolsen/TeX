@@ -15,6 +15,10 @@ import type {
   WorkspaceFocus,
   WorkspaceState,
 } from "@/domain/project"
+import {
+  projectRelativePath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
@@ -64,30 +68,30 @@ export function ProjectWorkspacePage({
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
-  onOpenPdf: (path: string) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
   onReturnHome: () => void
   onOpenSettings: (focus: WorkspaceFocus) => void
   onResizeSidebar: (width: number, persist: boolean) => void
-  onCloseFile: (path: string) => void
-  onCloseFiles: (paths: string[]) => void
+  onCloseFile: (path: ProjectRelativePath) => void
+  onCloseFiles: (paths: ReadonlyArray<ProjectRelativePath>) => void
   onCreateProjectEntry: (
-    parentPath: string | null,
+    parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
   ) => Promise<void>
-  onDeleteProjectEntry: (path: string) => Promise<void>
-  onEditDocument: (path: string, content: string) => void
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
-  onRenameProjectEntry: (path: string, name: string) => Promise<void>
+  onDeleteProjectEntry: (path: ProjectRelativePath) => Promise<void>
+  onEditDocument: (path: ProjectRelativePath, content: string) => void
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
+  onRenameProjectEntry: (path: ProjectRelativePath, name: string) => Promise<void>
   onResolveExternalChange: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onProjectFilesChanged: () => void
   onSaveDocument: () => Promise<boolean>
   onSetEditorFontSize: (fontSize: number) => void
-  onSelectRoot: (path: string) => void
-  onUpdatePdfViewerState: (path: string, state: PdfViewerState) => void
-  onUpdateEditorViewerState: (path: string, state: EditorViewerState) => void
+  onSelectRoot: (path: ProjectRelativePath) => void
+  onUpdatePdfViewerState: (path: ProjectRelativePath, state: PdfViewerState) => void
+  onUpdateEditorViewerState: (path: ProjectRelativePath, state: EditorViewerState) => void
   onUpdateWorkspaceView: (
     update: Partial<
       Pick<
@@ -122,12 +126,12 @@ export function ProjectWorkspacePage({
     string | null
   >(null)
   const [sourceLocation, setSourceLocation] = useState<{
-    path: string
+    path: ProjectRelativePath
     line: number
     column: number
   } | null>(null)
   const [target, setTarget] = useState<
-    (EditorTarget & { path: string }) | null
+    (EditorTarget & { path: ProjectRelativePath }) | null
   >(null)
   const build = useProjectBuild({
     beforeBuild: onSaveDocument,
@@ -253,7 +257,10 @@ export function ProjectWorkspacePage({
         : session.workspace.selectedRoot
     if (rootFile === null) return
     try {
-      await revealProjectOutput(session.project.path, rootFile)
+      await revealProjectOutput(
+        session.project.path,
+        projectRelativePath(rootFile)
+      )
       setBuildOperationMessage("Opened the built PDF location")
     } catch (error: unknown) {
       setBuildOperationMessage(projectErrorFromUnknown(error).message)
@@ -580,7 +587,8 @@ export function ProjectWorkspacePage({
                 onStopWatch={() => void watch.stop()}
                 onSaveConfiguration={async (configuration) => {
                   const saved = await build.saveConfiguration(configuration)
-                  if (saved.rootFile !== null) onSelectRoot(saved.rootFile)
+                  if (saved.rootFile !== null)
+                    onSelectRoot(projectRelativePath(saved.rootFile))
                 }}
                 profiles={build.profiles}
                 setEngine={build.setEngine}

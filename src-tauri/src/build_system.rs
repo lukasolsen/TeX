@@ -45,7 +45,7 @@ pub enum BuildEngine {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BuildRequest {
     project_path: String,
     root_file: String,
@@ -63,7 +63,6 @@ pub struct BuildInvocation {
     environment: Vec<EnvironmentSetting>,
     bibliography_tool: BibliographyTool,
     custom: bool,
-    tool_version: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -449,7 +448,6 @@ fn validate_build_with_resolver(
             environment: configuration.environment,
             bibliography_tool: configuration.bibliography_tool,
             custom,
-            tool_version: None,
         },
     })
 }
@@ -1040,8 +1038,8 @@ mod tests {
     }
 
     #[test]
-    fn ignores_frontend_supplied_build_configuration() -> Result<(), Box<dyn std::error::Error>> {
-        let request: BuildRequest = serde_json::from_value(serde_json::json!({
+    fn rejects_frontend_supplied_build_configuration() -> Result<(), Box<dyn std::error::Error>> {
+        let request = serde_json::from_value::<BuildRequest>(serde_json::json!({
             "projectPath": fixture_root().to_string_lossy(),
             "rootFile": "main.tex",
             "engine": "latexmkPdf",
@@ -1054,15 +1052,9 @@ mod tests {
                 "customCommandConsent": true,
                 "shellEscapeConsent": true
             }
-        }))?;
-        let validated =
-            validate_build_with_resolver(request, ProjectBuildConfiguration::default(), |_| {
-                Some(std::path::PathBuf::from("/usr/bin/latexmk"))
-            })
-            .map_err(|_| "validation failed")?;
+        }));
 
-        assert!(!validated.invocation.custom);
-        assert_eq!(validated.invocation.executable, "/usr/bin/latexmk");
+        assert!(request.is_err());
         Ok(())
     }
 

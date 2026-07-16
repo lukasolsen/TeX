@@ -65,7 +65,10 @@ export function BuildConfigurationDialog({
     }
   }
 
-  const setCustom = (executable: string, argumentsList: string[]) => {
+  const setCustom = (
+    executable: string,
+    argumentsList: ReadonlyArray<string>
+  ) => {
     setDraft((current) => ({
       ...current,
       customCommand:
@@ -219,13 +222,6 @@ export function BuildConfigurationDialog({
                 {formatBuildInvocation({
                   executable: custom.executable,
                   arguments: custom.arguments,
-                  workingDirectory: "project root",
-                  rootFile: draft.rootFile ?? "selected root",
-                  engine: "latexmkPdf",
-                  environment: draft.environment,
-                  bibliographyTool: draft.bibliographyTool,
-                  custom: true,
-                  toolVersion: null,
                 })}
               </p>
               <p className="mt-3 text-xs text-muted-foreground">

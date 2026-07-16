@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, StartupState } from "@/domain/project"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { RecentProjectList } from "@/features/projects/recent-project-list"
 
 export function ProjectHomePage({
@@ -34,9 +35,9 @@ export function ProjectHomePage({
 }: {
   feedback: OpenProjectFeedback
   onClearFeedback: () => void
-  onForgetProject: (path: string) => void
+  onForgetProject: (path: CanonicalProjectPath) => void
   onOpenProject: () => void
-  onOpenRecent: (path: string) => void
+  onOpenRecent: (path: CanonicalProjectPath) => void
   onOpenSettings: () => void
   startup: StartupState
 }) {

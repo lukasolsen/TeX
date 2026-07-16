@@ -9,6 +9,11 @@ import {
   type ProjectBuildConfiguration,
   type ProjectBuildConfigurationState,
 } from "@/domain/build"
+import {
+  projectRelativePath,
+  type CanonicalProjectPath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import {
   getBuildHistory,
@@ -36,8 +41,8 @@ export function useProjectBuild({
   beforeBuild: () => Promise<boolean>
   initialEngine: BuildEngine
   onEngineChange: (engine: BuildEngine) => void
-  projectPath: string
-  rootFile: string | null
+  projectPath: CanonicalProjectPath
+  rootFile: ProjectRelativePath | null
 }) {
   const [state, dispatch] = useReducer(
     projectBuildReducer,
@@ -180,7 +185,7 @@ export function useProjectBuild({
     dispatch({ type: "previewLoading" })
     void previewBuild({
       projectPath,
-      rootFile: effectiveRoot,
+      rootFile: projectRelativePath(effectiveRoot),
       engine,
     })
       .then((invocation) => {
@@ -211,7 +216,7 @@ export function useProjectBuild({
       }
       const request: BuildRequest = {
         projectPath,
-        rootFile: effectiveRoot,
+        rootFile: projectRelativePath(effectiveRoot),
         engine,
       }
       const run = await startBuild(request)

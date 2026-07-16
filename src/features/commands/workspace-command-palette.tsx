@@ -33,13 +33,22 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import type { ProjectEntry } from "@/domain/project"
+import {
+  projectRelativePath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import { isReadableSource } from "@/features/projects/project-model"
 import { shortcutLabel } from "@/lib/shortcuts"
 
-function readableFiles(entry: ProjectEntry, parent = ""): string[] {
-  const paths: string[] = []
+function readableFiles(
+  entry: ProjectEntry,
+  parent: ProjectRelativePath | null = null
+): ProjectRelativePath[] {
+  const paths: ProjectRelativePath[] = []
   for (const child of entry.children) {
-    const path = parent === "" ? child.name : `${parent}/${child.name}`
+    const path = projectRelativePath(
+      parent === null ? child.name : `${parent}/${child.name}`
+    )
     if (child.kind === "directory") paths.push(...readableFiles(child, path))
     else if (isReadableSource(path)) paths.push(path)
   }
@@ -84,7 +93,7 @@ export function WorkspaceCommandPalette({
   onNextDiagnostic: () => void
   onOpenChange: (open: boolean) => void
   onOpenBuild: () => void
-  onOpenFile: (path: string) => void
+  onOpenFile: (path: ProjectRelativePath) => void
   onOpenProject: () => void
   onOpenSettings: () => void
   onPreviousDiagnostic: () => void

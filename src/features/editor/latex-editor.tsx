@@ -57,6 +57,11 @@ import {
 } from "@/features/editor/latex-semantic-highlighting"
 import type { EditorViewerState, ProjectEntry } from "@/domain/project"
 import {
+  projectRelativePath,
+  type CanonicalProjectPath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
+import {
   isReadableSource,
   treeContainsPath,
 } from "@/features/projects/project-model"
@@ -104,11 +109,13 @@ const projectReferenceField = StateField.define({
 
 function projectFilePaths(
   entry: ProjectEntry,
-  parentPath = "",
-  paths = new Set<string>()
-): Set<string> {
+  parentPath: ProjectRelativePath | null = null,
+  paths = new Set<ProjectRelativePath>()
+): Set<ProjectRelativePath> {
   for (const child of entry.children) {
-    const path = parentPath === "" ? child.name : `${parentPath}/${child.name}`
+    const path = projectRelativePath(
+      parentPath === null ? child.name : `${parentPath}/${child.name}`
+    )
     if (child.kind === "file") paths.add(path)
     projectFilePaths(child, path, paths)
   }
@@ -253,13 +260,13 @@ export function LatexEditor({
   initialViewerState: EditorViewerState | undefined
   onChange: (content: string) => void
   onCursorChange: (line: number, column: number) => void
-  onOpenReference: (path: string) => void
+  onOpenReference: (path: ProjectRelativePath) => void
   onSave: () => void
-  onViewerStateChange: (path: string, state: EditorViewerState) => void
-  path: string
-  projectPath: string
+  onViewerStateChange: (path: ProjectRelativePath, state: EditorViewerState) => void
+  path: ProjectRelativePath
+  projectPath: CanonicalProjectPath
   projectTree: ProjectEntry
-  retainedPaths: string[]
+  retainedPaths: ReadonlyArray<ProjectRelativePath>
   target: EditorTarget | null
 }) {
   const host = useRef<HTMLDivElement>(null)
@@ -283,7 +290,7 @@ export function LatexEditor({
   const extensions = useRef<Extension[]>([])
   const documentStates = useRef(
     new Map<
-      string,
+      ProjectRelativePath,
       { state: EditorState; scrollTop: number; scrollLeft: number }
     >()
   )

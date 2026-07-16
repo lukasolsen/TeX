@@ -1,5 +1,7 @@
 import { useEffect } from "react"
 
+import type { CanonicalProjectPath } from "@/domain/identifiers"
+
 import {
   listenForProjectFileEvents,
   startProjectTreeWatch,
@@ -12,7 +14,7 @@ export function useProjectTreeWatch({
   projectPath,
 }: {
   onFilesChanged: () => void
-  projectPath: string
+  projectPath: CanonicalProjectPath
 }) {
   useEffect(() => {
     let active = true

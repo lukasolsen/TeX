@@ -15,6 +15,7 @@ import type {
   ProjectEntry,
   ProjectSidebarTab,
 } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import { ProjectTree } from "@/features/projects/project-tree"
 import { DocumentOutlinePanel } from "@/features/projects/document-outline-panel"
 import {
@@ -49,9 +50,9 @@ function DirectReferencesPanel({
   tree,
 }: {
   documentState: AsyncDocumentState
-  onOpenPdf: (path: string) => void
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
   tree: ProjectEntry
 }) {
   if (documentState.status === "loading") {
@@ -192,20 +193,20 @@ export function ProjectSidebar({
   activeLine: number | null
   documentState: AsyncDocumentState
   onCreate: (
-    parentPath: string | null,
+    parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
   ) => Promise<void>
-  onDelete: (path: string) => Promise<void>
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
-  onOpenPdf: (path: string) => void
-  onRename: (path: string, name: string) => Promise<void>
+  onDelete: (path: ProjectRelativePath) => Promise<void>
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
+  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
   onNavigateOutline: (line: number) => void
-  rootFiles: string[]
-  selectedFile: string | null
-  selectedPdf: string | null
-  selectedRoot: string | null
+  rootFiles: ProjectRelativePath[]
+  selectedFile: ProjectRelativePath | null
+  selectedPdf: ProjectRelativePath | null
+  selectedRoot: ProjectRelativePath | null
   tree: ProjectEntry
   tab: ProjectSidebarTab
   onTabChange: (tab: ProjectSidebarTab) => void

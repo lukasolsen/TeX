@@ -1,5 +1,7 @@
 import type { Tooltip } from "@codemirror/view"
 
+import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
+
 import {
   latexCommands,
   latexFileReferenceAt,
@@ -176,7 +178,7 @@ const keywordInfo: Record<string, KeywordInfo> = {
 
 export function referencedFileAt(
   source: string,
-  sourcePath: string,
+  sourcePath: ProjectRelativePath,
   position: number
 ): LatexFileReference | null {
   return latexFileReferenceAt(source, sourcePath, position)
@@ -264,7 +266,10 @@ function card(
 }
 
 /** Provides editor-local documentation and project-file previews without modifying source text. */
-export function latexHoverTooltip(projectPath: string, sourcePath: string) {
+export function latexHoverTooltip(
+  projectPath: CanonicalProjectPath,
+  sourcePath: ProjectRelativePath
+) {
   return async (
     view: { state: { doc: { toString(): string } } },
     position: number

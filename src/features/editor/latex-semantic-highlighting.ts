@@ -12,10 +12,11 @@ import {
   latexFileReferences,
   type LatexGroup,
 } from "@/domain/latex"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 
 export type LatexSemanticContext = {
-  sourcePath: string
-  projectFiles: ReadonlySet<string>
+  sourcePath: ProjectRelativePath
+  projectFiles: ReadonlySet<ProjectRelativePath>
 }
 
 export type LatexSemanticToken = {
@@ -82,8 +83,8 @@ function groupValueTokens(
 }
 
 function projectContainsReference(
-  projectFiles: ReadonlySet<string>,
-  path: string
+  projectFiles: ReadonlySet<ProjectRelativePath>,
+  path: ProjectRelativePath
 ): boolean {
   if (projectFiles.has(path)) return true
   return (

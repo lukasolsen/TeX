@@ -49,7 +49,7 @@ pub struct ProjectSearchResponse {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FileRevisionExpectation {
     pub path: String,
     pub revision: SourceRevision,
@@ -71,14 +71,14 @@ pub struct SearchError {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReplaceTransaction {
     project_path: String,
     files: Vec<ReplaceBackup>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReplaceBackup {
     path: String,
     content: String,

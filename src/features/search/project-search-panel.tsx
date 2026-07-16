@@ -15,6 +15,7 @@ import type {
   ProjectSearchResponse,
   ReplaceResponse,
 } from "@/domain/project"
+import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
 import {
   projectErrorFromUnknown,
   replaceProjectSources,
@@ -52,8 +53,8 @@ export function ProjectSearchPanel({
 }: {
   onClose: () => void
   onFilesChanged: () => void
-  onNavigate: (path: string, line: number, column: number) => void
-  projectPath: string
+  onNavigate: (path: ProjectRelativePath, line: number, column: number) => void
+  projectPath: CanonicalProjectPath
 }) {
   const [query, setQuery] = useState("")
   const [replacement, setReplacement] = useState("")
@@ -73,11 +74,11 @@ export function ProjectSearchPanel({
     if (query.trim() === "") return
     const timer = window.setTimeout(async () => {
       try {
-        const response = await searchProjectSources(
+        const response = await searchProjectSources({
           projectPath,
           query,
-          caseSensitive
-        )
+          caseSensitive,
+        })
         if (request.current === currentRequest)
           setState({ status: "ready", response })
       } catch (error: unknown) {
@@ -107,7 +108,7 @@ export function ProjectSearchPanel({
       : null
   const expectedFiles = useMemo(() => {
     const files = new Map<
-      string,
+      ProjectRelativePath,
       ProjectSearchResponse["results"][number]["revision"]
     >()
     for (const result of response?.results ?? [])
@@ -119,13 +120,13 @@ export function ProjectSearchPanel({
     if (response === null) return
     setState({ status: "replacing", response })
     try {
-      const result = await replaceProjectSources(
+      const result = await replaceProjectSources({
         projectPath,
         query,
         replacement,
         caseSensitive,
-        expectedFiles
-      )
+        expectedFiles,
+      })
       setPreviewing(false)
       setState({ status: "replaced", result })
       onFilesChanged()
@@ -139,11 +140,11 @@ export function ProjectSearchPanel({
     try {
       await undoProjectReplace(result.transactionId)
       onFilesChanged()
-      const response = await searchProjectSources(
+      const response = await searchProjectSources({
         projectPath,
         query,
-        caseSensitive
-      )
+        caseSensitive,
+      })
       setState({ status: "ready", response })
     } catch (error: unknown) {
       setState({ status: "error", error: projectErrorFromUnknown(error) })

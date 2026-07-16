@@ -23,7 +23,7 @@ pub struct SourceEditError {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecoveryDraft {
     pub project_path: String,
     pub relative_path: String,

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { CleanPreview } from "@/domain/build"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import {
   cleanAuxiliaryFiles,
   previewCleanAuxiliaryFiles,
@@ -34,7 +35,7 @@ export function CleanAuxiliaryDialog({
 }: {
   onOpenChange: (open: boolean) => void
   open: boolean
-  projectPath: string
+  projectPath: CanonicalProjectPath
 }) {
   const [state, setState] = useState<CleanState>({ status: "loading" })
 

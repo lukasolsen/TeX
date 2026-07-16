@@ -11,6 +11,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import type { AsyncDocumentState } from "@/domain/project"
+import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
 
 export function SourceTabs({
   onClose,
@@ -22,14 +23,14 @@ export function SourceTabs({
   projectPath,
   selectedFile,
 }: {
-  onClose: (path: string) => void
-  onCloseMany: (paths: string[]) => void
-  onPin: (path: string) => void
-  onSelect: (path: string) => void
+  onClose: (path: ProjectRelativePath) => void
+  onCloseMany: (paths: ReadonlyArray<ProjectRelativePath>) => void
+  onPin: (path: ProjectRelativePath) => void
+  onSelect: (path: ProjectRelativePath) => void
   documentState: AsyncDocumentState
-  pinnedFiles: string[]
-  projectPath: string
-  selectedFile: string | null
+  pinnedFiles: ReadonlyArray<ProjectRelativePath>
+  projectPath: CanonicalProjectPath
+  selectedFile: ProjectRelativePath | null
 }) {
   const previewFile =
     selectedFile !== null && !pinnedFiles.includes(selectedFile)

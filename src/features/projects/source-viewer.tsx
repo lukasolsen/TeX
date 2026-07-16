@@ -28,6 +28,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import type { AsyncDocumentState, EditorViewerState } from "@/domain/project"
 import type { ProjectEntry } from "@/domain/project"
+import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 import { shortcutLabel } from "@/lib/shortcuts"
 
@@ -49,16 +50,16 @@ export function SourceViewer({
 }: {
   fontSize: number
   initialViewerState: EditorViewerState | undefined
-  onChange: (path: string, content: string) => void
-  onCursorChange: (path: string, line: number, column: number) => void
-  onOpenReference: (path: string) => void
+  onChange: (path: ProjectRelativePath, content: string) => void
+  onCursorChange: (path: ProjectRelativePath, line: number, column: number) => void
+  onOpenReference: (path: ProjectRelativePath) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onSave: () => void
-  onViewerStateChange: (path: string, state: EditorViewerState) => void
-  projectPath: string
+  onViewerStateChange: (path: ProjectRelativePath, state: EditorViewerState) => void
+  projectPath: CanonicalProjectPath
   projectTree: ProjectEntry
-  retainedPaths: string[]
+  retainedPaths: ReadonlyArray<ProjectRelativePath>
   state: AsyncDocumentState
   target: EditorTarget | null
 }) {

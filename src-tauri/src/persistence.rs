@@ -35,7 +35,7 @@ pub struct StartupState {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppPreferences {
     pub color_theme: ColorTheme,
     #[serde(default = "default_accent_color")]
@@ -77,7 +77,7 @@ pub enum ProjectAvailability {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceState {
     pub project_path: String,
     #[serde(default)]
@@ -137,7 +137,7 @@ pub enum BuildProfile {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorViewerState {
     pub line: u32,
     pub column: u32,
@@ -146,7 +146,7 @@ pub struct EditorViewerState {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PdfViewerState {
     pub page: u32,
     pub position: f64,
@@ -186,7 +186,7 @@ impl fmt::Display for PersistenceError {
 impl Error for PersistenceError {}
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PersistedState {
     version: u8,
     recent_projects: Vec<PersistedRecentProject>,
@@ -196,7 +196,7 @@ struct PersistedState {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PersistedRecentProject {
     name: String,
     path: String,

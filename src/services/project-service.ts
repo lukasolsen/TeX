@@ -1,6 +1,11 @@
 import { invoke } from "@tauri-apps/api/core"
 
 import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
+
+import type {
   ProjectError,
   AppPreferences,
   ProjectSearchResponse,
@@ -12,6 +17,20 @@ import type {
   StartupState,
   WorkspaceState,
 } from "@/domain/project"
+import {
+  parseAppPreferences,
+  parseBinaryResponse,
+  parseForwardSearchResult,
+  parseInverseSearchResult,
+  parseOptionalProjectPath,
+  parsePdfRevision,
+  parseProjectSearchResponse,
+  parseProjectSummary,
+  parseRecoveryDraft,
+  parseReplaceResponse,
+  parseSourceDocument,
+  parseStartupState,
+} from "@/services/project-contract"
 
 const unexpectedProjectError: ProjectError = {
   code: "unavailable",
@@ -19,20 +38,22 @@ const unexpectedProjectError: ProjectError = {
     "TeX could not complete that project action. Your project files were not changed.",
 }
 
-export async function chooseProjectFolder(): Promise<string | null> {
-  return invoke<string | null>("choose_project_folder")
+export async function chooseProjectFolder(): Promise<CanonicalProjectPath | null> {
+  return parseOptionalProjectPath(await invoke<unknown>("choose_project_folder"))
 }
 
-export async function openProjectFolder(path: string): Promise<ProjectSummary> {
-  return invoke<ProjectSummary>("open_project", { path })
+export async function openProjectFolder(
+  path: CanonicalProjectPath
+): Promise<ProjectSummary> {
+  return parseProjectSummary(await invoke<unknown>("open_project", { path }))
 }
 
 export async function loadStartupState(): Promise<StartupState> {
-  return invoke<StartupState>("load_startup_state")
+  return parseStartupState(await invoke<unknown>("load_startup_state"))
 }
 
 export async function loadAppPreferences(): Promise<AppPreferences> {
-  return invoke<AppPreferences>("load_app_preferences")
+  return parseAppPreferences(await invoke<unknown>("load_app_preferences"))
 }
 
 export async function saveAppPreferences(
@@ -41,8 +62,12 @@ export async function saveAppPreferences(
   return invoke("save_app_preferences", { preferences })
 }
 
-export async function forgetRecentProject(path: string): Promise<StartupState> {
-  return invoke<StartupState>("forget_recent_project", { projectPath: path })
+export async function forgetRecentProject(
+  path: CanonicalProjectPath
+): Promise<StartupState> {
+  return parseStartupState(
+    await invoke<unknown>("forget_recent_project", { projectPath: path })
+  )
 }
 
 export async function saveWorkspaceState(
@@ -52,88 +77,114 @@ export async function saveWorkspaceState(
 }
 
 export async function readProjectSource(
-  projectPath: string,
-  relativePath: string
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
 ): Promise<SourceDocument> {
-  return invoke<SourceDocument>("read_project_source", {
-    projectPath,
-    relativePath,
-  })
+  return parseSourceDocument(
+    await invoke<unknown>("read_project_source", {
+      projectPath,
+      relativePath,
+    })
+  )
 }
 
 export async function readProjectPdf(
-  projectPath: string,
-  relativePath: string
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
 ): Promise<Uint8Array> {
-  const response = await invoke<ArrayBuffer>("read_project_pdf", {
+  const response = await invoke<unknown>("read_project_pdf", {
     projectPath,
     relativePath,
   })
-  return new Uint8Array(response)
+  return parseBinaryResponse(response)
 }
 
 export async function projectPdfRevision(
-  projectPath: string,
-  relativePath: string
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
 ): Promise<string> {
-  return invoke<string>("project_pdf_revision", { projectPath, relativePath })
+  return parsePdfRevision(
+    await invoke<unknown>("project_pdf_revision", { projectPath, relativePath })
+  )
 }
 
 export type ForwardSearchResult = { page: number; x: number; y: number }
-export type InverseSearchResult = { path: string; line: number; column: number }
+export type InverseSearchResult = {
+  path: ProjectRelativePath
+  line: number
+  column: number
+}
 
 export async function synctexForwardSearch(
-  projectPath: string,
-  pdfPath: string,
-  sourcePath: string,
-  line: number,
-  column: number
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    pdfPath: ProjectRelativePath
+    sourcePath: ProjectRelativePath
+    line: number
+    column: number
+  }>
 ): Promise<ForwardSearchResult> {
-  return invoke<ForwardSearchResult>("synctex_forward_search", {
-    projectPath,
-    pdfPath,
-    sourcePath,
-    line,
-    column,
-  })
+  const { projectPath, pdfPath, sourcePath, line, column } = request
+  return parseForwardSearchResult(
+    await invoke<unknown>("synctex_forward_search", {
+      projectPath,
+      pdfPath,
+      sourcePath,
+      line,
+      column,
+    })
+  )
 }
 
 export async function synctexInverseSearch(
-  projectPath: string,
-  pdfPath: string,
-  page: number,
-  x: number,
-  y: number
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    pdfPath: ProjectRelativePath
+    page: number
+    x: number
+    y: number
+  }>
 ): Promise<InverseSearchResult> {
-  return invoke<InverseSearchResult>("synctex_inverse_search", {
-    projectPath,
-    pdfPath,
-    page,
-    x,
-    y,
-  })
+  const { projectPath, pdfPath, page, x, y } = request
+  return parseInverseSearchResult(
+    await invoke<unknown>("synctex_inverse_search", {
+      projectPath,
+      pdfPath,
+      page,
+      x,
+      y,
+    })
+  )
 }
 
 export async function saveProjectSource(
-  projectPath: string,
-  relativePath: string,
-  content: string,
-  expectedRevision: SourceRevision
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+    content: string
+    expectedRevision: SourceRevision
+  }>
 ): Promise<SourceDocument> {
-  return invoke<SourceDocument>("save_project_source", {
-    projectPath,
-    relativePath,
-    content,
-    expectedRevision,
-  })
+  const { projectPath, relativePath, content, expectedRevision } = request
+  return parseSourceDocument(
+    await invoke<unknown>("save_project_source", {
+      projectPath,
+      relativePath,
+      content,
+      expectedRevision,
+    })
+  )
 }
 
 export async function saveRecoveryDraft(
-  projectPath: string,
-  relativePath: string,
-  content: string,
-  baseRevision: SourceRevision
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+    content: string
+    baseRevision: SourceRevision
+  }>
 ): Promise<void> {
+  const { projectPath, relativePath, content, baseRevision } = request
   return invoke("save_recovery_draft", {
     projectPath,
     relativePath,
@@ -143,62 +194,89 @@ export async function saveRecoveryDraft(
 }
 
 export async function loadRecoveryDraft(
-  projectPath: string,
-  relativePath: string
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+  }>
 ): Promise<RecoveryDraft | null> {
-  return invoke<RecoveryDraft | null>("load_recovery_draft", {
-    projectPath,
-    relativePath,
-  })
+  const { projectPath, relativePath } = request
+  return parseRecoveryDraft(
+    await invoke<unknown>("load_recovery_draft", {
+      projectPath,
+      relativePath,
+    })
+  )
 }
 
 export async function discardRecoveryDraft(
-  projectPath: string,
-  relativePath: string
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+  }>
 ): Promise<void> {
+  const { projectPath, relativePath } = request
   return invoke("discard_recovery_draft", { projectPath, relativePath })
 }
 
 export async function searchProjectSources(
-  projectPath: string,
-  query: string,
-  caseSensitive: boolean
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    query: string
+    caseSensitive: boolean
+  }>
 ): Promise<ProjectSearchResponse> {
-  return invoke<ProjectSearchResponse>("search_project_sources", {
-    projectPath,
-    query,
-    caseSensitive,
-  })
+  const { projectPath, query, caseSensitive } = request
+  return parseProjectSearchResponse(
+    await invoke<unknown>("search_project_sources", {
+      projectPath,
+      query,
+      caseSensitive,
+    })
+  )
 }
 
 export async function replaceProjectSources(
-  projectPath: string,
-  query: string,
-  replacement: string,
-  caseSensitive: boolean,
-  expectedFiles: { path: string; revision: SourceRevision }[]
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    query: string
+    replacement: string
+    caseSensitive: boolean
+    expectedFiles: ReadonlyArray<{
+      path: ProjectRelativePath
+      revision: SourceRevision
+    }>
+  }>
 ): Promise<ReplaceResponse> {
-  return invoke<ReplaceResponse>("replace_project_sources", {
-    projectPath,
-    query,
-    replacement,
-    caseSensitive,
-    expectedFiles,
-  })
+  const { projectPath, query, replacement, caseSensitive, expectedFiles } =
+    request
+  return parseReplaceResponse(
+    await invoke<unknown>("replace_project_sources", {
+      projectPath,
+      query,
+      replacement,
+      caseSensitive,
+      expectedFiles,
+    })
+  )
 }
 
 export async function undoProjectReplace(
   transactionId: string
 ): Promise<ReplaceResponse> {
-  return invoke<ReplaceResponse>("undo_project_replace", { transactionId })
+  return parseReplaceResponse(
+    await invoke<unknown>("undo_project_replace", { transactionId })
+  )
 }
 
 export async function createProjectEntry(
-  projectPath: string,
-  parentPath: string | null,
-  name: string,
-  directory: boolean
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    parentPath: ProjectRelativePath | null
+    name: string
+    directory: boolean
+  }>
 ): Promise<void> {
+  const { projectPath, parentPath, name, directory } = request
   return invoke("create_project_entry", {
     projectPath,
     parentPath,
@@ -208,17 +286,23 @@ export async function createProjectEntry(
 }
 
 export async function renameProjectEntry(
-  projectPath: string,
-  relativePath: string,
-  name: string
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+    name: string
+  }>
 ): Promise<void> {
+  const { projectPath, relativePath, name } = request
   return invoke("rename_project_entry", { projectPath, relativePath, name })
 }
 
 export async function deleteProjectEntry(
-  projectPath: string,
-  relativePath: string
+  request: Readonly<{
+    projectPath: CanonicalProjectPath
+    relativePath: ProjectRelativePath
+  }>
 ): Promise<void> {
+  const { projectPath, relativePath } = request
   return invoke("delete_project_entry", { projectPath, relativePath })
 }
 
@@ -229,9 +313,20 @@ export function projectErrorFromUnknown(error: unknown): ProjectError {
     "code" in error &&
     "message" in error &&
     typeof error.code === "string" &&
-    typeof error.message === "string"
+    typeof error.message === "string" &&
+    /^[a-z\d-]{1,64}$/.test(error.code) &&
+    error.message.length <= 8_192 &&
+    !hasControlCharacters(error.message)
   ) {
     return { code: error.code, message: error.message }
   }
   return unexpectedProjectError
+}
+
+function hasControlCharacters(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code < 32 || code === 127) return true
+  }
+  return false
 }

@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Input } from "@/components/ui/input"
 import type { ProjectEntry } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import {
   isReadableSource,
   isPdf,
@@ -34,7 +35,7 @@ import {
 import { cn } from "@/lib/utils"
 
 type CreationTarget = {
-  parentPath: string | null
+  parentPath: ProjectRelativePath | null
   directory: boolean
 }
 
@@ -45,7 +46,11 @@ function CreateEntryInput({
   parentPath,
 }: CreationTarget & {
   onCancel: () => void
-  onCreate: (parentPath: string | null, name: string, directory: boolean) => Promise<void>
+  onCreate: (
+    parentPath: ProjectRelativePath | null,
+    name: string,
+    directory: boolean
+  ) => Promise<void>
 }) {
   const [name, setName] = useState("")
   const input = useRef<HTMLInputElement>(null)
@@ -105,7 +110,7 @@ function EntryIcon({
 }: {
   expanded: boolean
   isDirectory: boolean
-  path: string
+  path: ProjectRelativePath
 }) {
   if (isDirectory) {
     return expanded ? (
@@ -140,24 +145,24 @@ function TreeBranch({
   selectedRoot,
 }: {
   creation: CreationTarget | null
-  entry: ProjectEntry & { path: string }
+  entry: ProjectEntry & { path: ProjectRelativePath }
   level: number
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
-  onOpenPdf: (path: string) => void
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
   onCreate: (
-    parentPath: string | null,
+    parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
   ) => Promise<void>
   onCancelCreate: () => void
   onStartCreate: (target: CreationTarget) => void
-  onRename: (path: string, name: string) => Promise<void>
-  onDelete: (path: string) => Promise<void>
-  rootFiles: string[]
-  selectedFile: string | null
-  selectedPdf: string | null
-  selectedRoot: string | null
+  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
+  onDelete: (path: ProjectRelativePath) => Promise<void>
+  rootFiles: ProjectRelativePath[]
+  selectedFile: ProjectRelativePath | null
+  selectedPdf: ProjectRelativePath | null
+  selectedRoot: ProjectRelativePath | null
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDirectory = entry.kind === "directory"
@@ -330,20 +335,20 @@ export function ProjectTree({
   selectedRoot,
   tree,
 }: {
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
-  onOpenPdf: (path: string) => void
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
   onCreate: (
-    parentPath: string | null,
+    parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
   ) => Promise<void>
-  onRename: (path: string, name: string) => Promise<void>
-  onDelete: (path: string) => Promise<void>
-  rootFiles: string[]
-  selectedFile: string | null
-  selectedPdf: string | null
-  selectedRoot: string | null
+  onRename: (path: ProjectRelativePath, name: string) => Promise<void>
+  onDelete: (path: ProjectRelativePath) => Promise<void>
+  rootFiles: ProjectRelativePath[]
+  selectedFile: ProjectRelativePath | null
+  selectedPdf: ProjectRelativePath | null
+  selectedRoot: ProjectRelativePath | null
   tree: ProjectEntry
 }) {
   const [creation, setCreation] = useState<CreationTarget | null>(null)

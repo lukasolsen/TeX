@@ -1,3 +1,8 @@
+import {
+  projectRelativePath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
+
 export type LatexGroup = {
   from: number
   to: number
@@ -15,7 +20,7 @@ export type LatexCommand = {
 export type LatexFileReference = {
   from: number
   to: number
-  path: string
+  path: ProjectRelativePath
   command: string
 }
 
@@ -147,9 +152,9 @@ function normalizeProjectPath(path: string): string | null {
 
 export function resolveLatexFilePath(
   value: string,
-  sourcePath: string,
+  sourcePath: ProjectRelativePath,
   command: string
-): string | null {
+): ProjectRelativePath | null {
   const spec = fileCommandSpecs[command]
   if (spec === undefined || value.includes("\\") || value.includes("#")) {
     return null
@@ -162,12 +167,15 @@ export function resolveLatexFilePath(
   const directory = sourcePath.includes("/")
     ? sourcePath.slice(0, sourcePath.lastIndexOf("/"))
     : ""
-  return normalizeProjectPath(directory === "" ? name : `${directory}/${name}`)
+  const normalized = normalizeProjectPath(
+    directory === "" ? name : `${directory}/${name}`
+  )
+  return normalized === null ? null : projectRelativePath(normalized)
 }
 
 export function latexFileReferences(
   source: string,
-  sourcePath: string
+  sourcePath: ProjectRelativePath
 ): LatexFileReference[] {
   const references: LatexFileReference[] = []
   for (const command of latexCommands(source)) {
@@ -208,7 +216,7 @@ export function latexFileReferences(
 
 export function latexFileReferenceAt(
   source: string,
-  sourcePath: string,
+  sourcePath: ProjectRelativePath,
   position: number
 ): LatexFileReference | null {
   return (

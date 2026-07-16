@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 
 import type { WatchStatus } from "@/domain/build"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import {
   acknowledgeProjectWatchBuild,
@@ -24,7 +25,7 @@ export function useProjectWatch({
   build: () => Promise<void>
   buildRunning: boolean
   onFilesChanged: () => void
-  projectPath: string
+  projectPath: CanonicalProjectPath
 }) {
   const [state, setState] = useState<ProjectWatchState>({
     status: "off",

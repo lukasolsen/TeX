@@ -13,7 +13,7 @@ pub(crate) const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
 pub(crate) const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceRevision {
     pub byte_length: u64,
     pub content_hash: String,

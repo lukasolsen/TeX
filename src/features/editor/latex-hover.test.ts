@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { keywordAt, referencedFileAt } from "@/features/editor/latex-hover"
+import { projectRelativePath } from "@/domain/identifiers"
 
 describe("keywordAt", () => {
   it("recognizes a command from every hover position", () => {
@@ -21,7 +22,9 @@ describe("keywordAt", () => {
     const source = "\\input{chapters/introduction}"
     const position = source.indexOf("introduction")
 
-    expect(referencedFileAt(source, "main.tex", position)).toMatchObject({
+    expect(
+      referencedFileAt(source, projectRelativePath("main.tex"), position)
+    ).toMatchObject({
       path: "chapters/introduction.tex",
       command: "input",
     })
@@ -31,7 +34,11 @@ describe("keywordAt", () => {
     const source = "% \\input{draft} and \\section{Old}"
 
     expect(
-      referencedFileAt(source, "main.tex", source.indexOf("draft"))
+      referencedFileAt(
+        source,
+        projectRelativePath("main.tex"),
+        source.indexOf("draft")
+      )
     ).toBeNull()
     expect(keywordAt(source, source.indexOf("section"))).toBeNull()
   })

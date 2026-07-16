@@ -10,6 +10,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import type { RecentProject } from "@/domain/project"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { formatLastOpened } from "@/features/projects/project-model"
 
 export function RecentProjectList({
@@ -17,9 +18,9 @@ export function RecentProjectList({
   onForget,
   onOpen,
 }: {
-  projects: RecentProject[]
-  onForget: (path: string) => void
-  onOpen: (path: string) => void
+  projects: ReadonlyArray<RecentProject>
+  onForget: (path: CanonicalProjectPath) => void
+  onOpen: (path: CanonicalProjectPath) => void
 }) {
   if (projects.length === 0) {
     return (

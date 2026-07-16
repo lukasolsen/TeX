@@ -50,6 +50,7 @@ import {
 } from "@/domain/build"
 import type { ProjectError } from "@/domain/project"
 import type { BuildPanelTab } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
 import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 
@@ -83,7 +84,7 @@ export function BuildPanel({
   engine: BuildEngine
   onBuild: () => void
   onClose: () => void
-  onNavigate: (path: string, line: number) => void
+  onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelectDiagnostic: (index: number) => void
   onStop: () => void
   onStartWatch: () => void
@@ -423,9 +424,6 @@ function SelectedRunMetadata({ run }: { run: BuildRun | null }) {
         ? ""
         : ` · finished ${formatRunTime(run.finishedAt)}`}{" "}
       · exit {run.exitCode ?? "—"}
-      {run.invocation.toolVersion === null
-        ? ""
-        : ` · ${run.invocation.toolVersion}`}
     </p>
   )
 }
@@ -582,7 +580,7 @@ function BuildProblems({
 }: {
   activeIndex: number | null
   issue: ProjectError | null
-  onNavigate: (path: string, line: number) => void
+  onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelect: (index: number) => void
   run: BuildRun | null
 }) {

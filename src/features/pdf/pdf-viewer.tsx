@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import type { PdfViewerState, ProjectError } from "@/domain/project"
+import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
 import { cn } from "@/lib/utils"
 import { shortcutLabel } from "@/lib/shortcuts"
 import {
@@ -241,11 +242,15 @@ export function PdfViewer({
   initialState: PdfViewerState | undefined
   onClose: () => void
   onStateChange: (state: PdfViewerState) => void
-  onNavigateSource: (path: string, line: number, column: number) => void
-  path: string | null
-  projectPath: string
+  onNavigateSource: (path: ProjectRelativePath, line: number, column: number) => void
+  path: ProjectRelativePath | null
+  projectPath: CanonicalProjectPath
   refreshToken: string
-  sourceLocation: { path: string; line: number; column: number } | null
+  sourceLocation: {
+    path: ProjectRelativePath
+    line: number
+    column: number
+  } | null
 }) {
   const [viewer, setViewer] = useState(initialState ?? defaultViewerState)
   const [loadState, setLoadState] = useState<PdfLoadState>({
@@ -680,13 +685,13 @@ export function PdfViewer({
     syncGeneration.current = generation
     setSyncStatus("Synchronizing source to PDF…")
     try {
-      const result = await synctexForwardSearch(
+      const result = await synctexForwardSearch({
         projectPath,
-        path,
-        sourceLocation.path,
-        sourceLocation.line,
-        sourceLocation.column
-      )
+        pdfPath: path,
+        sourcePath: sourceLocation.path,
+        line: sourceLocation.line,
+        column: sourceLocation.column,
+      })
       if (generation !== syncGeneration.current) return
       setSyncMarker(result)
       goToPage(result.page)
@@ -704,7 +709,13 @@ export function PdfViewer({
       syncGeneration.current = generation
       setSyncStatus("Synchronizing PDF to source…")
       try {
-        const result = await synctexInverseSearch(projectPath, path, page, x, y)
+        const result = await synctexInverseSearch({
+          projectPath,
+          pdfPath: path,
+          page,
+          x,
+          y,
+        })
         if (generation !== syncGeneration.current) return
         onNavigateSource(result.path, result.line, result.column)
         setSyncStatus(`Synchronized to ${result.path}, line ${result.line}`)

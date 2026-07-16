@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ProjectSummary } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import { rootEvidenceLabel } from "@/features/projects/project-model"
 
 export function RootFileControl({
@@ -16,9 +17,9 @@ export function RootFileControl({
   project,
   selectedRoot,
 }: {
-  onSelectRoot: (path: string) => void
+  onSelectRoot: (path: ProjectRelativePath) => void
   project: ProjectSummary
-  selectedRoot: string | null
+  selectedRoot: ProjectRelativePath | null
 }) {
   const selectedCandidate = project.rootCandidates.find(
     (candidate) => candidate.path === selectedRoot
