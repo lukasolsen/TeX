@@ -2,7 +2,7 @@
 
 Ledger revision: 1  
 Baseline commit: `eb95280770d2a7b15703f4ebbd3af6ca7e4af767`  
-Inventory state: complete; line review pending
+Inventory state: complete; Waves A–B reviewed
 
 Every maintained file has one primary review wave. `Inventoried` means the
 file's existence, broad owner, and review assignment are recorded; it does not
@@ -21,14 +21,14 @@ artifact evidence.
 | Wave | Scope | Files | Status |
 | --- | --- | ---: | --- |
 | A | Repository boundary | 26 ledger rows | Reviewed; 1 removed |
-| B | Rust filesystem and persistence | 10 | Inventoried |
+| B | Rust filesystem and persistence | 11 | Reviewed |
 | C | Rust process, parser, and event boundary | 6 | Inventoried |
 | D | Domain and IPC contracts | 9 | Inventoried |
 | E | React orchestration | 11 | Inventoried |
 | F | Editor, search, project tree, and UI | 23 | Inventoried |
 | G | PDF and synchronization UI | 3 | Inventoried |
 | H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
-| **Total** | | **237 ledger rows / 236 maintained** | **Wave A reviewed** |
+| **Total** | | **238 ledger rows / 237 maintained** | **Waves A–B reviewed** |
 
 ## File register
 
@@ -99,20 +99,21 @@ artifact evidence.
 | `src-tauri/icons/StoreLogo.png` | H | Inventoried | — |
 | `src-tauri/src/build_operations.rs` | C | Inventoried | — |
 | `src-tauri/src/build_system.rs` | C | Inventoried | — |
+| `src-tauri/src/bounded_io.rs` | B | Reviewed | TEX-B-003; bounded open-handle reads |
 | `src-tauri/src/latex_fixtures.rs` | C | Inventoried | — |
 | `src-tauri/src/lib.rs` | D | Inventoried | — |
 | `src-tauri/src/main.rs` | D | Inventoried | — |
-| `src-tauri/src/pdf_read.rs` | B | Inventoried | — |
-| `src-tauri/src/persistence.rs` | B | Inventoried | — |
-| `src-tauri/src/project_access.rs` | B | In review | TEX-B-001 |
-| `src-tauri/src/project_config.rs` | B | Inventoried | — |
-| `src-tauri/src/project_files.rs` | B | Inventoried | — |
-| `src-tauri/src/project_open.rs` | B | Inventoried | — |
-| `src-tauri/src/project_search.rs` | B | Inventoried | — |
+| `src-tauri/src/pdf_read.rs` | B | Reviewed | TEX-B-003; bounded reads and symlink rejection |
+| `src-tauri/src/persistence.rs` | B | Reviewed | TEX-B-003; bounded state and collection limits |
+| `src-tauri/src/project_access.rs` | B | Reviewed | TEX-B-001; canonical root identity |
+| `src-tauri/src/project_config.rs` | B | Reviewed | TEX-C-001; bounded config and normal child paths |
+| `src-tauri/src/project_files.rs` | B | Reviewed | TEX-B-002, TEX-B-006, TEX-B-007 |
+| `src-tauri/src/project_open.rs` | B | Reviewed | TEX-B-003; bounded tree allocation |
+| `src-tauri/src/project_search.rs` | B | Reviewed | TEX-B-003, TEX-B-004 |
 | `src-tauri/src/readiness.rs` | C | Inventoried | — |
-| `src-tauri/src/root_detection.rs` | B | Inventoried | — |
-| `src-tauri/src/source_edit.rs` | B | Inventoried | — |
-| `src-tauri/src/source_read.rs` | B | Inventoried | — |
+| `src-tauri/src/root_detection.rs` | B | Reviewed | TEX-B-003; file/entry/depth/read limits |
+| `src-tauri/src/source_edit.rs` | B | Reviewed | TEX-B-003, TEX-B-005; canonical recovery keys |
+| `src-tauri/src/source_read.rs` | B | Reviewed | TEX-B-003; strict relative paths and bounded reads |
 | `src-tauri/src/synctex.rs` | C | Inventoried | — |
 | `src-tauri/src/watch_system.rs` | C | Inventoried | — |
 | `src-tauri/tauri.conf.json` | A | Reviewed | Wave A configuration/workflow/dependency evidence |
