@@ -58,6 +58,11 @@ export type ProjectBuildConfigurationState =
   | { status: "ready"; configuration: ProjectBuildConfiguration }
   | { status: "error"; error: ProjectError }
 
+export type CleanPreview = {
+  files: string[]
+  totalBytes: number
+}
+
 export type BuildInvocation = {
   executable: string
   arguments: string[]

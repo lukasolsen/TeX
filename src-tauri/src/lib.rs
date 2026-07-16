@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod build_operations;
 mod build_system;
 #[cfg(test)]
 mod latex_fixtures;
@@ -61,6 +62,9 @@ pub fn run() {
             build_system::start_build,
             build_system::stop_build,
             build_system::get_build_history,
+            build_operations::preview_clean_auxiliary_files,
+            build_operations::clean_auxiliary_files,
+            build_operations::reveal_project_output,
             watch_system::start_project_watch,
             watch_system::stop_project_watch,
             watch_system::get_project_watch_status,

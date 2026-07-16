@@ -27,6 +27,10 @@ import { BuildPanel } from "@/features/build/build-panel"
 import { useProjectBuild } from "@/features/build/use-project-build"
 import { useProjectWatch } from "@/features/build/use-project-watch"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
+import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
+import { selectedBuildRun, type BuildDiagnostic } from "@/domain/build"
+import { revealProjectOutput } from "@/services/build-service"
+import { projectErrorFromUnknown } from "@/services/project-service"
 
 export function ProjectWorkspacePage({
   feedback,
@@ -107,6 +111,14 @@ export function ProjectWorkspacePage({
   const lastWorkspaceFocus = useRef<WorkspaceFocus>("source")
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [cleanOpen, setCleanOpen] = useState(false)
+  const [diagnosticCursor, setDiagnosticCursor] = useState(0)
+  const [logContextSequence, setLogContextSequence] = useState<number | null>(
+    null
+  )
+  const [buildOperationMessage, setBuildOperationMessage] = useState<
+    string | null
+  >(null)
   const [sourceLocation, setSourceLocation] = useState<{
     path: string
     line: number
@@ -126,6 +138,16 @@ export function ProjectWorkspacePage({
   const pdfOpen = session.workspace.pdfPaneOpen
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
+  const diagnosticRun = selectedBuildRun(build.state)
+  const diagnostics = diagnosticRun?.diagnostics ?? []
+  const activeDiagnosticIndex =
+    diagnostics.length === 0
+      ? null
+      : Math.min(diagnosticCursor, diagnostics.length - 1)
+  const activeDiagnostic =
+    activeDiagnosticIndex === null
+      ? null
+      : (diagnostics[activeDiagnosticIndex] ?? null)
   const watch = useProjectWatch({
     build: build.build,
     buildRunning: running,
@@ -167,6 +189,71 @@ export function ProjectWorkspacePage({
                 ? "External change needs review"
                 : "Recovery draft needs review"
 
+  const selectDiagnostic = (index: number, navigate: boolean) => {
+    const diagnostic = diagnostics[index]
+    if (diagnostic === undefined) return
+    setDiagnosticCursor(index)
+    onUpdateWorkspaceView({
+      buildPanelOpen: true,
+      buildPanelTab: "problems",
+    })
+    if (
+      navigate &&
+      diagnostic.file !== null &&
+      diagnostic.line !== null &&
+      !diagnostic.mappingUncertain
+    ) {
+      setTarget({
+        path: diagnostic.file,
+        line: diagnostic.line,
+        column: 1,
+        token: Date.now(),
+      })
+      onPinFile(diagnostic.file)
+    }
+  }
+
+  const moveDiagnostic = (offset: number) => {
+    if (diagnostics.length === 0) return
+    const current = activeDiagnosticIndex ?? 0
+    const next = (current + offset + diagnostics.length) % diagnostics.length
+    selectDiagnostic(next, true)
+  }
+
+  const copyDiagnostic = async () => {
+    const diagnostic = activeDiagnostic ?? diagnostics[0]
+    if (diagnostic === undefined) return
+    try {
+      await navigator.clipboard.writeText(formatDiagnostic(diagnostic))
+      setBuildOperationMessage("Diagnostic copied")
+    } catch {
+      setBuildOperationMessage("Could not copy the diagnostic")
+    }
+  }
+
+  const showLogContext = () => {
+    const diagnostic = activeDiagnostic ?? diagnostics[0]
+    if (diagnostic === undefined) return
+    setDiagnosticCursor(Math.max(0, diagnostics.indexOf(diagnostic)))
+    setLogContextSequence(diagnostic.logSequence)
+    onUpdateWorkspaceView({ buildPanelOpen: true, buildPanelTab: "output" })
+  }
+
+  const revealOutput = async () => {
+    const rootFile =
+      build.configurationState.status === "ready"
+        ? (build.configurationState.configuration.rootFile ??
+          session.workspace.selectedRoot)
+        : session.workspace.selectedRoot
+    if (rootFile === null) return
+    try {
+      await revealProjectOutput(session.project.path, rootFile)
+      setBuildOperationMessage("Opened the built PDF location")
+    } catch (error: unknown) {
+      setBuildOperationMessage(projectErrorFromUnknown(error).message)
+    }
+  }
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey
@@ -202,6 +289,16 @@ export function ProjectWorkspacePage({
     onUpdateWorkspaceView,
     session.workspace.editorFontSize,
   ])
+
+  useEffect(() => {
+    const onDiagnosticKey = (event: KeyboardEvent) => {
+      if (event.key !== "F8") return
+      event.preventDefault()
+      moveDiagnostic(event.shiftKey ? -1 : 1)
+    }
+    window.addEventListener("keydown", onDiagnosticKey)
+    return () => window.removeEventListener("keydown", onDiagnosticKey)
+  })
 
   useEffect(() => {
     if (restoreFocusToken === 0) return
@@ -458,15 +555,20 @@ export function ProjectWorkspacePage({
               }}
             >
               <BuildPanel
+                activeDiagnosticIndex={activeDiagnosticIndex}
                 configurationState={build.configurationState}
                 dispatch={build.dispatch}
                 engine={build.engine}
+                logContextSequence={logContextSequence}
                 onBuild={() => void build.build()}
+                onClean={() => setCleanOpen(true)}
                 onClose={() => onUpdateWorkspaceView({ buildPanelOpen: false })}
                 onNavigate={(path, line) => {
                   setTarget({ path, line, column: 1, token: Date.now() })
                   onPinFile(path)
                 }}
+                onRevealOutput={() => void revealOutput()}
+                onSelectDiagnostic={(index) => selectDiagnostic(index, false)}
                 onStop={() => void build.stop()}
                 onStartWatch={() => void watch.start()}
                 onStopWatch={() => void watch.stop()}
@@ -501,6 +603,11 @@ export function ProjectWorkspacePage({
         {saveActivity !== null ? (
           <span className="truncate" role="status">
             {saveActivity}
+          </span>
+        ) : null}
+        {buildOperationMessage !== null ? (
+          <span className="truncate" role="status">
+            {buildOperationMessage}
           </span>
         ) : null}
         <Button
@@ -548,12 +655,24 @@ export function ProjectWorkspacePage({
       </footer>
       <WorkspaceCommandPalette
         buildEnabled={buildEnabled}
+        diagnosticsAvailable={diagnostics.length > 0}
         onBuild={() => void build.build()}
+        onBuildAndView={() => {
+          onUpdateWorkspaceView({ pdfPaneOpen: true })
+          void build.build()
+        }}
+        onClean={() => setCleanOpen(true)}
+        onCopyDiagnostic={() => void copyDiagnostic()}
+        onFirstDiagnostic={() => selectDiagnostic(0, true)}
+        onNextDiagnostic={() => moveDiagnostic(1)}
         onOpenChange={setCommandPaletteOpen}
         onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
         onOpenFile={onPinFile}
         onOpenProject={onOpenProject}
         onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
+        onPreviousDiagnostic={() => moveDiagnostic(-1)}
+        onRevealOutput={() => void revealOutput()}
+        onShowLogContext={showLogContext}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onSave={onSaveDocument}
         onSearch={() => setSearchOpen(true)}
@@ -569,6 +688,21 @@ export function ProjectWorkspacePage({
         watchActive={watch.active}
         tree={session.project.tree}
       />
+      {cleanOpen ? (
+        <CleanAuxiliaryDialog
+          onOpenChange={setCleanOpen}
+          open
+          projectPath={session.project.path}
+        />
+      ) : null}
     </main>
   )
+}
+
+function formatDiagnostic(diagnostic: BuildDiagnostic): string {
+  const location =
+    diagnostic.file === null
+      ? ""
+      : `${diagnostic.file}${diagnostic.line === null ? "" : `:${diagnostic.line}`}: `
+  return `${location}${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`
 }
