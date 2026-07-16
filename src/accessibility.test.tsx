@@ -21,13 +21,11 @@ vi.mock("pdfjs-dist", () => ({
     throw new Error("PDF loading is outside this accessibility fixture.")
   },
   GlobalWorkerOptions: { workerSrc: "" },
-  TextLayer: class {
-    render(): Promise<void> {
-      return Promise.resolve()
-    }
+  TextLayerImages: class {},
+}))
 
-    cancel(): void {}
-  },
+vi.mock("pdfjs-dist/web/pdf_viewer.mjs", () => ({
+  TextLayerBuilder: class {},
 }))
 
 const projectPath = canonicalProjectPath("/projects/report")

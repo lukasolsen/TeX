@@ -212,14 +212,14 @@ body {
 .pdf-page .textLayer {
   inset: 0;
   opacity: 1;
+  pointer-events: auto;
 }
 
-.pdf-page .textLayer span {
-  color: transparent;
-  cursor: text;
+.pdf-page[role="button"] {
+  cursor: default;
 }
 
-.pdf-page .textLayer ::selection {
+.pdf-page .textLayer span:not([role="img"])::selection {
   background: color-mix(in oklch, var(--primary) 34%, transparent);
 }
 

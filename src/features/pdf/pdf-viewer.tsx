@@ -21,11 +21,12 @@ import {
 import {
   getDocument,
   GlobalWorkerOptions,
-  TextLayer,
+  TextLayerImages,
   type PDFDocumentProxy,
   type PDFDocumentLoadingTask,
   type PDFPageProxy,
 } from "pdfjs-dist"
+import { TextLayerBuilder } from "pdfjs-dist/web/pdf_viewer.mjs"
 import "pdfjs-dist/web/pdf_viewer.css"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -211,8 +212,6 @@ function PdfPage({
     canvas.style.width = `${viewport.width}px`
     canvas.style.height = `${viewport.height}px`
     textHost.replaceChildren()
-    textHost.style.width = `${viewport.width}px`
-    textHost.style.height = `${viewport.height}px`
 
     // Match the render transform to the allocated integer bitmap exactly. This
     // avoids a second fractional rescale when the viewport has subpixel edges.
@@ -227,7 +226,14 @@ function PdfPage({
           : [outputScaleX, 0, 0, outputScaleY, 0, 0],
       viewport,
     })
-    let textLayer: TextLayer | null = null
+    const textLayer = new TextLayerBuilder({
+      pdfPage: page,
+      onAppend: (layer: HTMLDivElement) => {
+        layer.style.width = `${viewport.width}px`
+        layer.style.height = `${viewport.height}px`
+        textHost.replaceChildren(layer)
+      },
+    })
     let effectActive = true
 
     void renderTask.promise.catch((error: unknown) => {
@@ -240,23 +246,21 @@ function PdfPage({
       }
     })
 
-    void page
-      .getTextContent()
-      .then((content) => {
-        if (!effectActive) return
-
-        textLayer = new TextLayer({
-          container: textHost,
-          textContentSource: content,
+    void textLayer
+      .render({
+        viewport,
+        images: new TextLayerImages(
+          0,
+          new Float32Array(),
           viewport,
-        })
-
-        return textLayer.render().then(() => {
-          if (effectActive) {
-            setTextLayerRevision((current) => current + 1)
-            onTextLayerReady(pageNumber)
-          }
-        })
+          () => canvas
+        ),
+      })
+      .then(() => {
+        if (effectActive) {
+          setTextLayerRevision((current) => current + 1)
+          onTextLayerReady(pageNumber)
+        }
       })
       .catch(() => {
         // Canvas rendering remains usable when selectable text is unavailable.
@@ -265,7 +269,7 @@ function PdfPage({
     return () => {
       effectActive = false
       renderTask.cancel()
-      textLayer?.cancel()
+      textLayer.cancel()
       canvas.width = 0
       canvas.height = 0
       textHost.replaceChildren()
@@ -343,7 +347,7 @@ function PdfPage({
       title={`${shortcutLabel(["primary"])}-click to synchronize to source`}
     >
       <canvas aria-hidden="true" ref={canvasRef} />
-      <div className="textLayer" ref={textRef} />
+      <div className="pointer-events-none absolute inset-0" ref={textRef} />
       {pageError ? (
         <span className="absolute inset-0 grid place-items-center text-sm text-destructive">
           Page {pageNumber} could not be rendered.
