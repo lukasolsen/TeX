@@ -1,8 +1,10 @@
-import { lazy, Suspense } from "react"
+import { lazy, Suspense, useState } from "react"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
 import { useProjectSession } from "@/features/projects/use-project-session"
 import { StartupScreen } from "@/components/feedback/startup-screen"
+import { SettingsPage } from "@/pages/settings-page"
+import { useAppPreferences } from "@/features/settings/use-app-preferences"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -11,6 +13,9 @@ const ProjectWorkspacePage = lazy(() =>
 )
 
 export default function App() {
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { preferences, saveError, setAccentColor, setColorTheme } =
+    useAppPreferences()
   const {
     chooseAndOpenProject,
     clearFeedback,
@@ -36,6 +41,23 @@ export default function App() {
   } = useProjectSession()
 
   if (state.status === "starting") return <StartupScreen />
+  if (settingsOpen) {
+    const workspace =
+      state.status === "workspace" ? state.session.workspace : null
+    return (
+      <SettingsPage
+        accentColor={preferences.accentColor}
+        colorTheme={preferences.colorTheme}
+        onClose={() => setSettingsOpen(false)}
+        onSetColorTheme={setColorTheme}
+        onSetAccentColor={setAccentColor}
+        onSetEditorFontSize={setEditorFontSize}
+        onSetSidebarWidth={(width) => resizeSidebar(width, true)}
+        saveError={saveError}
+        workspace={workspace}
+      />
+    )
+  }
   if (state.status === "workspace") {
     return (
       <Suspense fallback={<StartupScreen />}>
@@ -43,6 +65,7 @@ export default function App() {
           feedback={state.openFeedback}
           key={state.session.project.path}
           onOpenProject={chooseAndOpenProject}
+          onOpenSettings={() => setSettingsOpen(true)}
           onReturnHome={returnHome}
           onResizeSidebar={resizeSidebar}
           onCloseFile={closeFile}
@@ -72,6 +95,7 @@ export default function App() {
       onForgetProject={forgetProject}
       onOpenProject={chooseAndOpenProject}
       onOpenRecent={openProjectAtPath}
+      onOpenSettings={() => setSettingsOpen(true)}
       startup={state.startup}
     />
   )

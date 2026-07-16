@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog"
 
 import type {
   ProjectError,
+  AppPreferences,
   ProjectSearchResponse,
   ProjectSummary,
   RecoveryDraft,
@@ -33,6 +34,16 @@ export async function openProjectFolder(path: string): Promise<ProjectSummary> {
 
 export async function loadStartupState(): Promise<StartupState> {
   return invoke<StartupState>("load_startup_state")
+}
+
+export async function loadAppPreferences(): Promise<AppPreferences> {
+  return invoke<AppPreferences>("load_app_preferences")
+}
+
+export async function saveAppPreferences(
+  preferences: AppPreferences
+): Promise<void> {
+  return invoke("save_app_preferences", { preferences })
 }
 
 export async function forgetRecentProject(path: string): Promise<StartupState> {

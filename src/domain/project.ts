@@ -40,6 +40,13 @@ export type WorkspaceState = {
   editorFontSize: number
 }
 
+export type ColorTheme = "system" | "light" | "dark" | "custom"
+
+export type AppPreferences = {
+  colorTheme: ColorTheme
+  accentColor: string
+}
+
 export type StartupState = {
   recentProjects: RecentProject[]
   lastWorkspace: WorkspaceState | null

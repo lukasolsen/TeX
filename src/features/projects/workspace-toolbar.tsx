@@ -4,6 +4,7 @@ import {
   Home,
   Save,
   Search,
+  Settings,
   SquareTerminal,
 } from "lucide-react"
 
@@ -20,6 +21,7 @@ export function WorkspaceToolbar({
   onOpenSearch,
   onReturnHome,
   onSave,
+  onOpenSettings,
   session,
 }: {
   feedback: OpenProjectFeedback
@@ -29,6 +31,7 @@ export function WorkspaceToolbar({
   onOpenSearch: () => void
   onReturnHome: () => void
   onSave: () => void
+  onOpenSettings: () => void
   session: ProjectSession
 }) {
   const isOpening =
@@ -82,6 +85,15 @@ export function WorkspaceToolbar({
         variant="ghost"
       >
         <Search aria-hidden="true" />
+      </Button>
+      <Button
+        aria-label="Open settings"
+        onClick={onOpenSettings}
+        size="icon-sm"
+        title="Open settings"
+        variant="ghost"
+      >
+        <Settings aria-hidden="true" />
       </Button>
       <Button
         aria-label="Command palette"

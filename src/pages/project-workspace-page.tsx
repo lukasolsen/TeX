@@ -23,6 +23,7 @@ export function ProjectWorkspacePage({
   feedback,
   onOpenProject,
   onReturnHome,
+  onOpenSettings,
   onResizeSidebar,
   onCloseFile,
   onCloseFiles,
@@ -43,6 +44,7 @@ export function ProjectWorkspacePage({
   feedback: OpenProjectFeedback
   onOpenProject: () => void
   onReturnHome: () => void
+  onOpenSettings: () => void
   onResizeSidebar: (width: number, persist: boolean) => void
   onCloseFile: (path: string) => void
   onCloseFiles: (paths: string[]) => void
@@ -143,6 +145,7 @@ export function ProjectWorkspacePage({
         onOpenCommands={() => setCommandPaletteOpen(true)}
         onOpenBuild={() => setBuildOpen(true)}
         onOpenSearch={() => setSearchOpen(true)}
+        onOpenSettings={onOpenSettings}
         onReturnHome={onReturnHome}
         onSave={onSaveDocument}
         session={session}

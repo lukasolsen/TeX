@@ -1,4 +1,11 @@
-import { FolderOpen, Home, Info, LockKeyhole, ShieldCheck } from "lucide-react"
+import {
+  FolderOpen,
+  Home,
+  Info,
+  LockKeyhole,
+  Settings,
+  ShieldCheck,
+} from "lucide-react"
 
 import { AppBrand } from "@/components/brand/app-brand"
 import { OpenProjectFeedbackView } from "@/components/feedback/open-project-feedback"
@@ -22,6 +29,7 @@ export function ProjectHomePage({
   onForgetProject,
   onOpenProject,
   onOpenRecent,
+  onOpenSettings,
   startup,
 }: {
   feedback: OpenProjectFeedback
@@ -29,6 +37,7 @@ export function ProjectHomePage({
   onForgetProject: (path: string) => void
   onOpenProject: () => void
   onOpenRecent: (path: string) => void
+  onOpenSettings: () => void
   startup: StartupState
 }) {
   const isOpening =
@@ -59,6 +68,14 @@ export function ProjectHomePage({
           >
             <FolderOpen data-icon="inline-start" />
             Open project
+          </Button>
+          <Button
+            className="w-full justify-start"
+            onClick={onOpenSettings}
+            variant="ghost"
+          >
+            <Settings data-icon="inline-start" />
+            Settings
           </Button>
         </nav>
         <div className="mt-auto px-5 py-5">
@@ -91,6 +108,16 @@ export function ProjectHomePage({
                 workspace.
               </p>
             </div>
+            <Button
+              aria-label="Open settings"
+              className="md:hidden"
+              onClick={onOpenSettings}
+              size="icon-sm"
+              title="Open settings"
+              variant="ghost"
+            >
+              <Settings aria-hidden="true" />
+            </Button>
           </header>
 
           <section aria-labelledby="start-heading" className="mt-10">

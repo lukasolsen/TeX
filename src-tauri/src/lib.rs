@@ -36,6 +36,8 @@ pub fn run() {
             project_files::delete_project_entry,
             persistence::forget_recent_project,
             persistence::load_startup_state,
+            persistence::load_app_preferences,
+            persistence::save_app_preferences,
             persistence::save_workspace_state,
             source_read::read_project_source,
             source_edit::save_project_source,

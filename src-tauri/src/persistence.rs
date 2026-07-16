@@ -25,6 +25,32 @@ pub struct StartupState {
     pub restoration_notice: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppPreferences {
+    pub color_theme: ColorTheme,
+    #[serde(default = "default_accent_color")]
+    pub accent_color: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ColorTheme {
+    System,
+    Light,
+    Dark,
+    Custom,
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            color_theme: ColorTheme::System,
+            accent_color: default_accent_color(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RecentProject {
@@ -75,6 +101,8 @@ struct PersistedState {
     version: u8,
     recent_projects: Vec<PersistedRecentProject>,
     last_workspace: Option<WorkspaceState>,
+    #[serde(default)]
+    preferences: AppPreferences,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -91,8 +119,43 @@ impl Default for PersistedState {
             version: STATE_VERSION,
             recent_projects: Vec::new(),
             last_workspace: None,
+            preferences: AppPreferences::default(),
         }
     }
+}
+
+/// Loads local application preferences without accessing project files.
+#[tauri::command]
+pub fn load_app_preferences(app: AppHandle) -> Result<AppPreferences, PersistenceError> {
+    Ok(read_state(&state_path(&app)?)?.preferences)
+}
+
+/// Persists validated application preferences outside the user's projects.
+#[tauri::command]
+pub fn save_app_preferences(
+    app: AppHandle,
+    preferences: AppPreferences,
+) -> Result<(), PersistenceError> {
+    if !is_hex_color(&preferences.accent_color) {
+        return Err(PersistenceError {
+            code: "invalid-preference",
+            message: "The selected accent color is not valid.",
+        });
+    }
+    let path = state_path(&app)?;
+    let mut state = read_state(&path)?;
+    state.preferences = preferences;
+    write_state(&path, &state)
+}
+
+fn default_accent_color() -> String {
+    "#2563eb".to_owned()
+}
+
+fn is_hex_color(value: &str) -> bool {
+    value.len() == 7
+        && value.starts_with('#')
+        && value.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit)
 }
 
 /// Loads local application metadata and validates restorable paths before exposing them.
@@ -337,8 +400,8 @@ mod tests {
     };
 
     use super::{
-        load_startup_state_from_path, write_state, PersistedRecentProject, PersistedState,
-        ProjectAvailability, WorkspaceState, STATE_VERSION,
+        load_startup_state_from_path, write_state, AppPreferences, PersistedRecentProject,
+        PersistedState, ProjectAvailability, WorkspaceState, STATE_VERSION,
     };
 
     #[test]
@@ -367,6 +430,7 @@ mod tests {
                     sidebar_width: 999,
                     editor_font_size: 14,
                 }),
+                preferences: AppPreferences::default(),
             },
         )?;
 
