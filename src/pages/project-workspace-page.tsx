@@ -7,7 +7,11 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
-import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
+import type {
+  OpenProjectFeedback,
+  PdfViewerState,
+  ProjectSession,
+} from "@/domain/project"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
@@ -18,10 +22,12 @@ import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
 import { useProjectBuild } from "@/features/build/use-project-build"
+import { PdfViewer } from "@/features/pdf/pdf-viewer"
 
 export function ProjectWorkspacePage({
   feedback,
   onOpenProject,
+  onOpenPdf,
   onReturnHome,
   onOpenSettings,
   onResizeSidebar,
@@ -39,10 +45,12 @@ export function ProjectWorkspacePage({
   onSaveDocument,
   onSetEditorFontSize,
   onSelectRoot,
+  onUpdatePdfViewerState,
   session,
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
+  onOpenPdf: (path: string) => void
   onReturnHome: () => void
   onOpenSettings: () => void
   onResizeSidebar: (width: number, persist: boolean) => void
@@ -64,6 +72,7 @@ export function ProjectWorkspacePage({
   onSaveDocument: () => Promise<boolean>
   onSetEditorFontSize: (fontSize: number) => void
   onSelectRoot: (path: string) => void
+  onUpdatePdfViewerState: (path: string, state: PdfViewerState) => void
   session: ProjectSession
 }) {
   const selectedFile = session.workspace.selectedFile
@@ -71,6 +80,11 @@ export function ProjectWorkspacePage({
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
   const [buildOpen, setBuildOpen] = useState(true)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [sourceLocation, setSourceLocation] = useState<{
+    path: string
+    line: number
+    column: number
+  } | null>(null)
   const [target, setTarget] = useState<
     (EditorTarget & { path: string }) | null
   >(null)
@@ -185,6 +199,7 @@ export function ProjectWorkspacePage({
                 />
               ) : (
                 <ProjectSidebar
+                  onOpenPdf={onOpenPdf}
                   onPinFile={onPinFile}
                   onPreviewFile={onPreviewFile}
                   onCreate={onCreateProjectEntry}
@@ -195,6 +210,7 @@ export function ProjectWorkspacePage({
                     (candidate) => candidate.path
                   )}
                   selectedFile={selectedFile}
+                  selectedPdf={session.workspace.selectedPdf}
                   selectedRoot={session.workspace.selectedRoot}
                   tree={session.project.tree}
                 />
@@ -231,6 +247,9 @@ export function ProjectWorkspacePage({
                 <SourceViewer
                   fontSize={session.workspace.editorFontSize}
                   onChange={onEditDocument}
+                  onCursorChange={(path, line, column) =>
+                    setSourceLocation({ path, line, column })
+                  }
                   onOpenReference={onPinFile}
                   onResolveConflict={onResolveExternalChange}
                   onResolveRecovery={onResolveRecovery}
@@ -246,6 +265,43 @@ export function ProjectWorkspacePage({
                   }
                 />
               </section>
+            </ResizablePanel>
+            <ResizableHandle
+              aria-label="Resize PDF viewer"
+              title="Drag to resize PDF viewer"
+              withHandle
+            />
+            <ResizablePanel defaultSize="42%" id="pdf-viewer" minSize="20%">
+              <PdfViewer
+                key={session.workspace.selectedPdf ?? "empty-pdf-viewer"}
+                initialState={
+                  session.workspace.selectedPdf === null
+                    ? undefined
+                    : session.workspace.pdfViewerStates[
+                        session.workspace.selectedPdf
+                      ]
+                }
+                onStateChange={(viewerState) => {
+                  if (session.workspace.selectedPdf !== null) {
+                    onUpdatePdfViewerState(
+                      session.workspace.selectedPdf,
+                      viewerState
+                    )
+                  }
+                }}
+                onNavigateSource={(path, line, column) => {
+                  setTarget({ path, line, column, token: Date.now() })
+                  onPinFile(path)
+                }}
+                path={session.workspace.selectedPdf}
+                projectPath={session.project.path}
+                refreshToken={
+                  latestBuild?.status === "succeeded"
+                    ? `${latestBuild.id}:${latestBuild.finishedAt ?? ""}`
+                    : ""
+                }
+                sourceLocation={sourceLocation}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>

@@ -16,6 +16,7 @@ import {
 } from "@/features/projects/document-tabs"
 import {
   preferredRoot,
+  preferredPdf,
   preferredSourceFile,
 } from "@/features/projects/project-model"
 import {
@@ -94,6 +95,12 @@ function workspaceForProject(
     ),
     sidebarWidth: restored?.sidebarWidth ?? 288,
     editorFontSize: restored?.editorFontSize ?? 14,
+    selectedPdf: preferredPdf(
+      project,
+      restored?.selectedPdf ?? null,
+      selectedRoot
+    ),
+    pdfViewerStates: restored?.pdfViewerStates ?? {},
   }
 }
 
@@ -994,6 +1001,22 @@ export function useProjectSession() {
                     path,
                     renamedPath
                   ),
+            selectedPdf:
+              current.session.workspace.selectedPdf === null
+                ? null
+                : renamedProjectPath(
+                    current.session.workspace.selectedPdf,
+                    path,
+                    renamedPath
+                  ),
+            pdfViewerStates: Object.fromEntries(
+              Object.entries(current.session.workspace.pdfViewerStates).map(
+                ([pdfPath, viewerState]) => [
+                  renamedProjectPath(pdfPath, path, renamedPath),
+                  viewerState,
+                ]
+              )
+            ),
           }
           const documentState = current.session.documentState
           const nextDocumentState =
@@ -1073,6 +1096,14 @@ export function useProjectSession() {
           pinnedFiles,
           selectedRoot,
           selectedFile: nextFile,
+          selectedPdf: isProjectPathWithin(previous.selectedPdf, path)
+            ? null
+            : previous.selectedPdf,
+          pdfViewerStates: Object.fromEntries(
+            Object.entries(previous.pdfViewerStates).filter(
+              ([pdfPath]) => !isProjectPathWithin(pdfPath, path)
+            )
+          ),
         }
         void saveWorkspaceState(workspace)
         setState((current) => {
@@ -1160,6 +1191,33 @@ export function useProjectSession() {
     })
   }, [])
 
+  const openPdf = useCallback((path: string) => {
+    setState((current) => {
+      if (current.status !== "workspace") return current
+      const workspace = { ...current.session.workspace, selectedPdf: path }
+      void saveWorkspaceState(workspace)
+      return { ...current, session: { ...current.session, workspace } }
+    })
+  }, [])
+
+  const updatePdfViewerState = useCallback(
+    (path: string, viewerState: WorkspaceState["pdfViewerStates"][string]) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = {
+          ...current.session.workspace,
+          pdfViewerStates: {
+            ...current.session.workspace.pdfViewerStates,
+            [path]: viewerState,
+          },
+        }
+        void saveWorkspaceState(workspace)
+        return { ...current, session: { ...current.session, workspace } }
+      })
+    },
+    []
+  )
+
   const refreshActiveDocument = useCallback(async () => {
     const current = stateRef.current
     if (
@@ -1222,6 +1280,7 @@ export function useProjectSession() {
     editDocument,
     forgetProject,
     openProjectAtPath,
+    openPdf,
     pinFile,
     previewFile,
     refreshActiveDocument,
@@ -1234,5 +1293,6 @@ export function useProjectSession() {
     setEditorFontSize,
     saveActiveDocument,
     state,
+    updatePdfViewerState,
   }
 }

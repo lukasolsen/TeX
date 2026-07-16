@@ -120,9 +120,11 @@ export function ProjectSidebar({
   onDelete,
   onPinFile,
   onPreviewFile,
+  onOpenPdf,
   onRename,
   rootFiles,
   selectedFile,
+  selectedPdf,
   selectedRoot,
   tree,
 }: {
@@ -135,9 +137,11 @@ export function ProjectSidebar({
   onDelete: (path: string) => Promise<void>
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
+  onOpenPdf: (path: string) => void
   onRename: (path: string, name: string) => Promise<void>
   rootFiles: string[]
   selectedFile: string | null
+  selectedPdf: string | null
   selectedRoot: string | null
   tree: ProjectEntry
 }) {
@@ -168,9 +172,11 @@ export function ProjectSidebar({
           onDelete={onDelete}
           onPinFile={onPinFile}
           onPreviewFile={onPreviewFile}
+          onOpenPdf={onOpenPdf}
           onRename={onRename}
           rootFiles={rootFiles}
           selectedFile={selectedFile}
+          selectedPdf={selectedPdf}
           selectedRoot={selectedRoot}
           tree={tree}
         />

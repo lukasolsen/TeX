@@ -6,6 +6,7 @@ import {
   FileCode2,
   File,
   FileText,
+  FileType2,
   FilePlus,
   Folder,
   FolderOpen,
@@ -27,6 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ProjectEntry } from "@/domain/project"
 import {
   isReadableSource,
+  isPdf,
   projectTreeNodes,
 } from "@/features/projects/project-model"
 import { cn } from "@/lib/utils"
@@ -51,6 +53,7 @@ function EntryIcon({
     return <FileCode2 aria-hidden="true" className="size-3.5" />
   if (isReadableSource(path))
     return <FileText aria-hidden="true" className="size-3.5" />
+  if (isPdf(path)) return <FileType2 aria-hidden="true" className="size-3.5" />
   return <File aria-hidden="true" className="size-3.5" />
 }
 
@@ -59,17 +62,20 @@ function TreeBranch({
   level,
   onPinFile,
   onPreviewFile,
+  onOpenPdf,
   onCreate,
   onRename,
   onDelete,
   rootFiles,
   selectedFile,
+  selectedPdf,
   selectedRoot,
 }: {
   entry: ProjectEntry & { path: string }
   level: number
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
+  onOpenPdf: (path: string) => void
   onCreate: (
     parentPath: string | null,
     name: string,
@@ -79,11 +85,13 @@ function TreeBranch({
   onDelete: (path: string) => Promise<void>
   rootFiles: string[]
   selectedFile: string | null
+  selectedPdf: string | null
   selectedRoot: string | null
 }) {
   const [expanded, setExpanded] = useState(true)
   const isDirectory = entry.kind === "directory"
   const readable = !isDirectory && isReadableSource(entry.path)
+  const pdf = !isDirectory && isPdf(entry.path)
   const rootLabel =
     !isDirectory && selectedRoot === entry.path
       ? "Root"
@@ -99,19 +107,22 @@ function TreeBranch({
             aria-expanded={isDirectory ? expanded : undefined}
             className={cn(
               "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
-              selectedFile === entry.path && "bg-sidebar-accent text-foreground"
+              (selectedFile === entry.path || selectedPdf === entry.path) &&
+                "bg-sidebar-accent text-foreground"
             )}
-            disabled={!isDirectory && !readable}
+            disabled={!isDirectory && !readable && !pdf}
             onClick={() => {
               if (isDirectory) setExpanded((current) => !current)
+              else if (pdf) onOpenPdf(entry.path)
               else if (readable) onPreviewFile(entry.path)
             }}
             onDoubleClick={() => {
-              if (readable) onPinFile(entry.path)
+              if (pdf) onOpenPdf(entry.path)
+              else if (readable) onPinFile(entry.path)
             }}
             style={{ paddingInlineStart: `${8 + level * 14}px` }}
             title={
-              !isDirectory && !readable
+              !isDirectory && !readable && !pdf
                 ? "Preview is unavailable for this file type"
                 : entry.path
             }
@@ -214,11 +225,13 @@ function TreeBranch({
               level={level + 1}
               onPinFile={onPinFile}
               onPreviewFile={onPreviewFile}
+              onOpenPdf={onOpenPdf}
               onCreate={onCreate}
               onRename={onRename}
               onDelete={onDelete}
               rootFiles={rootFiles}
               selectedFile={selectedFile}
+              selectedPdf={selectedPdf}
               selectedRoot={selectedRoot}
             />
           ))}
@@ -231,16 +244,19 @@ function TreeBranch({
 export function ProjectTree({
   onPinFile,
   onPreviewFile,
+  onOpenPdf,
   onCreate,
   onRename,
   onDelete,
   rootFiles,
   selectedFile,
+  selectedPdf,
   selectedRoot,
   tree,
 }: {
   onPinFile: (path: string) => void
   onPreviewFile: (path: string) => void
+  onOpenPdf: (path: string) => void
   onCreate: (
     parentPath: string | null,
     name: string,
@@ -250,6 +266,7 @@ export function ProjectTree({
   onDelete: (path: string) => Promise<void>
   rootFiles: string[]
   selectedFile: string | null
+  selectedPdf: string | null
   selectedRoot: string | null
   tree: ProjectEntry
 }) {
@@ -269,11 +286,13 @@ export function ProjectTree({
                   level={0}
                   onPinFile={onPinFile}
                   onPreviewFile={onPreviewFile}
+                  onOpenPdf={onOpenPdf}
                   onCreate={onCreate}
                   onRename={onRename}
                   onDelete={onDelete}
                   rootFiles={rootFiles}
                   selectedFile={selectedFile}
+                  selectedPdf={selectedPdf}
                   selectedRoot={selectedRoot}
                 />
               ))}

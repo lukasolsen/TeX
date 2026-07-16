@@ -38,6 +38,20 @@ export type WorkspaceState = {
   selectedFile: string | null
   sidebarWidth: number
   editorFontSize: number
+  selectedPdf: string | null
+  pdfViewerStates: Record<string, PdfViewerState>
+}
+
+export type PdfLayoutMode = "continuous" | "single"
+export type PdfSidebarMode = "none" | "outline"
+
+export type PdfViewerState = {
+  page: number
+  position: number
+  zoom: number
+  rotation: 0 | 90 | 180 | 270
+  layout: PdfLayoutMode
+  sidebar: PdfSidebarMode
 }
 
 export type ColorTheme = "system" | "light" | "dark" | "custom"

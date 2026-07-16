@@ -115,6 +115,10 @@ function sourceEditorTheme(fontSize: number) {
         "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
       padding: "1rem 0 4rem",
     },
+    ".cm-cursor, .cm-dropCursor": {
+      borderLeftColor: "var(--source-foreground)",
+      borderLeftWidth: "2px",
+    },
     ".cm-line": { padding: "0 1rem" },
     ".cm-gutters": {
       backgroundColor: "var(--source)",
@@ -218,6 +222,7 @@ export function LatexEditor({
   fontSize,
   label,
   onChange,
+  onCursorChange,
   onOpenReference,
   onSave,
   path,
@@ -230,6 +235,7 @@ export function LatexEditor({
   fontSize: number
   label: string
   onChange: (content: string) => void
+  onCursorChange: (line: number, column: number) => void
   onOpenReference: (path: string) => void
   onSave: () => void
   path: string
@@ -241,6 +247,7 @@ export function LatexEditor({
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
+  const onCursorChangeRef = useRef(onCursorChange)
   const onOpenReferenceRef = useRef(onOpenReference)
   const onSaveRef = useRef(onSave)
   const applyingExternalContent = useRef(false)
@@ -259,9 +266,10 @@ export function LatexEditor({
 
   useEffect(() => {
     onChangeRef.current = onChange
+    onCursorChangeRef.current = onCursorChange
     onOpenReferenceRef.current = onOpenReference
     onSaveRef.current = onSave
-  }, [onChange, onOpenReference, onSave])
+  }, [onChange, onCursorChange, onOpenReference, onSave])
 
   useEffect(() => {
     contentRef.current = content
@@ -424,6 +432,11 @@ export function LatexEditor({
         if (update.docChanged && !applyingExternalContent.current) {
           onChangeRef.current(update.state.doc.toString())
         }
+        if (update.selectionSet || update.docChanged) {
+          const head = update.state.selection.main.head
+          const line = update.state.doc.lineAt(head)
+          onCursorChangeRef.current(line.number, head - line.from + 1)
+        }
       }),
       themeCompartment.current.of(sourceEditorTheme(fontSizeRef.current)),
       attributesCompartment.current.of(
@@ -447,6 +460,7 @@ export function LatexEditor({
     window.addEventListener("tex:toggle-comment", toggleLineComment)
     window.addEventListener("tex:find-in-file", findInFile)
     view.current = editor
+    onCursorChangeRef.current(1, 1)
     return () => {
       window.removeEventListener("tex:toggle-comment", toggleLineComment)
       window.removeEventListener("tex:find-in-file", findInFile)
@@ -518,6 +532,9 @@ export function LatexEditor({
     })
     editor.scrollDOM.scrollTop = restored?.scrollTop ?? 0
     activePath.current = path
+    const head = editor.state.selection.main.head
+    const activeLine = editor.state.doc.lineAt(head)
+    onCursorChangeRef.current(activeLine.number, head - activeLine.from + 1)
     editor.dispatch({
       effects: setLatexSemanticContext.of({
         sourcePath: path,

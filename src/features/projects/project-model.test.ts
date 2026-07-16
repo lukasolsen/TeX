@@ -4,6 +4,8 @@ import type { ProjectSummary } from "@/domain/project"
 import {
   formatLastOpened,
   isReadableSource,
+  isPdf,
+  preferredPdf,
   preferredRoot,
   preferredSourceFile,
   projectTreeNodes,
@@ -24,6 +26,7 @@ const project: ProjectSummary = {
         children: [{ name: "intro.tex", kind: "file", children: [] }],
       },
       { name: "main.tex", kind: "file", children: [] },
+      { name: "main.pdf", kind: "file", children: [] },
     ],
   },
   rootCandidates: [{ path: "main.tex", evidence: ["documentClass"] }],
@@ -37,6 +40,7 @@ describe("project model", () => {
     expect(rootNodes.map((entry) => entry.path)).toEqual([
       "chapters",
       "main.tex",
+      "main.pdf",
     ])
     expect(projectTreeNodes(rootNodes[0], rootNodes[0].path)[0].path).toBe(
       "chapters/intro.tex"
@@ -61,6 +65,13 @@ describe("project model", () => {
   it("keeps preview support explicit and case-insensitive", () => {
     expect(isReadableSource("sources/MAIN.TEX")).toBe(true)
     expect(isReadableSource("figures/chart.pdf")).toBe(false)
+    expect(isPdf("figures/CHART.PDF")).toBe(true)
+  })
+
+  it("restores a project PDF or selects the root output", () => {
+    expect(preferredPdf(project, null, "main.tex")).toBe("main.pdf")
+    expect(preferredPdf(project, "missing.pdf", "main.tex")).toBe("main.pdf")
+    expect(preferredPdf(project, "main.pdf", null)).toBe("main.pdf")
   })
 
   it("finds direct LaTeX dependencies and ignores comments", () => {

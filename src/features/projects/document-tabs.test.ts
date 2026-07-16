@@ -14,6 +14,8 @@ const workspace: WorkspaceState = {
   selectedRoot: "main.tex",
   sidebarWidth: 288,
   editorFontSize: 14,
+  selectedPdf: null,
+  pdfViewerStates: {},
 }
 
 describe("document tabs", () => {

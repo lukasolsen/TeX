@@ -66,6 +66,59 @@ export async function readProjectSource(
   })
 }
 
+export async function readProjectPdf(
+  projectPath: string,
+  relativePath: string
+): Promise<Uint8Array> {
+  const response = await invoke<ArrayBuffer>("read_project_pdf", {
+    projectPath,
+    relativePath,
+  })
+  return new Uint8Array(response)
+}
+
+export async function projectPdfRevision(
+  projectPath: string,
+  relativePath: string
+): Promise<string> {
+  return invoke<string>("project_pdf_revision", { projectPath, relativePath })
+}
+
+export type ForwardSearchResult = { page: number; x: number; y: number }
+export type InverseSearchResult = { path: string; line: number; column: number }
+
+export async function synctexForwardSearch(
+  projectPath: string,
+  pdfPath: string,
+  sourcePath: string,
+  line: number,
+  column: number
+): Promise<ForwardSearchResult> {
+  return invoke<ForwardSearchResult>("synctex_forward_search", {
+    projectPath,
+    pdfPath,
+    sourcePath,
+    line,
+    column,
+  })
+}
+
+export async function synctexInverseSearch(
+  projectPath: string,
+  pdfPath: string,
+  page: number,
+  x: number,
+  y: number
+): Promise<InverseSearchResult> {
+  return invoke<InverseSearchResult>("synctex_inverse_search", {
+    projectPath,
+    pdfPath,
+    page,
+    x,
+    y,
+  })
+}
+
 export async function saveProjectSource(
   projectPath: string,
   relativePath: string,

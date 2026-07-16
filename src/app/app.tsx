@@ -26,6 +26,7 @@ export default function App() {
     editDocument,
     forgetProject,
     openProjectAtPath,
+    openPdf,
     pinFile,
     refreshActiveDocument,
     resizeSidebar,
@@ -38,6 +39,7 @@ export default function App() {
     setEditorFontSize,
     saveActiveDocument,
     state,
+    updatePdfViewerState,
   } = useProjectSession()
 
   if (state.status === "starting") return <StartupScreen />
@@ -65,6 +67,7 @@ export default function App() {
           feedback={state.openFeedback}
           key={state.session.project.path}
           onOpenProject={chooseAndOpenProject}
+          onOpenPdf={openPdf}
           onOpenSettings={() => setSettingsOpen(true)}
           onReturnHome={returnHome}
           onResizeSidebar={resizeSidebar}
@@ -83,6 +86,7 @@ export default function App() {
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}
           session={state.session}
+          onUpdatePdfViewerState={updatePdfViewerState}
         />
       </Suspense>
     )

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     error::Error,
     fmt, fs,
     io::{self, Write},
@@ -78,6 +79,35 @@ pub struct WorkspaceState {
     pub sidebar_width: u16,
     #[serde(default = "default_editor_font_size")]
     pub editor_font_size: u8,
+    #[serde(default)]
+    pub selected_pdf: Option<String>,
+    #[serde(default)]
+    pub pdf_viewer_states: HashMap<String, PdfViewerState>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfViewerState {
+    pub page: u32,
+    pub position: f64,
+    pub zoom: f64,
+    pub rotation: u16,
+    pub layout: PdfLayoutMode,
+    pub sidebar: PdfSidebarMode,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PdfLayoutMode {
+    Continuous,
+    Single,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PdfSidebarMode {
+    None,
+    Outline,
 }
 
 #[derive(Debug, Serialize)]
@@ -201,8 +231,20 @@ pub fn save_workspace_state(
 
     validate_optional_file(&canonical_root, workspace.selected_root.as_deref())?;
     validate_optional_file(&canonical_root, workspace.selected_file.as_deref())?;
+    validate_optional_pdf(&canonical_root, workspace.selected_pdf.as_deref())?;
     for path in &workspace.pinned_files {
         validate_optional_file(&canonical_root, Some(path))?;
+    }
+    for (path, viewer) in &workspace.pdf_viewer_states {
+        validate_optional_pdf(&canonical_root, Some(path))?;
+        if !viewer.position.is_finite()
+            || !viewer.zoom.is_finite()
+            || !(0.0..=1.0).contains(&viewer.position)
+            || !(0.25..=5.0).contains(&viewer.zoom)
+            || !matches!(viewer.rotation, 0 | 90 | 180 | 270)
+        {
+            return Err(unavailable());
+        }
     }
 
     let path = state_path(&app)?;
@@ -244,6 +286,8 @@ pub fn record_project_opened(
         selected_file: None,
         sidebar_width: DEFAULT_SIDEBAR_WIDTH,
         editor_font_size: default_editor_font_size(),
+        selected_pdf: None,
+        pdf_viewer_states: HashMap::new(),
     });
     write_state(&path, &state)
 }
@@ -284,6 +328,16 @@ fn startup_state_from_persisted(
                     .to_owned(),
             );
         }
+        if !optional_pdf_exists_within(&root, workspace.selected_pdf.as_deref()) {
+            workspace.selected_pdf = None;
+            restoration_notice = Some(
+                "The previously open PDF is no longer available. The project was restored safely."
+                    .to_owned(),
+            );
+        }
+        workspace
+            .pdf_viewer_states
+            .retain(|path, _| optional_pdf_exists_within(&root, Some(path)));
         workspace
             .pinned_files
             .retain(|path| optional_file_exists_within(&root, Some(path)));
@@ -358,6 +412,28 @@ fn validate_optional_file(root: &Path, relative: Option<&str>) -> Result<(), Per
     }
 }
 
+fn validate_optional_pdf(root: &Path, relative: Option<&str>) -> Result<(), PersistenceError> {
+    if optional_pdf_exists_within(root, relative) {
+        Ok(())
+    } else {
+        Err(PersistenceError {
+            code: "invalid-workspace-path",
+            message: "Workspace state contains a PDF that is no longer available.",
+        })
+    }
+}
+
+fn optional_pdf_exists_within(root: &Path, relative: Option<&str>) -> bool {
+    let Some(relative) = relative else {
+        return true;
+    };
+    Path::new(relative)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("pdf"))
+        && optional_file_exists_within(root, Some(relative))
+}
+
 fn optional_file_exists_within(root: &Path, relative: Option<&str>) -> bool {
     let Some(relative) = relative else {
         return true;
@@ -395,6 +471,7 @@ fn unavailable() -> PersistenceError {
 #[cfg(test)]
 mod tests {
     use std::{
+        collections::HashMap,
         fs,
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -429,6 +506,8 @@ mod tests {
                     selected_file: Some("missing.tex".to_owned()),
                     sidebar_width: 999,
                     editor_font_size: 14,
+                    selected_pdf: None,
+                    pdf_viewer_states: HashMap::new(),
                 }),
                 preferences: AppPreferences::default(),
             },

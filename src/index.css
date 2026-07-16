@@ -7,7 +7,7 @@
 
 @theme inline {
   --font-heading: var(--font-sans);
-  --font-sans: 'Inter Variable', sans-serif;
+  --font-sans: "Inter Variable", sans-serif;
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -195,7 +195,7 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply antialiased bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
   }
   html {
     @apply font-sans;
@@ -205,6 +205,25 @@
 html,
 body {
   height: 100%;
+}
+
+.pdf-page .textLayer {
+  inset: 0;
+  opacity: 1;
+}
+
+.pdf-page .textLayer span {
+  color: transparent;
+  cursor: text;
+}
+
+.pdf-page .textLayer ::selection {
+  background: color-mix(in oklch, var(--primary) 34%, transparent);
+}
+
+.pdf-page .textLayer .pdf-search-match {
+  border-radius: 0.1rem;
+  background: color-mix(in oklch, var(--primary) 32%, transparent);
 }
 
 body {

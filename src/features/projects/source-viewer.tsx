@@ -33,6 +33,7 @@ import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 export function SourceViewer({
   fontSize,
   onChange,
+  onCursorChange,
   onOpenReference,
   onResolveConflict,
   onResolveRecovery,
@@ -45,6 +46,7 @@ export function SourceViewer({
 }: {
   fontSize: number
   onChange: (path: string, content: string) => void
+  onCursorChange: (path: string, line: number, column: number) => void
   onOpenReference: (path: string) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
@@ -167,6 +169,9 @@ export function SourceViewer({
         fontSize={fontSize}
         label={`Edit ${state.document.path}`}
         onChange={(content) => onChange(state.document.path, content)}
+        onCursorChange={(line, column) =>
+          onCursorChange(state.document.path, line, column)
+        }
         onOpenReference={onOpenReference}
         onSave={onSave}
         path={state.document.path}

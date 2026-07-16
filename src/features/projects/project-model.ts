@@ -40,6 +40,27 @@ export function isReadableSource(path: string): boolean {
   return extension !== undefined && readableSourceExtensions.has(extension)
 }
 
+export function isPdf(path: string): boolean {
+  return path.toLocaleLowerCase().endsWith(".pdf")
+}
+
+export function preferredPdf(
+  project: ProjectSummary,
+  persistedPdf: string | null,
+  selectedRoot: string | null
+): string | null {
+  if (
+    persistedPdf !== null &&
+    isPdf(persistedPdf) &&
+    treeContainsPath(project.tree, persistedPdf)
+  ) {
+    return persistedPdf
+  }
+  if (selectedRoot === null) return null
+  const output = selectedRoot.replace(/\.[^/.]+$/, ".pdf")
+  return treeContainsPath(project.tree, output) ? output : null
+}
+
 /** Extracts direct file references from common LaTeX commands without resolving TeX's full macro language. */
 export function texDependencies(
   source: string,
