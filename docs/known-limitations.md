@@ -4,6 +4,9 @@
   process. Raw compiler logs can contain document fragments and sensitive paths;
   TeX does not persist them across restart without a future explicit retention
   and redaction design.
+- PDF text selection is restored after replacement only when the selected text
+  remains within a matching PDF.js text-layer span. TeX defers automatic swaps
+  while a selection is active so the user can finish or copy it first.
 
 Revision: 2026-07-16
 

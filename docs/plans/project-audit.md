@@ -85,14 +85,14 @@ performance/accessibility/platform qualification.
 | --- | --- | --- |
 | Keep the last readable PDF during builds and update failures | **Implemented** | The viewer only refreshes on successful builds/external revision changes and retains the current document when a replacement cannot be read or parsed. |
 | Preserve page, normalized position, zoom, rotation, layout, and outline state | **Implemented** | `pdf-viewer.tsx`, `pdf-viewer-model.ts`, and persisted per-PDF state restore these values and clamp page selection. |
-| Preserve selection, active interaction, and exact focus across replacement | **Missing — larger work** | Selected text and active scrolling/selecting are not captured, and replacement is not deferred while the user is interacting. Focus is not deliberately moved, but there is no explicit focus-restoration contract or regression test. |
+| Preserve selection, active interaction, and exact focus across replacement | **Implemented; platform qualification open** | Scrolling/pointer/text-selection activity defers replacement with an explicit quiet apply action; focused controls are restored without scrolling, and same-text-layer selection is restored best-effort after PDF.js rerenders. Packaged assistive-technology/browser qualification remains open. |
 | Continuous/single layouts, zoom, fit, rotation, text selection, find, outline, page picker, keyboard scrolling | **Implemented** | All listed viewer controls and PageUp/PageDown plus keyboard find/zoom routes exist. |
 | Search-result navigation | **Implemented** | Previous/next page-match controls and match status are provided. |
 | Explicit forward and inverse SyncTeX navigation | **Implemented** | `synctex.rs` invokes the supported CLI; source-to-PDF uses an explicit toolbar action and PDF-to-source requires a modifier click. Unavailable/stale data is explained. |
-| Cancellable/stale-safe synchronization requests | **Partial** | Errors are safe, but requests cannot be cancelled and an older request is not explicitly prevented from completing after a newer one. |
+| Cancellable/stale-safe synchronization requests | **Implemented** | Monotonic request generations invalidate stale PDF load/outline, search, outline navigation, and forward/inverse SyncTeX results before any state or navigation update. Superseded PDF documents are destroyed. |
 | Per-project/output viewer persistence | **Implemented** | Viewer state is keyed by project-relative PDF path inside each persisted workspace. |
-| External PDF rebuild handling and attribution | **Partial** | Revision polling applies the safe update path, but the UI does not distinguish an external rebuild from an in-app build. |
-| Repeated-update and failure stress gate | **Missing — larger work** | There is no automated 100-success/100-failure viewer replacement test or focus/selection regression harness. |
+| External PDF rebuild handling and attribution | **Implemented** | Build refresh tokens and external revision changes share the safe candidate path but produce distinct update-ready and completion announcements. Build-token changes reset the external revision baseline to avoid duplicate attribution. |
+| Repeated-update and failure stress gate | **Implemented; packaged qualification open** | TypeScript model tests run 100 success and 100 failure replacements with full reading-state/last-good invariants; Rust repeats 100 valid and 100 failed reads on the multi-file NASA SyncTeX fixture and covers oversized/missing/path failures. Packaged focus/selection/memory stress remains open. |
 
 ### Phase 5 and quality policy
 
@@ -119,14 +119,11 @@ The following order keeps the plan's reliability-first intent:
 1. **Workspace persistence qualification** — run packaged restart, resize,
    keyboard, focus, migration, corruption, and missing-path smoke tests on each
    supported platform.
-2. **PDF replacement hardening** — preserve focus/selection, defer swaps during
-   active interaction, attribute external rebuilds, cancel stale SyncTeX work,
-   and add the 100-update/100-failure stress harness.
-3. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
+2. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
    build/PDF latency, run keyboard/screen-reader/IME smoke tests on supported
    platforms, and publish versions, machines, percentiles, and known limits.
-4. **Safe deletion recovery** — move deleted project entries to a recoverable
+3. **Safe deletion recovery** — move deleted project entries to a recoverable
    project-local or OS trash workflow where platform/filesystem support permits,
    with explicit fallback behavior.
 
-Phase 5 conveniences should wait until items 1–4 have clear release evidence.
+Phase 5 conveniences should wait until items 1–3 have clear release evidence.
