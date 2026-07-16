@@ -284,6 +284,13 @@ pub fn get_build_history(
 }
 
 fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {
+    validate_build_with_availability(request, executable_available)
+}
+
+fn validate_build_with_availability(
+    request: BuildRequest,
+    executable_is_available: impl Fn(&str) -> bool,
+) -> Result<ValidatedBuild, BuildError> {
     let project_root = canonical_project_root(Path::new(&request.project_path))?;
     let relative_root = Path::new(&request.root_file);
     if relative_root.extension().and_then(|value| value.to_str()) != Some("tex") {
@@ -291,19 +298,18 @@ fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {
     }
     resolve_source_path(&project_root, relative_root).map_err(|_| invalid_root())?;
 
-    let profile = request.engine.profile();
-    if !profile.available {
-        return Err(BuildError {
-            code: "build-tool-unavailable",
-            message: "The selected LaTeX build tool is not installed or is unavailable on PATH.",
-        });
-    }
     let (executable, mut arguments) = match request.engine {
         BuildEngine::LatexmkPdf => ("latexmk", vec!["-pdf"]),
         BuildEngine::PdfLatex => ("pdflatex", Vec::new()),
         BuildEngine::XeLatex => ("xelatex", Vec::new()),
         BuildEngine::LuaLatex => ("lualatex", Vec::new()),
     };
+    if !executable_is_available(executable) {
+        return Err(BuildError {
+            code: "build-tool-unavailable",
+            message: "The selected LaTeX build tool is not installed or is unavailable on PATH.",
+        });
+    }
     arguments.extend(["-interaction=nonstopmode", "-file-line-error", "-synctex=1"]);
     let mut arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
     arguments.push(request.root_file.clone());
@@ -680,8 +686,9 @@ mod tests {
     use std::{fs, path::Path};
 
     use super::{
-        executable_available_in, file_line_message, parse_diagnostic, validate_build, BuildEngine,
-        BuildEvent, BuildLogEntry, BuildLogStream, BuildRequest, BuildStatus, DiagnosticSeverity,
+        executable_available_in, file_line_message, parse_diagnostic, validate_build,
+        validate_build_with_availability, BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream,
+        BuildRequest, BuildStatus, DiagnosticSeverity,
     };
 
     fn fixture_root() -> std::path::PathBuf {
@@ -691,11 +698,14 @@ mod tests {
     #[test]
     fn constructs_a_safe_latexmk_invocation() -> Result<(), Box<dyn std::error::Error>> {
         let root = fixture_root();
-        let validated = validate_build(BuildRequest {
-            project_path: root.to_string_lossy().into_owned(),
-            root_file: "main.tex".to_owned(),
-            engine: BuildEngine::LatexmkPdf,
-        })
+        let validated = validate_build_with_availability(
+            BuildRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                root_file: "main.tex".to_owned(),
+                engine: BuildEngine::LatexmkPdf,
+            },
+            |_| true,
+        )
         .map_err(|_| "validation failed")?;
 
         assert_eq!(validated.invocation.executable, "latexmk");
