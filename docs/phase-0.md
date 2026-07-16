@@ -1,5 +1,10 @@
 # Phase 0 foundation
 
+> Historical foundation: Phase 0 is complete. The restrictions below describe
+> the initial architecture gate, not the application's current capabilities.
+> Project access and controlled compiler execution were added behind validated
+> Rust commands in later phases.
+
 Phase 0 establishes contracts and proof points before TeX is allowed to open user projects or execute a compiler. The application intentionally exposes no filesystem or shell capability in this phase.
 
 ## Decisions made

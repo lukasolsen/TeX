@@ -4,6 +4,8 @@ import {
   Hammer,
   MessageSquareText,
   PanelBottomOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Search,
   Save,
   Settings,
@@ -23,6 +25,7 @@ import {
 } from "@/components/ui/command"
 import type { ProjectEntry } from "@/domain/project"
 import { isReadableSource } from "@/features/projects/project-model"
+import { shortcutLabel } from "@/lib/shortcuts"
 
 function readableFiles(entry: ProjectEntry, parent = ""): string[] {
   const paths: string[] = []
@@ -42,11 +45,13 @@ export function WorkspaceCommandPalette({
   onOpenFile,
   onOpenProject,
   onOpenSettings,
+  onTogglePdf,
   onSave,
   onSearch,
   onZoomIn,
   onZoomOut,
   open,
+  pdfOpen,
   tree,
 }: {
   buildEnabled: boolean
@@ -56,11 +61,13 @@ export function WorkspaceCommandPalette({
   onOpenFile: (path: string) => void
   onOpenProject: () => void
   onOpenSettings: () => void
+  onTogglePdf: () => void
   onSave: () => void
   onSearch: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   open: boolean
+  pdfOpen: boolean
   tree: ProjectEntry
 }) {
   const run = (command: () => void) => {
@@ -78,14 +85,19 @@ export function WorkspaceCommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenBuild)}>
             <PanelBottomOpen /> Show build details
-            <CommandShortcut>Ctrl Shift B</CommandShortcut>
+            <CommandShortcut>
+              {shortcutLabel(["primary", "shift", "b"])}
+            </CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => run(onSave)}>
-            <Save /> Save source <CommandShortcut>Ctrl S</CommandShortcut>
+            <Save /> Save source
+            <CommandShortcut>{shortcutLabel(["primary", "s"])}</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => run(onSearch)}>
             <Search /> Search project{" "}
-            <CommandShortcut>Ctrl Shift F</CommandShortcut>
+            <CommandShortcut>
+              {shortcutLabel(["primary", "shift", "f"])}
+            </CommandShortcut>
           </CommandItem>
           <CommandItem
             onSelect={() =>
@@ -93,7 +105,7 @@ export function WorkspaceCommandPalette({
             }
           >
             <TextSearch /> Find in current file
-            <CommandShortcut>Ctrl F</CommandShortcut>
+            <CommandShortcut>{shortcutLabel(["primary", "f"])}</CommandShortcut>
           </CommandItem>
           <CommandItem
             onSelect={() =>
@@ -101,7 +113,11 @@ export function WorkspaceCommandPalette({
             }
           >
             <MessageSquareText /> Toggle line comment
-            <CommandShortcut>Ctrl /</CommandShortcut>
+            <CommandShortcut>{shortcutLabel(["primary", "/"])}</CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => run(onTogglePdf)}>
+            {pdfOpen ? <PanelRightClose /> : <PanelRightOpen />}
+            {pdfOpen ? "Hide PDF viewer" : "Show PDF viewer"}
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenProject)}>
             <FolderOpen /> Open project

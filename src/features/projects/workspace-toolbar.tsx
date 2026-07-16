@@ -3,6 +3,8 @@ import {
   FolderOpen,
   Hammer,
   Home,
+  PanelRightClose,
+  PanelRightOpen,
   Save,
   Search,
   Settings,
@@ -13,6 +15,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
 import type { BuildRun } from "@/domain/build"
+import { shortcutLabel } from "@/lib/shortcuts"
 
 /** Keeps project-level actions separate from the active document surface. */
 export function WorkspaceToolbar({
@@ -27,7 +30,9 @@ export function WorkspaceToolbar({
   onReturnHome,
   onSave,
   onOpenSettings,
+  onTogglePdf,
   onStop,
+  pdfOpen,
   session,
 }: {
   buildEnabled: boolean
@@ -41,7 +46,9 @@ export function WorkspaceToolbar({
   onReturnHome: () => void
   onSave: () => void
   onOpenSettings: () => void
+  onTogglePdf: () => void
   onStop: () => void
+  pdfOpen: boolean
   session: ProjectSession
 }) {
   const isOpening =
@@ -98,7 +105,7 @@ export function WorkspaceToolbar({
         aria-label="Show build details"
         onClick={onOpenBuild}
         size="icon-sm"
-        title="Show build details (Ctrl+Shift+B)"
+        title={`Show build details (${shortcutLabel(["primary", "shift", "b"])})`}
         variant="ghost"
       >
         <SquareTerminal aria-hidden="true" />
@@ -108,7 +115,7 @@ export function WorkspaceToolbar({
         disabled={saveUnavailable}
         onClick={onSave}
         size="icon-sm"
-        title="Save source (Ctrl+S)"
+        title={`Save source (${shortcutLabel(["primary", "s"])})`}
         variant="ghost"
       >
         <Save aria-hidden="true" />
@@ -117,10 +124,19 @@ export function WorkspaceToolbar({
         aria-label="Search project"
         onClick={onOpenSearch}
         size="icon-sm"
-        title="Search project (Ctrl+Shift+F)"
+        title={`Search project (${shortcutLabel(["primary", "shift", "f"])})`}
         variant="ghost"
       >
         <Search aria-hidden="true" />
+      </Button>
+      <Button
+        aria-label={pdfOpen ? "Hide PDF viewer" : "Show PDF viewer"}
+        onClick={onTogglePdf}
+        size="icon-sm"
+        title={pdfOpen ? "Hide PDF viewer" : "Show PDF viewer"}
+        variant={pdfOpen ? "ghost" : "secondary"}
+      >
+        {pdfOpen ? <PanelRightClose /> : <PanelRightOpen />}
       </Button>
       <Button
         aria-label="Open settings"
@@ -134,13 +150,13 @@ export function WorkspaceToolbar({
       <Button
         onClick={onOpenCommands}
         size="sm"
-        title="Command palette (Ctrl+Shift+P)"
+        title={`Command palette (${shortcutLabel(["primary", "shift", "p"])})`}
         variant="ghost"
       >
         <SquareTerminal data-icon="inline-start" />
         <span className="hidden lg:inline">Commands</span>
         <kbd className="hidden rounded border bg-muted px-1 py-0.5 font-sans text-[10px] text-muted-foreground xl:inline">
-          Ctrl ⇧ P
+          {shortcutLabel(["primary", "shift", "p"])}
         </kbd>
       </Button>
       <Button

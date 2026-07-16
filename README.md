@@ -2,7 +2,12 @@
 
 TeX is a local-first desktop workspace for multi-file LaTeX projects. It is built with Tauri, Rust, React, TypeScript, and shadcn/ui.
 
-The repository is currently in Phase 0: its UI is a minimal shell and the backend intentionally has no filesystem or compiler permission. The phase boundary, technical spikes, and fixture protocol are documented in [docs/phase-0.md](docs/phase-0.md).
+The application currently supports safe local project opening, root detection,
+multi-file editing and search, recovery-aware autosave, controlled LaTeX builds,
+diagnostic logs, PDF viewing with retained reading state, and two-way SyncTeX
+navigation. The original product direction is documented in
+[docs/plans/project.md](docs/plans/project.md); the historical foundation and
+security decisions are in [docs/phase-0.md](docs/phase-0.md).
 
 ## Development
 

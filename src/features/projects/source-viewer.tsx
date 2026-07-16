@@ -29,6 +29,7 @@ import { Textarea } from "@/components/ui/textarea"
 import type { AsyncDocumentState } from "@/domain/project"
 import type { ProjectEntry } from "@/domain/project"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
+import { shortcutLabel } from "@/lib/shortcuts"
 
 export function SourceViewer({
   fontSize,
@@ -160,7 +161,8 @@ export function SourceViewer({
           <CircleAlert aria-hidden="true" />
           <AlertTitle>Couldn&apos;t save {state.document.path}</AlertTitle>
           <AlertDescription>
-            {state.saveState.error.message} Press Ctrl+S or Command+S to retry.
+            {state.saveState.error.message} Press{" "}
+            {shortcutLabel(["primary", "s"])} to retry.
           </AlertDescription>
         </Alert>
       ) : null}

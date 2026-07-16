@@ -165,10 +165,10 @@ export function BuildPanel({
                 }}
                 value={state.selectedRunId ?? undefined}
               >
-                <SelectTrigger className="ml-auto" size="sm">
+                <SelectTrigger className="ml-auto w-44" size="sm">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent align="end">
+                <SelectContent align="end" className="min-w-44">
                   <SelectGroup>
                     {state.runs.map((item, index) => (
                       <SelectItem key={item.id} value={item.id}>
@@ -226,7 +226,7 @@ function BuildProfileSelect({
       }}
       value={engine}
     >
-      <SelectTrigger size="sm" title={current?.description}>
+      <SelectTrigger className="w-48" size="sm" title={current?.description}>
         <SelectValue>
           {profiles.status === "loading"
             ? "Detecting tools…"
@@ -235,7 +235,7 @@ function BuildProfileSelect({
               : (current?.label ?? "Choose profile")}
         </SelectValue>
       </SelectTrigger>
-      <SelectContent align="end">
+      <SelectContent align="end" className="min-w-72">
         <SelectGroup>
           <SelectLabel>Build profiles</SelectLabel>
           {profiles.status === "ready"

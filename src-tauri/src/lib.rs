@@ -16,7 +16,7 @@ mod synctex;
 
 use tauri_plugin_log::{Target, TargetKind};
 
-/// Starts the desktop application and registers only Phase 0 commands.
+/// Starts the desktop application and registers its validated local capabilities.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

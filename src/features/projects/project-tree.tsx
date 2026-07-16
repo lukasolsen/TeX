@@ -20,7 +20,6 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu"
 import { Badge } from "@/components/ui/badge"
@@ -156,13 +155,13 @@ function TreeBranch({
             onClick={() => void navigator.clipboard.writeText(entry.path)}
           >
             <Copy />
-            Copy path<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+            Copy path
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() => void navigator.clipboard.writeText(entry.path)}
           >
             <Copy />
-            Copy relative path<ContextMenuShortcut>⌘⇧C</ContextMenuShortcut>
+            Copy relative path
           </ContextMenuItem>
           <ContextMenuSeparator />
           {isDirectory ? (
@@ -197,7 +196,7 @@ function TreeBranch({
             }}
           >
             <Pencil />
-            Rename<ContextMenuShortcut>F2</ContextMenuShortcut>
+            Rename
           </ContextMenuItem>
           <ContextMenuItem
             onClick={() => {
@@ -212,7 +211,7 @@ function TreeBranch({
             variant="destructive"
           >
             <Trash2 />
-            Delete<ContextMenuShortcut>⌫</ContextMenuShortcut>
+            Delete
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -308,7 +307,7 @@ export function ProjectTree({
           }}
         >
           <FilePlus />
-          New file<ContextMenuShortcut>⌘N</ContextMenuShortcut>
+          New file
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => {
@@ -317,20 +316,20 @@ export function ProjectTree({
           }}
         >
           <FolderPlus />
-          New folder<ContextMenuShortcut>⌘⇧N</ContextMenuShortcut>
+          New folder
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={() => void navigator.clipboard.writeText(".")}
         >
           <Copy />
-          Copy path<ContextMenuShortcut>⌘C</ContextMenuShortcut>
+          Copy path
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => void navigator.clipboard.writeText(".")}
         >
           <Copy />
-          Copy relative path<ContextMenuShortcut>⌘⇧C</ContextMenuShortcut>
+          Copy relative path
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

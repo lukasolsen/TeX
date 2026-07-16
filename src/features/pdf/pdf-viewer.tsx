@@ -15,6 +15,7 @@ import {
   Rows3,
   Search,
   Square,
+  X,
 } from "lucide-react"
 import {
   getDocument,
@@ -43,6 +44,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import type { PdfViewerState, ProjectError } from "@/domain/project"
 import { cn } from "@/lib/utils"
+import { shortcutLabel } from "@/lib/shortcuts"
 import { normalizePdfOutline } from "@/features/pdf/pdf-viewer-model"
 import {
   projectErrorFromUnknown,
@@ -161,7 +163,7 @@ function PdfPage({
         onInverseSearch(pageNumber, pdfX, page.view[3] - pdfY)
       }}
       style={{ width: viewport.width, height: viewport.height }}
-      title="Ctrl-click or Command-click to synchronize to source"
+      title={`${shortcutLabel(["primary"])}-click to synchronize to source`}
     >
       <canvas aria-hidden="true" ref={canvasRef} />
       <div className="textLayer" ref={textRef} />
@@ -188,6 +190,7 @@ function pageNumbers(
 
 export function PdfViewer({
   initialState,
+  onClose,
   onStateChange,
   onNavigateSource,
   path,
@@ -196,6 +199,7 @@ export function PdfViewer({
   sourceLocation,
 }: {
   initialState: PdfViewerState | undefined
+  onClose: () => void
   onStateChange: (state: PdfViewerState) => void
   onNavigateSource: (path: string, line: number, column: number) => void
   path: string | null
@@ -222,6 +226,10 @@ export function PdfViewer({
   const searchInputRef = useRef<HTMLInputElement>(null)
   const restoredDocument = useRef<PDFDocumentProxy | null>(null)
   const readyDocument = loadState.status === "ready" ? loadState.document : null
+  const closeViewer = useCallback(() => {
+    if (path !== null) onStateChange(viewer)
+    onClose()
+  }, [onClose, onStateChange, path, viewer])
 
   useEffect(() => {
     if (path === null) return
@@ -496,9 +504,19 @@ export function PdfViewer({
   if (path === null) {
     return (
       <section
-        className="flex size-full items-center justify-center bg-workspace p-6"
+        className="relative flex size-full items-center justify-center bg-workspace p-6"
         aria-label="PDF viewer"
       >
+        <Button
+          aria-label="Close PDF viewer"
+          className="absolute top-2 right-2"
+          onClick={closeViewer}
+          size="icon-xs"
+          title="Close PDF viewer"
+          variant="ghost"
+        >
+          <X />
+        </Button>
         <Empty className="max-w-sm border-0">
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -517,10 +535,20 @@ export function PdfViewer({
   if (loadState.status === "loading") {
     return (
       <section
-        className="flex size-full items-center justify-center gap-2 bg-workspace text-sm text-muted-foreground"
+        className="relative flex size-full items-center justify-center gap-2 bg-workspace text-sm text-muted-foreground"
         aria-label="PDF viewer"
         role="status"
       >
+        <Button
+          aria-label="Close PDF viewer"
+          className="absolute top-2 right-2"
+          onClick={closeViewer}
+          size="icon-xs"
+          title="Close PDF viewer"
+          variant="ghost"
+        >
+          <X />
+        </Button>
         <LoaderCircle className="motion-safe:animate-spin" />
         Loading {path}…
       </section>
@@ -529,9 +557,19 @@ export function PdfViewer({
   if (loadState.status === "error") {
     return (
       <section
-        className="flex size-full items-start justify-center bg-workspace p-6"
+        className="relative flex size-full items-start justify-center bg-workspace p-6"
         aria-label="PDF viewer"
       >
+        <Button
+          aria-label="Close PDF viewer"
+          className="absolute top-2 right-2"
+          onClick={closeViewer}
+          size="icon-xs"
+          title="Close PDF viewer"
+          variant="ghost"
+        >
+          <X />
+        </Button>
         <Alert variant="destructive">
           <FileSearch />
           <AlertTitle>Couldn&apos;t open {path}</AlertTitle>
@@ -691,6 +729,16 @@ export function PdfViewer({
             variant="ghost"
           >
             <RotateCw />
+          </Button>
+          <Separator className="mx-1 h-5" orientation="vertical" />
+          <Button
+            aria-label="Close PDF viewer"
+            onClick={closeViewer}
+            size="icon-xs"
+            title="Close PDF viewer"
+            variant="ghost"
+          >
+            <X />
           </Button>
         </div>
       </div>

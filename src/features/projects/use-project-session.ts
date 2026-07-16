@@ -160,7 +160,7 @@ function withOpenFeedback(
   return { ...current, openFeedback }
 }
 
-/** Owns startup restoration and the complete Phase 1 project-session state machine. */
+/** Owns startup restoration and the project editing session state machine. */
 export function useProjectSession() {
   const [state, setState] = useState<AppSessionState>({ status: "starting" })
   const stateRef = useRef<AppSessionState>(state)
@@ -448,6 +448,21 @@ export function useProjectSession() {
   useEffect(() => {
     saveActionRef.current = saveActiveDocument
   }, [saveActiveDocument])
+
+  useEffect(() => {
+    const saveOnWindowLoss = () => {
+      void saveActionRef.current()
+    }
+    const saveWhenHidden = () => {
+      if (document.visibilityState === "hidden") saveOnWindowLoss()
+    }
+    window.addEventListener("blur", saveOnWindowLoss)
+    document.addEventListener("visibilitychange", saveWhenHidden)
+    return () => {
+      window.removeEventListener("blur", saveOnWindowLoss)
+      document.removeEventListener("visibilitychange", saveWhenHidden)
+    }
+  }, [])
 
   const editDocument = useCallback((path: string, content: string) => {
     const current = stateRef.current
