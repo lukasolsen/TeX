@@ -1,6 +1,6 @@
 # TeX engineering standards, audit, and hardening plan
 
-Status: in progress — Phase 4 Waves A–E complete
+Status: in progress — Phase 4 Waves A–F complete
 Created: 2026-07-16  
 Scope: every maintained Rust, React, TypeScript, configuration, test, workflow,
 fixture, and documentation file in TeX

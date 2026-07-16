@@ -2,7 +2,7 @@
 
 Ledger revision: 1  
 Baseline commit: `eb95280770d2a7b15703f4ebbd3af6ca7e4af767`  
-Inventory state: complete; Waves A–E reviewed
+Inventory state: complete; Waves A–F reviewed
 
 Every maintained file has one primary review wave. `Inventoried` means the
 file's existence, broad owner, and review assignment are recorded; it does not
@@ -25,10 +25,10 @@ artifact evidence.
 | C | Rust process, parser, and event boundary | 7 | Reviewed |
 | D | Domain and IPC contracts | 16 | Reviewed |
 | E | React orchestration | 13 | Reviewed |
-| F | Editor, search, project tree, and UI | 23 | Inventoried |
+| F | Editor, search, project tree, and UI | 28 | Reviewed |
 | G | PDF and synchronization UI | 3 | Inventoried |
 | H | Styles, components, fixtures, assets, and documentation | 149 | Inventoried |
-| **Total** | | **248 ledger rows / 247 maintained** | **Waves A–E reviewed** |
+| **Total** | | **253 ledger rows / 252 maintained** | **Waves A–F reviewed** |
 
 ## File register
 
@@ -145,53 +145,58 @@ artifact evidence.
 | `src/domain/identifiers.ts` | D | Reviewed | TEX-D-002; canonical/relative/ID/hash brands |
 | `src/domain/latex.test.ts` | D | Reviewed | Parser/reference contract evidence |
 | `src/domain/latex.ts` | D | Reviewed | Linear bounded source/reference parser |
-| `src/domain/project.ts` | D | Reviewed | Readonly project/workspace/source contracts |
+| `src/domain/project.ts` | D | Reviewed | Readonly project/workspace/source and IME-aware editor-change contracts |
 | `src/features/build/build-configuration-dialog.tsx` | H | Inventoried | — |
 | `src/features/build/build-panel.tsx` | H | Inventoried | — |
 | `src/features/build/clean-auxiliary-dialog.tsx` | H | Inventoried | — |
 | `src/features/build/use-project-build.ts` | E | Reviewed | TEX-E-002, TEX-E-003; operation epochs, duplicate suppression, serialized configuration writes |
 | `src/features/build/use-project-watch.ts` | E | Reviewed | TEX-E-002; event precedence, teardown-safe queue acknowledgement, lifecycle generations |
-| `src/features/commands/workspace-command-palette.tsx` | F | Inventoried | — |
-| `src/features/editor/latex-editor.tsx` | F | Inventoried | — |
-| `src/features/editor/latex-highlighting.test.ts` | F | Inventoried | — |
-| `src/features/editor/latex-highlighting.ts` | F | Inventoried | — |
-| `src/features/editor/latex-hover.test.ts` | F | Inventoried | — |
-| `src/features/editor/latex-hover.ts` | F | Inventoried | — |
-| `src/features/editor/latex-semantic-highlighting.test.ts` | F | Inventoried | — |
-| `src/features/editor/latex-semantic-highlighting.ts` | F | Inventoried | — |
+| `src/features/commands/workspace-command-palette.tsx` | F | Reviewed | Deferred source-file derivation while closed; bounded by Rust tree contract |
+| `src/features/editor/editor-change.test.ts` | F | Reviewed | TEX-F-001, TEX-F-003; composition and post-write state regressions |
+| `src/features/editor/editor-change.ts` | F | Reviewed | TEX-F-001, TEX-F-003; explicit edit/persistence transition classifier |
+| `src/features/editor/latex-editor.tsx` | F | Reviewed | TEX-F-003, TEX-F-005; CodeMirror composition, state cache, disposal, focus |
+| `src/features/editor/latex-highlighting.test.ts` | F | Reviewed | Stable stream-parser token class evidence |
+| `src/features/editor/latex-highlighting.ts` | F | Reviewed | CodeMirror highlight-class mapping |
+| `src/features/editor/latex-hover.test.ts` | F | Reviewed | Comment exclusion and project-reference resolution regressions |
+| `src/features/editor/latex-hover.ts` | F | Reviewed | TEX-F-005; safe DOM construction and approved project reads |
+| `src/features/editor/latex-semantic-highlighting.test.ts` | F | Reviewed | Semantic argument and missing-file regressions |
+| `src/features/editor/latex-semantic-highlighting.ts` | F | Reviewed | Viewport-owned decoration lifecycle and readonly context |
 | `src/features/pdf/pdf-viewer-model.test.ts` | G | Inventoried | — |
 | `src/features/pdf/pdf-viewer-model.ts` | G | Inventoried | — |
 | `src/features/pdf/pdf-viewer.tsx` | G | Inventoried | — |
-| `src/features/projects/document-outline-panel.tsx` | F | Inventoried | — |
-| `src/features/projects/document-outline.test.ts` | F | Inventoried | — |
-| `src/features/projects/document-outline.ts` | F | Inventoried | — |
-| `src/features/projects/document-tabs.test.ts` | F | Inventoried | — |
-| `src/features/projects/document-tabs.ts` | F | Inventoried | — |
-| `src/features/projects/project-model.test.ts` | F | Inventoried | — |
-| `src/features/projects/project-model.ts` | F | Inventoried | — |
-| `src/features/projects/project-sidebar.tsx` | F | Inventoried | — |
-| `src/features/projects/project-tree.tsx` | F | Inventoried | — |
-| `src/features/projects/recent-project-list.tsx` | F | Inventoried | — |
-| `src/features/projects/root-file-control.tsx` | F | Inventoried | — |
-| `src/features/projects/source-tabs.tsx` | F | Inventoried | — |
-| `src/features/projects/source-viewer.tsx` | F | Inventoried | — |
-| `src/features/projects/use-project-session.ts` | E | Reviewed | TEX-E-002, TEX-E-003; shared saves, request generations, retained persistence failures |
+| `src/features/projects/document-outline-panel.tsx` | F | Reviewed | Memoized outline derivation and semantic navigation |
+| `src/features/projects/document-outline.test.ts` | F | Reviewed | Section, comment, formatting, and escaped-percent regressions |
+| `src/features/projects/document-outline.ts` | F | Reviewed | Bounded line-oriented structural extraction |
+| `src/features/projects/document-tabs.test.ts` | F | Reviewed | Preview/pin/close selection regressions |
+| `src/features/projects/document-tabs.ts` | F | Reviewed | Immutable document-tab transitions |
+| `src/features/projects/project-model.test.ts` | F | Reviewed | Tree, root, PDF, dependency, case, and timestamp regressions |
+| `src/features/projects/project-model.ts` | F | Reviewed | Normalized tree/reference derivation and locale-independent extensions |
+| `src/features/projects/project-sidebar.tsx` | F | Reviewed | Memoized reference derivation and truthful availability states |
+| `src/features/projects/project-tree.tsx` | F | Reviewed | TEX-F-004; inline mutation flow, bounded initial expansion, clipboard ownership |
+| `src/features/projects/recent-project-list.tsx` | F | Reviewed | Truthful availability and non-destructive forget action |
+| `src/features/projects/root-file-control.tsx` | F | Reviewed | Detected/configured/multiple-root state contract |
+| `src/features/projects/source-tabs.tsx` | F | Reviewed | TEX-F-004; preview/pin/close semantics and clipboard feedback |
+| `src/features/projects/source-viewer.tsx` | F | Reviewed | TEX-F-001, TEX-F-003; conflict/recovery and editor composition boundary |
+| `src/features/projects/use-project-session.ts` | E | Reviewed | TEX-E-002, TEX-E-003, TEX-F-001, TEX-F-003, TEX-F-004; save/mutation state ownership |
 | `src/features/projects/use-project-tree-watch.ts` | E | Reviewed | TEX-E-002; startup/teardown ordering and listener error ownership |
 | `src/features/projects/workspace-restoration.test.ts` | E | Reviewed | Viewport-clamping and truthful restoration-notice regressions |
 | `src/features/projects/workspace-restoration.ts` | E | Reviewed | Bounded geometry restoration preserving available editor space |
-| `src/features/projects/workspace-toolbar.tsx` | F | Inventoried | — |
-| `src/features/search/project-search-panel.tsx` | F | Inventoried | — |
+| `src/features/projects/workspace-toolbar.tsx` | F | Reviewed | Save/build availability and named keyboard routes |
+| `src/features/search/project-search-panel.tsx` | F | Reviewed | TEX-F-002; latest-request mutation exclusion and transactional undo |
 | `src/features/settings/use-app-preferences.ts` | E | Reviewed | TEX-E-003; ordered writes, revision-aware load/error handling |
 | `src/index.css` | H | Inventoried | — |
 | `src/lib/shortcuts.test.ts` | H | Inventoried | — |
 | `src/lib/shortcuts.ts` | H | Inventoried | — |
 | `src/lib/promises.ts` | H | In review | Type-aware promise ownership |
+| `src/lib/latest-request.test.ts` | F | Reviewed | TEX-F-002; latest-only and teardown invalidation regressions |
+| `src/lib/latest-request.ts` | F | Reviewed | TEX-F-002; monotonic asynchronous result ownership |
 | `src/lib/serial-task-queue.test.ts` | E | Reviewed | TEX-E-003; ordering and post-failure continuation regressions |
 | `src/lib/serial-task-queue.ts` | E | Reviewed | TEX-E-003; minimal ordered mutation owner |
+| `src/lib/use-clipboard.ts` | F | Reviewed | TEX-F-004; latest-only clipboard rejection ownership |
 | `src/lib/utils.ts` | H | Inventoried | — |
 | `src/main.tsx` | H | Inventoried | — |
 | `src/pages/project-home-page.tsx` | E | Reviewed | Truthful project-entry routes and explicit component contract |
-| `src/pages/project-workspace-page.tsx` | E | Reviewed | TEX-E-001, TEX-E-002; coordinated build/watch actions and focus restoration |
+| `src/pages/project-workspace-page.tsx` | E | Reviewed | TEX-E-001, TEX-E-002, TEX-F-003; coordinated actions, focus, and project-bound editor changes |
 | `src/pages/settings-page.tsx` | E | Reviewed | Controlled preference/workspace settings with explicit component contract |
 | `src/services/build-contract.test.ts` | D | Reviewed | TEX-D-001; malformed event and bound tests |
 | `src/services/build-contract.ts` | D | Reviewed | TEX-D-001; build/watch/config parsers |
