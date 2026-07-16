@@ -275,6 +275,32 @@ Exit gate:
 - The stress suite has zero page-one, zoom, focus, stale-navigation, blank-PDF,
   or lost-last-good regressions.
 
+Progress (2026-07-16):
+
+- PDF candidates load and validate off-screen while the current readable
+  document remains mounted. Failed, missing, partial, malformed, oversized, or
+  superseded candidates only update status and never replace the last good PDF.
+- Replacement preserves normalized position, zoom, rotation, layout, outline
+  state, and focused PDF control; only a page absent from the new document is
+  clamped. The polite announcement names build-driven versus external updates
+  and explains a clamped-page fallback.
+- Scrolling, pointer interaction, and PDF text selection defer swaps. A quiet
+  update-ready row allows explicit application; otherwise the newest candidate
+  applies after interaction settles. Selected text is preserved until the swap
+  and restored on a best-effort same-text-layer basis where PDF.js exposes a
+  matching text node.
+- Monotonic generations cover PDF loads and outline extraction, PDF search,
+  outline navigation, and both SyncTeX directions. Superseded results destroy
+  loaded PDF resources where applicable and cannot move current state.
+- Automated model coverage performs 100 successful replacements followed by
+  100 failures without page/position/zoom/rotation/layout/sidebar or last-good
+  loss. The Rust stress test repeats 100 successful and 100 failed reads against
+  the multi-file NASA SyncTeX fixture; oversized, removed, invalid-extension,
+  and escaping paths are also covered.
+- Open qualification gate: packaged locked-file behavior, browser text-layer
+  selection restoration, focus, rapid external replacement, and long-running
+  renderer-memory smoke tests on every supported platform.
+
 ## Milestone 6 — safe project operations
 
 Purpose: make filesystem experimentation recoverable.
