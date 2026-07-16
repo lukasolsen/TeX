@@ -68,6 +68,8 @@ pub fn run() {
             watch_system::start_project_watch,
             watch_system::stop_project_watch,
             watch_system::get_project_watch_status,
+            watch_system::start_project_tree_watch,
+            watch_system::stop_project_tree_watch,
             synctex::synctex_forward_search,
             synctex::synctex_inverse_search,
         ])

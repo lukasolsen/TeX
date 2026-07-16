@@ -31,7 +31,7 @@ export default function App() {
     openProjectAtPath,
     openPdf,
     pinFile,
-    refreshActiveDocument,
+    refreshProjectFiles,
     resizeSidebar,
     returnHome,
     previewFile,
@@ -94,7 +94,7 @@ export default function App() {
           onRenameProjectEntry={renameProjectEntry}
           onResolveExternalChange={resolveExternalChange}
           onResolveRecovery={resolveRecovery}
-          onProjectFilesChanged={refreshActiveDocument}
+          onProjectFilesChanged={refreshProjectFiles}
           onSaveDocument={saveActiveDocument}
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}

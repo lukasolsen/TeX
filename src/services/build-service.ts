@@ -15,6 +15,7 @@ import type {
 
 const BUILD_EVENT = "tex://build-event"
 const WATCH_EVENT = "tex://watch-event"
+const PROJECT_FILES_EVENT = "tex://project-files-event"
 
 export async function previewBuild(
   request: BuildRequest
@@ -64,6 +65,22 @@ export async function listenForWatchEvents(
   handler: (event: WatchEvent) => void
 ): Promise<UnlistenFn> {
   return listen<WatchEvent>(WATCH_EVENT, (event) => handler(event.payload))
+}
+
+export async function startProjectTreeWatch(projectPath: string): Promise<void> {
+  return invoke("start_project_tree_watch", { projectPath })
+}
+
+export async function stopProjectTreeWatch(projectPath: string): Promise<void> {
+  return invoke("stop_project_tree_watch", { projectPath })
+}
+
+export async function listenForProjectFileEvents(
+  handler: (projectPath: string) => void
+): Promise<UnlistenFn> {
+  return listen<{ projectPath: string }>(PROJECT_FILES_EVENT, (event) =>
+    handler(event.payload.projectPath)
+  )
 }
 
 export async function loadProjectBuildConfiguration(
