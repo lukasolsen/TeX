@@ -45,7 +45,7 @@ performance/accessibility/platform qualification.
 | --- | --- | --- |
 | Native folder selection and recent projects | **Implemented** | `project-service.ts`, `recent-project-list.tsx`, and `persistence.rs` provide folder selection, path, last-opened time, availability, and safe forgetting. |
 | Metadata outside the source tree with atomic persistence | **Implemented** | Workspace/preferences are stored under app data and written atomically in `persistence.rs`. |
-| Detect and surface root candidates | **Partial** | `root_detection.rs` supports `\documentclass` and magic-root comments and exposes ambiguity. Configured roots and build-metadata signals are not implemented. |
+| Detect and surface root candidates | **Implemented** | `root_detection.rs` supports `\documentclass` and magic-root comments; schema-v1 project build settings add configured-root evidence without silently selecting ambiguous detected candidates. |
 | Bounded project tree with generated/cache exclusions | **Partial** | `project_open.rs` bounds depth/count and excludes common fixed directories and generated extensions. User-configurable output/generated exclusions are missing. |
 | Restore valid roots, files, tabs, and PDF state safely | **Implemented** | `persistence.rs`, `use-project-session.ts`, and document-tab tests validate paths and provide restoration notices for missing entries. |
 | Restore split sizes, open panels, and last selected panel | **Implemented; platform qualification open** | Schema-v2 workspace persistence restores viewport-validated sidebar/PDF/build geometry, pane visibility, sidebar/build tabs, build profile, source cursor/scroll, selected PDF, and per-PDF state. Automated migration, corruption, missing-path, round-trip, and smaller-window tests pass; packaged cross-platform smoke evidence remains open. |
@@ -68,7 +68,7 @@ performance/accessibility/platform qualification.
 | Requirement | Status | Evidence and remaining work |
 | --- | --- | --- |
 | Safe common profiles and exact invocation preview | **Implemented** | `build_system.rs` exposes validated latexmk/pdfLaTeX/XeLaTeX/LuaLaTeX profiles and separately supplied process arguments; `build-panel.tsx` shows command, directory, and root before execution. |
-| Project custom command/profile selection with explicit consent | **Missing — larger work** | There is no project configuration format, custom command validator/consent flow, output-directory model, bibliography-tool selection, or `--shell-escape` authorization surface. |
+| Project custom command/profile selection with explicit consent | **Implemented; fixture qualification open** | Versioned settings live outside source, canonicalize project paths and absolute executables, keep arguments separate, restrict TeX environment overrides, and persist separate custom-command and shell-escape consent. Configured output and watcher exclusions are active; cross-platform fixture qualification remains open. |
 | Build, Build and view, Watch, Stop, Clean, Reveal output | **Partial** | Manual Build and Stop are implemented; successful output refreshes the selected PDF. Explicit Build and view, Watch, conservative Clean with preview, and Reveal output are missing. |
 | One build controller per project | **Implemented** | `BuildController` rejects overlapping builds and supervises cancellation per canonical project root. |
 | Structured metadata, bounded raw logs, diagnostics, and run selection | **Implemented** | Up to 20 in-memory runs retain timestamps, invocation, status, stdout/stderr, exit code, and parsed diagnostics. |
@@ -77,7 +77,7 @@ performance/accessibility/platform qualification.
 | First/next/previous diagnostic and copy diagnostic commands | **Missing — larger work** | Diagnostics are keyboard-focusable and individually navigable, but command-level traversal and copying are absent. |
 | Visible, safe watch mode | **Implemented; platform qualification open** | `watch_system.rs` owns recursive observation, 350 ms debounce/coalescing, explicit change kinds, path revalidation, and generated-output suppression. The build panel and status bar expose start/queued/building/stop/error states and route automatic builds through the serialized controller. Unsafe custom profiles are not yet available; packaged platform event/race qualification remains open. |
 | Build accessibility announcements | **Implemented** | Build state and diagnostic counts are textual, and completion is announced through a polite live region. |
-| Reproducibility details | **Partial** | Exact command, working directory, root, timestamps, and exit code are shown. Compiler/tool version and environment-relevant project settings are not. |
+| Reproducibility details | **Implemented** | Exact command, canonical executable, working directory, root, timestamps, exit code, restricted environment settings, bibliography intent, and standard-tool version are retained with the run. |
 
 ### Phase 4 — PDF and SyncTeX
 
@@ -119,20 +119,17 @@ The following order keeps the plan's reliability-first intent:
 1. **Workspace persistence qualification** — run packaged restart, resize,
    keyboard, focus, migration, corruption, and missing-path smoke tests on each
    supported platform.
-2. **Project build configuration** — design a local project setting format for
-   root, output directory, profile, bibliography tool, and custom command;
-   validate arguments without a shell and gate `--shell-escape` explicitly.
-3. **Build command completeness** — add Build and view, conservative Clean with
+2. **Build command completeness** — add Build and view, conservative Clean with
    a previewed file list, Reveal output, first/next/previous diagnostic, and Copy
    diagnostic. Persist bounded build evidence if restart survival is required.
-4. **PDF replacement hardening** — preserve focus/selection, defer swaps during
+3. **PDF replacement hardening** — preserve focus/selection, defer swaps during
    active interaction, attribute external rebuilds, cancel stale SyncTeX work,
    and add the 100-update/100-failure stress harness.
-5. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
+4. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
    build/PDF latency, run keyboard/screen-reader/IME smoke tests on supported
    platforms, and publish versions, machines, percentiles, and known limits.
-6. **Safe deletion recovery** — move deleted project entries to a recoverable
+5. **Safe deletion recovery** — move deleted project entries to a recoverable
    project-local or OS trash workflow where platform/filesystem support permits,
    with explicit fallback behavior.
 
-Phase 5 conveniences should wait until items 1–6 have clear release evidence.
+Phase 5 conveniences should wait until items 1–5 have clear release evidence.

@@ -35,6 +35,7 @@ Release and user-facing policies:
 - [Supported systems and tool versions](docs/support.md)
 - [Privacy](docs/privacy.md)
 - [Known limitations](docs/known-limitations.md)
+- [Project build configuration](docs/project-build-configuration.md)
 
 Read [AGENTS.md](AGENTS.md) and [docs/code-quality.md](docs/code-quality.md)
 before contributing.
