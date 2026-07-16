@@ -15,6 +15,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::project_config::load_configuration_for_project;
 
 const WATCH_EVENT: &str = "tex://watch-event";
+const PROJECT_FILES_EVENT: &str = "tex://project-files-event";
 const DEBOUNCE: Duration = Duration::from_millis(350);
 const GENERATED_DIRECTORIES: [&str; 7] =
     [".git", ".cache", "build", "dist", "out", "output", "target"];
@@ -80,7 +81,7 @@ enum WatchEvent {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WatchError {
     code: &'static str,
@@ -90,11 +91,64 @@ pub struct WatchError {
 #[derive(Clone, Default)]
 pub struct WatchController {
     projects: Arc<Mutex<HashMap<PathBuf, ActiveWatch>>>,
+    tree_projects: Arc<Mutex<HashMap<PathBuf, ActiveTreeWatch>>>,
 }
 
 struct ActiveWatch {
     status: WatchStatus,
     stop: mpsc::Sender<()>,
+}
+
+struct ActiveTreeWatch {
+    stop: mpsc::Sender<()>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ProjectFilesEvent {
+    project_path: String,
+}
+
+/// Starts a lightweight watcher that keeps the project tree current without triggering builds.
+#[tauri::command]
+pub fn start_project_tree_watch(
+    project_path: String,
+    app: AppHandle,
+    controller: State<'_, WatchController>,
+) -> Result<(), WatchError> {
+    let root = canonical_project_root(Path::new(&project_path))?;
+    let (stop_sender, stop_receiver) = mpsc::channel();
+    {
+        let mut projects = controller
+            .tree_projects
+            .lock()
+            .map_err(|_| watch_unavailable())?;
+        if projects.contains_key(&root) {
+            return Ok(());
+        }
+        projects.insert(root.clone(), ActiveTreeWatch { stop: stop_sender });
+    }
+
+    let owned = controller.inner().clone();
+    thread::spawn(move || run_tree_watch(app, owned, root, stop_receiver));
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_project_tree_watch(
+    project_path: String,
+    controller: State<'_, WatchController>,
+) -> Result<(), WatchError> {
+    let root = canonical_project_root(Path::new(&project_path))?;
+    let watch = controller
+        .tree_projects
+        .lock()
+        .map_err(|_| watch_unavailable())?
+        .remove(&root);
+    if let Some(watch) = watch {
+        let _ = watch.stop.send(());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -214,6 +268,59 @@ fn run_watch(
     }
 }
 
+fn run_tree_watch(
+    app: AppHandle,
+    controller: WatchController,
+    root: PathBuf,
+    stop_receiver: mpsc::Receiver<()>,
+) {
+    let (event_sender, event_receiver) = mpsc::channel();
+    let watcher = RecommendedWatcher::new(
+        move |event| {
+            let _ = event_sender.send(event);
+        },
+        Config::default(),
+    );
+    let Ok(mut watcher) = watcher else {
+        remove_tree_watch(&controller, &root);
+        return;
+    };
+    if watcher.watch(&root, RecursiveMode::Recursive).is_err() {
+        remove_tree_watch(&controller, &root);
+        return;
+    }
+
+    let mut last_event = None;
+    loop {
+        if stop_receiver.try_recv().is_ok() {
+            remove_tree_watch(&controller, &root);
+            return;
+        }
+        match event_receiver.recv_timeout(Duration::from_millis(50)) {
+            Ok(Ok(event))
+                if classify_event(&event.kind).is_some()
+                    && event.paths.iter().any(|path| path.starts_with(&root)) =>
+            {
+                last_event = Some(Instant::now());
+            }
+            Ok(Ok(_)) | Err(mpsc::RecvTimeoutError::Timeout) => {}
+            Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                remove_tree_watch(&controller, &root);
+                return;
+            }
+        }
+        if last_event.is_some_and(|event| event.elapsed() >= DEBOUNCE) {
+            last_event = None;
+            let _ = app.emit(
+                PROJECT_FILES_EVENT,
+                ProjectFilesEvent {
+                    project_path: root.to_string_lossy().into_owned(),
+                },
+            );
+        }
+    }
+}
+
 #[derive(Default)]
 struct PendingChanges {
     kinds: BTreeSet<ProjectChangeKind>,
@@ -327,6 +434,12 @@ fn remove_watch(controller: &WatchController, root: &Path) {
     }
 }
 
+fn remove_tree_watch(controller: &WatchController, root: &Path) {
+    if let Ok(mut projects) = controller.tree_projects.lock() {
+        projects.remove(root);
+    }
+}
+
 fn emit_status(app: &AppHandle, root: &Path, status: WatchStatus, message: Option<&'static str>) {
     let _ = app.emit(
         WATCH_EVENT,
@@ -364,7 +477,10 @@ fn watch_unavailable() -> WatchError {
 mod tests {
     use std::path::Path;
 
-    use notify::{event::CreateKind, EventKind};
+    use notify::{
+        event::{AccessKind, AccessMode, CreateKind},
+        EventKind,
+    };
 
     use super::{classify_event, is_build_input, is_ignored, ProjectChangeKind};
 
@@ -392,6 +508,14 @@ mod tests {
         assert_eq!(
             classify_event(&EventKind::Create(CreateKind::File)),
             Some(ProjectChangeKind::Create)
+        );
+    }
+
+    #[test]
+    fn ignores_non_mutating_access_events() {
+        assert_eq!(
+            classify_event(&EventKind::Access(AccessKind::Open(AccessMode::Read))),
+            None
         );
     }
 }

@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs::{self, OpenOptions},
     path::{Path, PathBuf},
 };
 
@@ -12,7 +12,7 @@ pub struct ProjectFileError {
     pub message: &'static str,
 }
 
-/// Creates a project-local file or directory after validating its parent and name.
+/// Creates a project-local file or directory after validating every path component.
 #[tauri::command]
 pub fn create_project_entry(
     project_path: String,
@@ -22,12 +22,32 @@ pub fn create_project_entry(
 ) -> Result<(), ProjectFileError> {
     let root = project_root(&project_path)?;
     let parent = resolve_directory(&root, parent_path.as_deref())?;
-    let name = entry_name(&name)?;
-    let target = parent.join(name);
+    create_entry(&root, &parent, &name, directory)
+}
+
+fn create_entry(
+    root: &Path,
+    parent: &Path,
+    name: &str,
+    directory: bool,
+) -> Result<(), ProjectFileError> {
+    let relative = entry_path(name)?;
+    let target = parent.join(relative);
+    let target_parent = target.parent().ok_or_else(invalid)?;
+    fs::create_dir_all(target_parent).map_err(|_| unavailable())?;
+    let verified_parent = target_parent.canonicalize().map_err(|_| unavailable())?;
+    if !verified_parent.is_dir() || !verified_parent.starts_with(root) {
+        return Err(invalid());
+    }
+
     if directory {
         fs::create_dir(&target)
     } else {
-        fs::File::create(&target).map(|_| ())
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&target)
+            .map(|_| ())
     }
     .map_err(|_| unavailable())
 }
@@ -118,6 +138,21 @@ fn entry_name(name: &str) -> Result<&str, ProjectFileError> {
     }
 }
 
+fn entry_path(name: &str) -> Result<&Path, ProjectFileError> {
+    let path = Path::new(name);
+    if name.contains('\\')
+        || path.as_os_str().is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        Err(invalid())
+    } else {
+        Ok(path)
+    }
+}
+
 fn invalid() -> ProjectFileError {
     ProjectFileError {
         code: "invalid-project-entry",
@@ -138,7 +173,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{entry_name, rename_project_entry, resolve_entry};
+    use super::{create_entry, entry_name, entry_path, rename_project_entry, resolve_entry};
 
     fn temporary_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -152,6 +187,23 @@ mod tests {
         assert!(entry_name("../outside.tex").is_err());
         assert!(entry_name("chapter/main.tex").is_err());
         assert!(entry_name("main.tex").is_ok());
+    }
+
+    #[test]
+    fn accepts_nested_entry_paths_without_traversal() {
+        assert!(entry_path("chapters/intro.tex").is_ok());
+        assert!(entry_path("../outside.tex").is_err());
+        assert!(entry_path("chapters/../outside.tex").is_err());
+        assert!(entry_path("/outside.tex").is_err());
+    }
+
+    #[test]
+    fn creates_missing_directories_for_nested_file() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = temporary_directory()?;
+        assert!(create_entry(&directory, &directory, "chapters/intro.tex", false).is_ok());
+        assert!(directory.join("chapters/intro.tex").is_file());
+        fs::remove_dir_all(directory)?;
+        Ok(())
     }
 
     #[test]

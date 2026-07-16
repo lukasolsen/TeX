@@ -26,6 +26,7 @@ import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
 import { useProjectBuild } from "@/features/build/use-project-build"
 import { useProjectWatch } from "@/features/build/use-project-watch"
+import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
 import { selectedBuildRun, type BuildDiagnostic } from "@/domain/build"
@@ -151,6 +152,10 @@ export function ProjectWorkspacePage({
   const watch = useProjectWatch({
     build: build.build,
     buildRunning: running,
+    onFilesChanged: onProjectFilesChanged,
+    projectPath: session.project.path,
+  })
+  useProjectTreeWatch({
     onFilesChanged: onProjectFilesChanged,
     projectPath: session.project.path,
   })

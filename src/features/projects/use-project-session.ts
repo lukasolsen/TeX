@@ -1348,6 +1348,27 @@ export function useProjectSession() {
     }
   }, [])
 
+  const refreshProjectFiles = useCallback(async () => {
+    const current = stateRef.current
+    if (current.status !== "workspace") return
+
+    try {
+      const project = await openProjectFolder(current.session.project.path)
+      setState((value) =>
+        value.status !== "workspace" ||
+        value.session.project.path !== current.session.project.path
+          ? value
+          : {
+              ...value,
+              session: { ...value.session, project },
+            }
+      )
+    } catch {
+      // A transient external filesystem change must not disturb the current workspace.
+    }
+    await refreshActiveDocument()
+  }, [refreshActiveDocument])
+
   const returnHome = useCallback(async () => {
     if (!(await saveActionRef.current())) return
     try {
@@ -1383,6 +1404,7 @@ export function useProjectSession() {
     pinFile,
     previewFile,
     refreshActiveDocument,
+    refreshProjectFiles,
     renameProjectEntry,
     resizeSidebar,
     resolveExternalChange,

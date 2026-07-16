@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState, type KeyboardEvent } from "react"
 import {
   Copy,
   ChevronDown,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/context-menu"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Input } from "@/components/ui/input"
 import type { ProjectEntry } from "@/domain/project"
 import {
   isReadableSource,
@@ -31,6 +32,71 @@ import {
   projectTreeNodes,
 } from "@/features/projects/project-model"
 import { cn } from "@/lib/utils"
+
+type CreationTarget = {
+  parentPath: string | null
+  directory: boolean
+}
+
+function CreateEntryInput({
+  directory,
+  onCancel,
+  onCreate,
+  parentPath,
+}: CreationTarget & {
+  onCancel: () => void
+  onCreate: (parentPath: string | null, name: string, directory: boolean) => Promise<void>
+}) {
+  const [name, setName] = useState("")
+  const input = useRef<HTMLInputElement>(null)
+  const submitting = useRef(false)
+
+  useEffect(() => {
+    input.current?.focus()
+  }, [])
+
+  const submit = async () => {
+    if (submitting.current) return
+    const value = name.trim()
+    if (value === "") {
+      onCancel()
+      return
+    }
+    submitting.current = true
+    await onCreate(parentPath, value, directory)
+    onCancel()
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault()
+      void submit()
+    } else if (event.key === "Escape") {
+      event.preventDefault()
+      onCancel()
+    }
+  }
+
+  return (
+    <li className="flex h-7 items-center gap-1.5 px-2">
+      {directory ? (
+        <Folder aria-hidden="true" className="size-3.5 shrink-0" />
+      ) : (
+        <File aria-hidden="true" className="size-3.5 shrink-0" />
+      )}
+      <Input
+        aria-label={directory ? "New folder path" : "New file path"}
+        className="h-6 rounded-sm px-1.5 text-[13px]"
+        onBlur={() => void submit()}
+        onChange={(event) => setName(event.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={directory ? "Folder name" : "File name"}
+        ref={input}
+        value={name}
+      />
+    </li>
+  )
+}
 
 function EntryIcon({
   expanded,
@@ -57,12 +123,15 @@ function EntryIcon({
 }
 
 function TreeBranch({
+  creation,
   entry,
   level,
   onPinFile,
   onPreviewFile,
   onOpenPdf,
   onCreate,
+  onCancelCreate,
+  onStartCreate,
   onRename,
   onDelete,
   rootFiles,
@@ -70,6 +139,7 @@ function TreeBranch({
   selectedPdf,
   selectedRoot,
 }: {
+  creation: CreationTarget | null
   entry: ProjectEntry & { path: string }
   level: number
   onPinFile: (path: string) => void
@@ -80,6 +150,8 @@ function TreeBranch({
     name: string,
     directory: boolean
   ) => Promise<void>
+  onCancelCreate: () => void
+  onStartCreate: (target: CreationTarget) => void
   onRename: (path: string, name: string) => Promise<void>
   onDelete: (path: string) => Promise<void>
   rootFiles: string[]
@@ -168,8 +240,8 @@ function TreeBranch({
             <>
               <ContextMenuItem
                 onClick={() => {
-                  const name = window.prompt("New file name")
-                  if (name !== null) void onCreate(entry.path, name, false)
+                  setExpanded(true)
+                  onStartCreate({ parentPath: entry.path, directory: false })
                 }}
               >
                 <FilePlus />
@@ -177,8 +249,8 @@ function TreeBranch({
               </ContextMenuItem>
               <ContextMenuItem
                 onClick={() => {
-                  const name = window.prompt("New folder name")
-                  if (name !== null) void onCreate(entry.path, name, true)
+                  setExpanded(true)
+                  onStartCreate({ parentPath: entry.path, directory: true })
                 }}
               >
                 <FolderPlus />
@@ -219,6 +291,7 @@ function TreeBranch({
         <ul>
           {projectTreeNodes(entry, entry.path).map((child) => (
             <TreeBranch
+              creation={creation}
               entry={child}
               key={child.path}
               level={level + 1}
@@ -226,6 +299,8 @@ function TreeBranch({
               onPreviewFile={onPreviewFile}
               onOpenPdf={onOpenPdf}
               onCreate={onCreate}
+              onCancelCreate={onCancelCreate}
+              onStartCreate={onStartCreate}
               onRename={onRename}
               onDelete={onDelete}
               rootFiles={rootFiles}
@@ -234,6 +309,14 @@ function TreeBranch({
               selectedRoot={selectedRoot}
             />
           ))}
+          {creation?.parentPath === entry.path ? (
+            <CreateEntryInput
+              directory={creation.directory}
+              onCancel={onCancelCreate}
+              onCreate={onCreate}
+              parentPath={entry.path}
+            />
+          ) : null}
         </ul>
       ) : null}
     </li>
@@ -269,6 +352,8 @@ export function ProjectTree({
   selectedRoot: string | null
   tree: ProjectEntry
 }) {
+  const [creation, setCreation] = useState<CreationTarget | null>(null)
+
   return (
     <ContextMenu>
       <ContextMenuTrigger className="flex min-h-0 flex-1">
@@ -280,6 +365,7 @@ export function ProjectTree({
             <ul>
               {projectTreeNodes(tree).map((entry) => (
                 <TreeBranch
+                  creation={creation}
                   entry={entry}
                   key={entry.path}
                   level={0}
@@ -287,6 +373,8 @@ export function ProjectTree({
                   onPreviewFile={onPreviewFile}
                   onOpenPdf={onOpenPdf}
                   onCreate={onCreate}
+                  onCancelCreate={() => setCreation(null)}
+                  onStartCreate={setCreation}
                   onRename={onRename}
                   onDelete={onDelete}
                   rootFiles={rootFiles}
@@ -295,6 +383,14 @@ export function ProjectTree({
                   selectedRoot={selectedRoot}
                 />
               ))}
+              {creation?.parentPath === null ? (
+                <CreateEntryInput
+                  directory={creation.directory}
+                  onCancel={() => setCreation(null)}
+                  onCreate={onCreate}
+                  parentPath={null}
+                />
+              ) : null}
             </ul>
           </ScrollArea>
         </aside>
@@ -302,8 +398,7 @@ export function ProjectTree({
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() => {
-            const name = window.prompt("New file name")
-            if (name !== null) void onCreate(null, name, false)
+            setCreation({ parentPath: null, directory: false })
           }}
         >
           <FilePlus />
@@ -311,8 +406,7 @@ export function ProjectTree({
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => {
-            const name = window.prompt("New folder name")
-            if (name !== null) void onCreate(null, name, true)
+            setCreation({ parentPath: null, directory: true })
           }}
         >
           <FolderPlus />
