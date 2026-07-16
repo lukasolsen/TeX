@@ -12,6 +12,8 @@ import {
   TextSearch,
   ZoomIn,
   ZoomOut,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 
 import {
@@ -48,10 +50,12 @@ export function WorkspaceCommandPalette({
   onTogglePdf,
   onSave,
   onSearch,
+  onToggleWatch,
   onZoomIn,
   onZoomOut,
   open,
   pdfOpen,
+  watchActive,
   tree,
 }: {
   buildEnabled: boolean
@@ -64,10 +68,12 @@ export function WorkspaceCommandPalette({
   onTogglePdf: () => void
   onSave: () => void
   onSearch: () => void
+  onToggleWatch: () => void
   onZoomIn: () => void
   onZoomOut: () => void
   open: boolean
   pdfOpen: boolean
+  watchActive: boolean
   tree: ProjectEntry
 }) {
   const run = (command: () => void) => {
@@ -82,6 +88,10 @@ export function WorkspaceCommandPalette({
         <CommandGroup heading="Commands">
           <CommandItem disabled={!buildEnabled} onSelect={() => run(onBuild)}>
             <Hammer /> Build PDF
+          </CommandItem>
+          <CommandItem onSelect={() => run(onToggleWatch)}>
+            {watchActive ? <EyeOff /> : <Eye />}
+            {watchActive ? "Stop watching project" : "Watch project and build"}
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenBuild)}>
             <PanelBottomOpen /> Show build details

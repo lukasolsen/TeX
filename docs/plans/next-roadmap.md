@@ -135,6 +135,25 @@ Exit gate:
 - Repeated source saves produce one intended build, generated output produces
   no loop, and every watch transition remains visible and cancellable.
 
+Progress (2026-07-16):
+
+- Implemented a Rust-owned recursive watcher with 350 ms burst coalescing,
+  explicit create/modify/remove/rename events, project-root validation, and
+  re-stat checks for changed paths.
+- `.git`, common cache/output directories, and TeX auxiliary extensions are
+  excluded before events reach the UI. Source inputs queue one build through
+  the existing per-project build controller; manual Build and Stop remain
+  available.
+- Watch Off, Starting, Watching, Build queued, Building, Stopping, and Error are
+  visible in the build panel and status bar. Tree reconciliation preserves the
+  existing workspace selection and current PDF.
+- Unsafe custom profiles remain unavailable until Milestone 3 introduces their
+  explicit persisted consent model; therefore watch mode cannot currently run
+  one accidentally.
+- Automated unit coverage verifies generated-output filtering, source-input
+  classification, and explicit event classification. Packaged cross-platform
+  rename, unavailable-watch, and cancellation smoke qualification remains open.
+
 ## Milestone 3 — project build configuration
 
 Purpose: support real projects without weakening the process boundary.

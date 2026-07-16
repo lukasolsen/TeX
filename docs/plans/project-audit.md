@@ -75,7 +75,7 @@ performance/accessibility/platform qualification.
 | Logs survive panel close, later builds, failures, and app restart | **Partial** | Logs survive panel close and later builds during the process lifetime. Build history is not persisted across application restart. |
 | Diagnostic mapping with uncertainty | **Partial** | File-line diagnostics are mapped conservatively and uncertain paths are labeled. Generated-file/output-directory mapping and broader TeX diagnostic forms remain limited. |
 | First/next/previous diagnostic and copy diagnostic commands | **Missing — larger work** | Diagnostics are keyboard-focusable and individually navigable, but command-level traversal and copying are absent. |
-| Visible, safe watch mode | **Missing — larger work** | There is no file watcher, debounce/coalescing model, output-loop suppression, watch status, or unsafe-profile opt-in. Current source/PDF external-change checks use bounded polling. |
+| Visible, safe watch mode | **Implemented; platform qualification open** | `watch_system.rs` owns recursive observation, 350 ms debounce/coalescing, explicit change kinds, path revalidation, and generated-output suppression. The build panel and status bar expose start/queued/building/stop/error states and route automatic builds through the serialized controller. Unsafe custom profiles are not yet available; packaged platform event/race qualification remains open. |
 | Build accessibility announcements | **Implemented** | Build state and diagnostic counts are textual, and completion is announced through a polite live region. |
 | Reproducibility details | **Partial** | Exact command, working directory, root, timestamps, and exit code are shown. Compiler/tool version and environment-relevant project settings are not. |
 
@@ -119,22 +119,19 @@ The following order keeps the plan's reliability-first intent:
 1. **Workspace persistence qualification** — run packaged restart, resize,
    keyboard, focus, migration, corruption, and missing-path smoke tests on each
    supported platform.
-2. **Watch and filesystem event architecture** — add a Rust watcher with
-   debounce/coalescing, rename/remove handling, generated-output exclusions,
-   visible status, stop control, and explicit unsafe-profile consent.
-3. **Project build configuration** — design a local project setting format for
+2. **Project build configuration** — design a local project setting format for
    root, output directory, profile, bibliography tool, and custom command;
    validate arguments without a shell and gate `--shell-escape` explicitly.
-4. **Build command completeness** — add Build and view, conservative Clean with
+3. **Build command completeness** — add Build and view, conservative Clean with
    a previewed file list, Reveal output, first/next/previous diagnostic, and Copy
    diagnostic. Persist bounded build evidence if restart survival is required.
-5. **PDF replacement hardening** — preserve focus/selection, defer swaps during
+4. **PDF replacement hardening** — preserve focus/selection, defer swaps during
    active interaction, attribute external rebuilds, cancel stale SyncTeX work,
    and add the 100-update/100-failure stress harness.
-6. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
+5. **Qualification suite** — add missing fixtures, benchmark startup/edit/search/
    build/PDF latency, run keyboard/screen-reader/IME smoke tests on supported
    platforms, and publish versions, machines, percentiles, and known limits.
-7. **Safe deletion recovery** — move deleted project entries to a recoverable
+6. **Safe deletion recovery** — move deleted project entries to a recoverable
    project-local or OS trash workflow where platform/filesystem support permits,
    with explicit fallback behavior.
 

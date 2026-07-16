@@ -25,6 +25,7 @@ import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
 import { useProjectBuild } from "@/features/build/use-project-build"
+import { useProjectWatch } from "@/features/build/use-project-watch"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 
 export function ProjectWorkspacePage({
@@ -125,6 +126,12 @@ export function ProjectWorkspacePage({
   const pdfOpen = session.workspace.pdfPaneOpen
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
+  const watch = useProjectWatch({
+    build: build.build,
+    buildRunning: running,
+    onFilesChanged: onProjectFilesChanged,
+    projectPath: session.project.path,
+  })
   const profileAvailable =
     build.profiles.status === "ready" &&
     build.profiles.profiles.some(
@@ -460,6 +467,8 @@ export function ProjectWorkspacePage({
                   onPinFile(path)
                 }}
                 onStop={() => void build.stop()}
+                onStartWatch={() => void watch.start()}
+                onStopWatch={() => void watch.stop()}
                 profiles={build.profiles}
                 setEngine={build.setEngine}
                 state={build.state}
@@ -467,6 +476,7 @@ export function ProjectWorkspacePage({
                 onTabChange={(buildPanelTab) =>
                   onUpdateWorkspaceView({ buildPanelTab })
                 }
+                watch={watch.state}
               />
             </ResizablePanel>
           </>
@@ -501,6 +511,18 @@ export function ProjectWorkspacePage({
               ? "Building"
               : `Build ${latestBuild.status}`}
         </Button>
+        <Button
+          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
+          onClick={() => void (watch.active ? watch.stop() : watch.start())}
+          size="xs"
+          variant="ghost"
+        >
+          {watch.state.status === "off"
+            ? "Watch off"
+            : watch.state.status === "error"
+              ? "Watch error"
+              : `Watch ${watch.state.status}`}
+        </Button>
         <span className="ml-auto hidden items-center gap-1.5 text-status-foreground/75 md:flex">
           <FileText aria-hidden="true" className="size-3.5" />
           {session.workspace.editorFontSize}px
@@ -530,6 +552,7 @@ export function ProjectWorkspacePage({
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onSave={onSaveDocument}
         onSearch={() => setSearchOpen(true)}
+        onToggleWatch={() => void (watch.active ? watch.stop() : watch.start())}
         onZoomIn={() =>
           onSetEditorFontSize(session.workspace.editorFontSize + 1)
         }
@@ -538,6 +561,7 @@ export function ProjectWorkspacePage({
         }
         open={commandPaletteOpen}
         pdfOpen={pdfOpen}
+        watchActive={watch.active}
         tree={session.project.tree}
       />
     </main>
