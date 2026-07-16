@@ -18,7 +18,8 @@ protection rule with:
 - pull requests required before merging;
 - at least one approving review and dismissal of stale approvals;
 - conversation resolution required;
-- the `quality` status check required and required to be current with `master`;
+- the `frontend` and `rust` status checks required and required to be current
+  with `master`;
 - force pushes and branch deletion blocked;
 - administrators included unless an explicitly documented recovery requires a
   temporary exception.
