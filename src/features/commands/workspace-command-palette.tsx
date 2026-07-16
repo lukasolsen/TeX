@@ -14,6 +14,13 @@ import {
   ZoomOut,
   Eye,
   EyeOff,
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  ListStart,
+  Play,
+  ScrollText,
+  Trash2,
 } from "lucide-react"
 
 import {
@@ -41,12 +48,21 @@ function readableFiles(entry: ProjectEntry, parent = ""): string[] {
 
 export function WorkspaceCommandPalette({
   buildEnabled,
+  diagnosticsAvailable,
   onBuild,
+  onBuildAndView,
+  onClean,
+  onCopyDiagnostic,
+  onFirstDiagnostic,
+  onNextDiagnostic,
   onOpenChange,
   onOpenBuild,
   onOpenFile,
   onOpenProject,
   onOpenSettings,
+  onPreviousDiagnostic,
+  onRevealOutput,
+  onShowLogContext,
   onTogglePdf,
   onSave,
   onSearch,
@@ -59,12 +75,21 @@ export function WorkspaceCommandPalette({
   tree,
 }: {
   buildEnabled: boolean
+  diagnosticsAvailable: boolean
   onBuild: () => void
+  onBuildAndView: () => void
+  onClean: () => void
+  onCopyDiagnostic: () => void
+  onFirstDiagnostic: () => void
+  onNextDiagnostic: () => void
   onOpenChange: (open: boolean) => void
   onOpenBuild: () => void
   onOpenFile: (path: string) => void
   onOpenProject: () => void
   onOpenSettings: () => void
+  onPreviousDiagnostic: () => void
+  onRevealOutput: () => void
+  onShowLogContext: () => void
   onTogglePdf: () => void
   onSave: () => void
   onSearch: () => void
@@ -88,6 +113,50 @@ export function WorkspaceCommandPalette({
         <CommandGroup heading="Commands">
           <CommandItem disabled={!buildEnabled} onSelect={() => run(onBuild)}>
             <Hammer /> Build PDF
+          </CommandItem>
+          <CommandItem
+            disabled={!buildEnabled}
+            onSelect={() => run(onBuildAndView)}
+          >
+            <Play /> Build and view PDF
+          </CommandItem>
+          <CommandItem onSelect={() => run(onClean)}>
+            <Trash2 /> Preview and clean auxiliary files
+          </CommandItem>
+          <CommandItem onSelect={() => run(onRevealOutput)}>
+            <FolderOpen /> Reveal built PDF
+          </CommandItem>
+          <CommandItem
+            disabled={!diagnosticsAvailable}
+            onSelect={() => run(onFirstDiagnostic)}
+          >
+            <ListStart /> Go to first diagnostic
+          </CommandItem>
+          <CommandItem
+            disabled={!diagnosticsAvailable}
+            onSelect={() => run(onNextDiagnostic)}
+          >
+            <ArrowDown /> Next diagnostic
+            <CommandShortcut>F8</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            disabled={!diagnosticsAvailable}
+            onSelect={() => run(onPreviousDiagnostic)}
+          >
+            <ArrowUp /> Previous diagnostic
+            <CommandShortcut>Shift F8</CommandShortcut>
+          </CommandItem>
+          <CommandItem
+            disabled={!diagnosticsAvailable}
+            onSelect={() => run(onCopyDiagnostic)}
+          >
+            <Copy /> Copy diagnostic
+          </CommandItem>
+          <CommandItem
+            disabled={!diagnosticsAvailable}
+            onSelect={() => run(onShowLogContext)}
+          >
+            <ScrollText /> Show diagnostic log context
           </CommandItem>
           <CommandItem onSelect={() => run(onToggleWatch)}>
             {watchActive ? <EyeOff /> : <Eye />}

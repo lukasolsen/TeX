@@ -10,6 +10,8 @@ import {
   Eye,
   EyeOff,
   Settings2,
+  FolderOpen,
+  Trash2,
   X,
 } from "lucide-react"
 
@@ -53,15 +55,20 @@ import { BuildConfigurationDialog } from "@/features/build/build-configuration-d
 
 export function BuildPanel({
   dispatch,
+  activeDiagnosticIndex,
+  logContextSequence,
   configurationState,
   engine,
   onBuild,
   onClose,
   onNavigate,
+  onSelectDiagnostic,
   onStop,
   onStartWatch,
   onStopWatch,
   onSaveConfiguration,
+  onClean,
+  onRevealOutput,
   onTabChange,
   profiles,
   setEngine,
@@ -70,17 +77,22 @@ export function BuildPanel({
   watch,
 }: {
   dispatch: Dispatch<ProjectBuildAction>
+  activeDiagnosticIndex: number | null
+  logContextSequence: number | null
   configurationState: ProjectBuildConfigurationState
   engine: BuildEngine
   onBuild: () => void
   onClose: () => void
   onNavigate: (path: string, line: number) => void
+  onSelectDiagnostic: (index: number) => void
   onStop: () => void
   onStartWatch: () => void
   onStopWatch: () => void
   onSaveConfiguration: (
     configuration: ProjectBuildConfiguration
   ) => Promise<void>
+  onClean: () => void
+  onRevealOutput: () => void
   onTabChange: (tab: BuildPanelTab) => void
   profiles: BuildProfilesState
   setEngine: (engine: BuildEngine) => void
@@ -132,6 +144,25 @@ export function BuildPanel({
           </span>
         ) : null}
         <div className="ml-auto flex min-w-0 items-center gap-2">
+          <Button
+            aria-label="Clean auxiliary files"
+            disabled={running}
+            onClick={onClean}
+            size="icon-sm"
+            title="Preview and clean auxiliary files"
+            variant="ghost"
+          >
+            <Trash2 aria-hidden="true" />
+          </Button>
+          <Button
+            aria-label="Reveal built PDF"
+            onClick={onRevealOutput}
+            size="icon-sm"
+            title="Reveal built PDF"
+            variant="ghost"
+          >
+            <FolderOpen aria-hidden="true" />
+          </Button>
           <Button
             aria-label="Configure project build"
             disabled={configurationState.status !== "ready"}
@@ -248,10 +279,16 @@ export function BuildPanel({
             ) : null}
           </div>
           <TabsContent className="min-h-0" value="output">
-            <BuildOutput run={run} />
+            <BuildOutput contextSequence={logContextSequence} run={run} />
           </TabsContent>
           <TabsContent className="min-h-0" value="problems">
-            <BuildProblems issue={issue} onNavigate={onNavigate} run={run} />
+            <BuildProblems
+              activeIndex={activeDiagnosticIndex}
+              issue={issue}
+              onNavigate={onNavigate}
+              onSelect={onSelectDiagnostic}
+              run={run}
+            />
           </TabsContent>
         </Tabs>
       </div>
@@ -450,7 +487,13 @@ function BuildStatusBadge({ run }: { run: BuildRun | null }) {
   return <Badge variant={variant}>{statusLabel(run.status)}</Badge>
 }
 
-function BuildOutput({ run }: { run: BuildRun | null }) {
+function BuildOutput({
+  contextSequence,
+  run,
+}: {
+  contextSequence: number | null
+  run: BuildRun | null
+}) {
   const scrollRoot = useRef<HTMLDivElement>(null)
   const followOutput = useRef(true)
 
@@ -476,6 +519,14 @@ function BuildOutput({ run }: { run: BuildRun | null }) {
     }
   }, [run?.entries.length, run?.id])
 
+  useEffect(() => {
+    if (contextSequence === null) return
+    const entry = scrollRoot.current?.querySelector<HTMLElement>(
+      `[data-log-sequence="${contextSequence}"]`
+    )
+    entry?.scrollIntoView({ block: "center" })
+  }, [contextSequence, run?.id])
+
   if (run === null) {
     return (
       <BuildEmpty
@@ -496,7 +547,15 @@ function BuildOutput({ run }: { run: BuildRun | null }) {
           </li>
         ) : null}
         {run.entries.map((entry) => (
-          <li className="text-source-foreground" key={entry.sequence}>
+          <li
+            className={
+              entry.sequence === contextSequence
+                ? "rounded bg-accent text-accent-foreground"
+                : "text-source-foreground"
+            }
+            data-log-sequence={entry.sequence}
+            key={entry.sequence}
+          >
             <span
               className="mr-3 inline-block w-8 text-right text-muted-foreground select-none"
               aria-hidden="true"
@@ -515,12 +574,16 @@ function BuildOutput({ run }: { run: BuildRun | null }) {
 }
 
 function BuildProblems({
+  activeIndex,
   issue,
   onNavigate,
+  onSelect,
   run,
 }: {
+  activeIndex: number | null
   issue: ProjectError | null
   onNavigate: (path: string, line: number) => void
+  onSelect: (index: number) => void
   run: BuildRun | null
 }) {
   const unmappedFailure =
@@ -552,7 +615,7 @@ function BuildProblems({
           </Alert>
         ) : null}
         <ul className="flex flex-col gap-1" aria-label="Build diagnostics">
-          {(run?.diagnostics ?? []).map((diagnostic) => {
+          {(run?.diagnostics ?? []).map((diagnostic, index) => {
             const locationAvailable =
               diagnostic.file !== null &&
               diagnostic.line !== null &&
@@ -560,9 +623,10 @@ function BuildProblems({
             return (
               <li key={`${diagnostic.logSequence}-${diagnostic.message}`}>
                 <Button
+                  aria-current={activeIndex === index ? "true" : undefined}
                   className="h-auto w-full justify-start rounded-md px-2 py-1.5 text-left"
-                  disabled={!locationAvailable}
                   onClick={() => {
+                    onSelect(index)
                     if (
                       locationAvailable &&
                       diagnostic.file !== null &&
@@ -571,7 +635,7 @@ function BuildProblems({
                       onNavigate(diagnostic.file, diagnostic.line)
                     }
                   }}
-                  variant="ghost"
+                  variant={activeIndex === index ? "secondary" : "ghost"}
                 >
                   {diagnostic.severity === "error" ? (
                     <AlertCircle

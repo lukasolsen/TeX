@@ -10,6 +10,7 @@ import type {
   WatchEvent,
   WatchStatus,
   ProjectBuildConfiguration,
+  CleanPreview,
 } from "@/domain/build"
 
 const BUILD_EVENT = "tex://build-event"
@@ -81,4 +82,24 @@ export async function saveProjectBuildConfiguration(
     projectPath,
     configuration,
   })
+}
+
+export async function previewCleanAuxiliaryFiles(
+  projectPath: string
+): Promise<CleanPreview> {
+  return invoke<CleanPreview>("preview_clean_auxiliary_files", { projectPath })
+}
+
+export async function cleanAuxiliaryFiles(
+  projectPath: string,
+  files: string[]
+): Promise<number> {
+  return invoke<number>("clean_auxiliary_files", { projectPath, files })
+}
+
+export async function revealProjectOutput(
+  projectPath: string,
+  rootFile: string
+): Promise<void> {
+  return invoke("reveal_project_output", { projectPath, rootFile })
 }
