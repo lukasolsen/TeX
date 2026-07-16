@@ -13,6 +13,7 @@ pub mod root_detection;
 mod source_edit;
 mod source_read;
 mod synctex;
+mod watch_system;
 
 use tauri_plugin_log::{Target, TargetKind};
 
@@ -21,6 +22,7 @@ use tauri_plugin_log::{Target, TargetKind};
 pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
+        .manage(watch_system::WatchController::default())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -56,6 +58,9 @@ pub fn run() {
             build_system::start_build,
             build_system::stop_build,
             build_system::get_build_history,
+            watch_system::start_project_watch,
+            watch_system::stop_project_watch,
+            watch_system::get_project_watch_status,
             synctex::synctex_forward_search,
             synctex::synctex_inverse_search,
         ])
