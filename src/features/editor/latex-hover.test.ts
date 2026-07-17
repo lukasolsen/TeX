@@ -45,6 +45,41 @@ describe("LaTeX documentation catalog", () => {
     })
   })
 
+  it("documents standard and common document classes", () => {
+    for (const name of [
+      "article",
+      "report",
+      "book",
+      "memoir",
+      "beamer",
+      "slides",
+      "minimal",
+      "letter",
+      "proc",
+      "ieeetran",
+      "revtex4-2",
+      "scrartcl",
+      "scrreprt",
+      "scrbook",
+      "scrlttr2",
+      "standalone",
+      "extarticle",
+      "extreport",
+      "extbook",
+      "amsart",
+      "amsbook",
+      "amsproc",
+      "ltxdoc",
+      "moderncv",
+      "acmart",
+    ] as const) {
+      expect(documentClassDocumentation(name)).toBeDefined()
+    }
+    expect(
+      Object.keys(latexDocumentation.documentClasses).length
+    ).toBeGreaterThanOrEqual(25)
+  })
+
   it("finds documentation for a recognised package", () => {
     expect(packageDocumentation("siunitx")).toMatchObject({
       title: "siunitx",
