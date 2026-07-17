@@ -118,6 +118,7 @@ pub async fn delete_project_entry(
     let target = resolve_entry(&root, &relative_path)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable())?;
     let entry_kind = if metadata.is_dir() { "folder" } else { "file" };
+    let deletion_root = root.clone();
     let (approval_sender, mut approval_receiver) = tauri::async_runtime::channel(1);
     app
         .dialog()
@@ -143,9 +144,16 @@ pub async fn delete_project_entry(
             message: "The project entry was not deleted.",
         });
     }
-    tauri::async_runtime::spawn_blocking(move || delete_entry(target))
-        .await
-        .map_err(|_| unavailable())?
+    tauri::async_runtime::spawn_blocking(move || {
+        // Re-validate under the full containment rules immediately before deleting.
+        // The confirmation dialog can block arbitrarily long, during which a path
+        // component could be swapped for a symlink; re-resolving here ensures the
+        // delete cannot be redirected outside the approved root.
+        let target = resolve_entry(&deletion_root, &relative_path)?;
+        delete_entry(target)
+    })
+    .await
+    .map_err(|_| unavailable())?
 }
 
 fn delete_entry(target: PathBuf) -> Result<(), ProjectFileError> {
