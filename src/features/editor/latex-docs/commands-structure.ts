@@ -1,68 +1,67 @@
 import { entry, type LatexDocumentation } from "@/features/editor/latex-docs/entry"
 
+const command = (name: string, markdown: string): LatexDocumentation =>
+  entry(`\\${name}`, markdown)
+
 export const commandsStructure = {
-  author: entry(
-    "\\author",
-    "Sets author metadata for `\\maketitle` in the preamble. Classes decide how multiple authors and affiliations are formatted.\n\n```latex\n\\author{Ada Lovelace}\n```\n\nIt produces no text until `\\maketitle` is used. [LaTeX reference](https://latexref.xyz/_005cauthor.html)"
-  ),
-  begin: entry(
-    "\\begin",
-    "Starts a named environment in the document body or wherever that environment is permitted. Every environment has a matching `\\end` with the same name.\n\n```latex\n\\begin{itemize}\n  \\item First point\n\\end{itemize}\n```\n\nNested environments must close in reverse order. [LaTeX environments](https://latexref.xyz/Environments.html)"
-  ),
-  chapter: entry(
-    "\\chapter",
-    "Creates a top-level numbered division in classes that support chapters, including `book` and `report`. Use it in the document body.\n\n```latex\n\\chapter{Method}\n```\n\nThe `article` class has no chapters; begin with `\\section` there. [LaTeX sectioning](https://latexref.xyz/Sectioning.html)"
-  ),
-  date: entry(
-    "\\date",
-    "Sets the date metadata that `\\maketitle` renders. Put it in the preamble.\n\n```latex\n\\date{\\today}\n```\n\nUse `\\date{}` when the title block should deliberately omit a date. [LaTeX reference](https://latexref.xyz/_005cdate.html)"
-  ),
-  documentclass: entry(
-    "\\documentclass",
-    "Chooses the document class, which supplies the document structure and defaults. It is the first major declaration in the preamble.\n\n```latex\n\\documentclass[12pt,a4paper]{article}\n```\n\nUse exactly one class; classes are not loaded with `\\usepackage`. [LaTeX document classes](https://latexref.xyz/Document-classes.html)"
-  ),
-  end: entry(
-    "\\end",
-    "Closes the environment opened by the corresponding `\\begin`. It is required wherever that environment ends.\n\n```latex\n\\begin{equation}\n  E = mc^2\n\\end{equation}\n```\n\nThe name must match exactly or LaTeX cannot recover the environment nesting. [LaTeX environments](https://latexref.xyz/Environments.html)"
-  ),
-  include: entry(
-    "\\include",
-    "Includes a separate `.tex` file on a page boundary and supports `\\includeonly` for selective builds. Use it in the document body.\n\n```latex\n\\include{chapters/method}\n```\n\nPrefer `\\input` for small inline fragments; do not nest `\\include`. [LaTeX include](https://latexref.xyz/_005cinclude-_0026-_005cincludeonly.html)"
-  ),
-  input: entry(
-    "\\input",
-    "Inserts another source file at this location, which keeps a large document split into focused files.\n\n```latex\n\\input{chapters/introduction}\n```\n\nThe path is relative to this file; an input file normally has no second preamble. [LaTeX input](https://latexref.xyz/_005cinput.html)"
-  ),
-  label: entry(
-    "\\label",
-    "Creates a stable name for a numbered heading, caption, equation, or other counter. Place it immediately after the thing it identifies.\n\n```latex\n\\section{Results}\\label{sec:results}\n```\n\nLabels must be unique; prefixes such as `sec:` and `fig:` prevent collisions. [LaTeX labels](https://latexref.xyz/_005clabel.html)"
-  ),
-  maketitle: entry(
-    "\\maketitle",
-    "Renders the title block from preamble metadata set with `\\title`, `\\author`, and `\\date`. Use it near the start of the document body.\n\n```latex\n\\begin{document}\n\\maketitle\n```\n\nDo not call it in the preamble; most classes expect it only once. [LaTeX title page](https://latexref.xyz/_005cmaketitle.html)"
-  ),
-  ref: entry(
-    "\\ref",
-    "Inserts the number associated with a matching `\\label` in running text.\n\n```latex\nSee Section~\\ref{sec:results}.\n```\n\nCompile again after adding or moving labels so LaTeX can resolve the reference. [LaTeX references](https://latexref.xyz/_005cref.html)"
-  ),
-  section: entry(
-    "\\section",
-    "Creates a numbered section heading in the document body and normally adds it to the table of contents.\n\n```latex\n\\section{Introduction}\n```\n\nKeep heading levels meaningful; use paragraphs rather than headings only to add space. [LaTeX sectioning](https://latexref.xyz/Sectioning.html)"
-  ),
-  subfile: entry(
-    "\\subfile",
-    "Includes a child document when the project uses the `subfiles` package, allowing the child to compile independently.\n\n```latex\n\\subfile{chapters/introduction}\n```\n\nLoad `subfiles`; each child needs a compatible standalone preamble. [subfiles on CTAN](https://ctan.org/pkg/subfiles)"
-  ),
-  subsection: entry(
-    "\\subsection",
-    "Creates a numbered subsection below the current section in the document body.\n\n```latex\n\\subsection{Data collection}\n```\n\nUse it for actual document structure, not as visual spacing. [LaTeX sectioning](https://latexref.xyz/Sectioning.html)"
-  ),
-  title: entry(
-    "\\title",
-    "Sets title metadata for `\\maketitle`; put it in the preamble.\n\n```latex\n\\title{A Clear Research Title}\n```\n\nIt does not print by itself, and its exact styling comes from the document class. [LaTeX reference](https://latexref.xyz/_005ctitle.html)"
-  ),
-  usepackage: entry(
-    "\\usepackage",
-    "Loads a LaTeX package and makes its commands and environments available. It belongs in the preamble.\n\n```latex\n\\usepackage{graphicx}\n```\n\nAvoid loading a package twice unless its documentation explicitly supports it. [LaTeX packages](https://latexref.xyz/Additional-packages.html)"
-  ),
+  addcontentsline: command("addcontentsline", "Adds a manual entry to a table of contents, list of figures, or list of tables.\n\n```latex\n\\addcontentsline{toc}{section}{Acknowledgements}\n```\n\nUse the target file, entry level, and displayed text in that order."),
+  addtocontents: command("addtocontents", "Writes formatting material directly to an auxiliary contents file. Prefer higher-level commands when possible because the file format is class-dependent."),
+  and: command("and", "Separates authors in `\\author` for classes that recognise it. The document class controls the resulting author layout."),
+  appendix: command("appendix", "Changes subsequent sectioning commands to appendix numbering.\n\n```latex\n\\appendix\n\\section{Supplementary derivation}\n```\n\nIt does not create an appendix heading by itself."),
+  author: command("author", "Sets author metadata for `\\maketitle` in the preamble. Classes decide how multiple authors and affiliations are formatted.\n\n```latex\n\\author{Ada Lovelace}\n```\n\nIt produces no text until `\\maketitle` is used."),
+  autoref: command("autoref", "Creates a typed cross-reference such as ‘Section 2’. It is provided by `hyperref`; load that package before using it."),
+  backmatter: command("backmatter", "Starts unnumbered back matter in classes such as `book` and `memoir`. Use it before bibliographies, indexes, or closing chapters when the class supports it."),
+  begin: command("begin", "Starts a named environment wherever that environment is permitted. Every environment has a matching `\\end` with the same name.\n\n```latex\n\\begin{itemize}\n  \\item First point\n\\end{itemize}\n```\n\nNested environments must close in reverse order."),
+  chapter: command("chapter", "Creates a top-level numbered division in classes that support chapters, including `book` and `report`. The `article` class has no chapters; begin with `\\section` there."),
+  cleardoublepage: command("cleardoublepage", "Ends the current page and, in two-sided layouts, inserts a blank page when needed so following content starts on a right-hand page."),
+  clearpage: command("clearpage", "Ends the current page and places all pending floats before continuing. Use it when a figure or table must not move beyond a boundary."),
+  date: command("date", "Sets the date metadata that `\\maketitle` renders. Put it in the preamble.\n\n```latex\n\\date{\\today}\n```\n\nUse `\\date{}` when the title block should deliberately omit a date."),
+  documentclass: command("documentclass", "Chooses the document class, which supplies the document structure and defaults. It is the first major declaration in the preamble.\n\n```latex\n\\documentclass[12pt,a4paper]{article}\n```\n\nUse exactly one class; classes are not loaded with `\\usepackage`."),
+  end: command("end", "Closes the environment opened by the corresponding `\\begin`.\n\n```latex\n\\begin{equation}\n  E = mc^2\n\\end{equation}\n```\n\nThe name must match exactly or LaTeX cannot recover the environment nesting."),
+  eqref: command("eqref", "Prints a parenthesised reference to a labelled equation. It is provided by `amsmath`; load that package before using it."),
+  frontmatter: command("frontmatter", "Starts unnumbered front matter in classes such as `book` and `memoir`, typically using roman page numbers."),
+  href: command("href", "Creates linked text for a URL. It is provided by `hyperref`.\n\n```latex\n\\href{https://example.org}{Project website}\n```"),
+  include: command("include", "Includes a separate `.tex` file on a page boundary and supports `\\includeonly` for selective builds.\n\n```latex\n\\include{chapters/method}\n```\n\nPrefer `\\input` for small inline fragments; do not nest `\\include`."),
+  includeonly: command("includeonly", "Limits which `\\include` files are processed while retaining cross-reference information from earlier builds. Put it in the preamble.\n\n```latex\n\\includeonly{chapters/method}\n```"),
+  input: command("input", "Inserts another source file at this location, which keeps a large document split into focused files.\n\n```latex\n\\input{chapters/introduction}\n```\n\nAn input file normally has no second preamble."),
+  label: command("label", "Creates a stable name for a numbered heading, caption, equation, or other counter.\n\n```latex\n\\section{Results}\\label{sec:results}\n```\n\nLabels must be unique; prefixes such as `sec:` and `fig:` prevent collisions."),
+  linebreak: command("linebreak", "Requests a line break at the current point. An optional value from 0 to 4 expresses how strongly LaTeX should try to break there."),
+  listoffigures: command("listoffigures", "Prints the list of figures, usually after the table of contents. Compile twice after changing captions so entries are current."),
+  listoftables: command("listoftables", "Prints the list of tables, usually after the table of contents. Compile twice after changing captions so entries are current."),
+  mainmatter: command("mainmatter", "Starts numbered main matter in classes such as `book` and `memoir`, typically resetting page numbering to arabic numerals."),
+  maketitle: command("maketitle", "Renders the title block from preamble metadata set with `\\title`, `\\author`, and `\\date`. Use it near the start of the document body.\n\n```latex\n\\begin{document}\n\\maketitle\n```\n\nMost classes expect it only once."),
+  nameref: command("nameref", "References the title associated with a label instead of its number. It is provided by `nameref` and is also available through `hyperref`."),
+  newcommand: command("newcommand", "Defines a reusable command and reports an error if its name already exists.\n\n```latex\n\\newcommand{\\vect}[1]{\\mathbf{#1}}\n```\n\nUse an optional argument count when the replacement needs parameters."),
+  newcounter: command("newcounter", "Creates a new counter, optionally resetting it when another counter advances. Use `\\newtheorem` for theorem numbering rather than managing theorem counters manually."),
+  newenvironment: command("newenvironment", "Defines an environment with opening and closing code.\n\n```latex\n\\newenvironment{note}{\\begin{quote}\\itshape}{\\end{quote}}\n```\n\nIt reports an error when the environment name already exists."),
+  newpage: command("newpage", "Ends the current page without forcing queued floats to appear. Use `\\clearpage` when pending floats must be placed first."),
+  newline: command("newline", "Forces a line break at the current point. Prefer paragraph breaks for ordinary prose separation."),
+  newtheorem: command("newtheorem", "Defines a numbered theorem-like environment. It is commonly supplied by the document class or `amsthm`.\n\n```latex\n\\newtheorem{theorem}{Theorem}[section]\n```"),
+  nolinebreak: command("nolinebreak", "Discourages a line break at the current point. An optional value from 0 to 4 controls the strength of the request."),
+  nolinkurl: command("nolinkurl", "Typesets a URL in a breakable monospaced form without creating a hyperlink. It is provided by `hyperref` or `url`."),
+  nopagebreak: command("nopagebreak", "Discourages a page break at the current point. An optional value from 0 to 4 controls the strength of the request."),
+  pageref: command("pageref", "Prints the page number associated with a matching label.\n\n```latex\nSee page~\\pageref{sec:results}.\n```\n\nCompile again after moving labelled material."),
+  pagebreak: command("pagebreak", "Requests a page break at the current point. An optional value from 0 to 4 expresses how strongly LaTeX should break there."),
+  paragraph: command("paragraph", "Creates a run-in sectioning heading below `\\subsubsection` in standard classes. Its formatting depends on the document class."),
+  part: command("part", "Creates the highest document division, above chapters or sections.\n\n```latex\n\\part{Foundations}\n```\n\nUse it for major groups of content rather than ordinary sections."),
+  phantomsection: command("phantomsection", "Creates a hyperlink anchor at the current position. It is provided by `hyperref` and is useful before manual contents entries."),
+  providecommand: command("providecommand", "Defines a command only when it is not already defined, which helps packages offer a safe fallback definition."),
+  ref: command("ref", "Inserts the number associated with a matching `\\label` in running text.\n\n```latex\nSee Section~\\ref{sec:results}.\n```\n\nCompile again after adding or moving labels so LaTeX can resolve the reference."),
+  refstepcounter: command("refstepcounter", "Increments a counter and makes its value available to the next `\\label`. Use it when creating a custom numbered object that users can reference."),
+  renewcommand: command("renewcommand", "Redefines an existing command and reports an error if it is undefined. Limit redefinitions to documented extension points to avoid surprising package interactions."),
+  renewenvironment: command("renewenvironment", "Redefines an existing environment. Use it only when the existing environment is known and the replacement preserves its intended use."),
+  RequirePackage: command("RequirePackage", "Loads a package from a class or package file. In a normal document preamble, use `\\usepackage` instead."),
+  section: command("section", "Creates a numbered section heading in the document body and normally adds it to the table of contents.\n\n```latex\n\\section{Introduction}\n```\n\nKeep heading levels meaningful; use paragraphs rather than headings only to add space."),
+  setcounter: command("setcounter", "Sets a counter to a specific integer.\n\n```latex\n\\setcounter{section}{3}\n```\n\nChanging built-in counters can affect numbering and references."),
+  stepcounter: command("stepcounter", "Increments a counter without making its value available to `\\label`. Use `\\refstepcounter` when the new value must be referenced."),
+  subparagraph: command("subparagraph", "Creates the lowest standard sectioning level below `\\paragraph`. Its formatting depends on the document class and is often run-in."),
+  subsection: command("subsection", "Creates a numbered subsection below the current section in the document body.\n\n```latex\n\\subsection{Data collection}\n```\n\nUse it for actual document structure, not as visual spacing."),
+  subsubsection: command("subsubsection", "Creates a numbered subsection below `\\subsection`. Use it sparingly so the document hierarchy remains easy to scan."),
+  subfile: command("subfile", "Includes a child document when the project uses the `subfiles` package, allowing the child to compile independently.\n\n```latex\n\\subfile{chapters/introduction}\n```\n\nLoad `subfiles`; each child needs a compatible standalone preamble."),
+  tableofcontents: command("tableofcontents", "Prints the table of contents at the current location.\n\n```latex\n\\tableofcontents\n```\n\nCompile twice after changing headings so entries are current."),
+  thanks: command("thanks", "Adds a footnote to title metadata, usually inside `\\author` or `\\title`. The document class determines where it is printed."),
+  title: command("title", "Sets title metadata for `\\maketitle`; put it in the preamble.\n\n```latex\n\\title{A Clear Research Title}\n```\n\nIt does not print by itself, and its styling comes from the document class."),
+  url: command("url", "Typesets a URL in a breakable monospaced form. It is provided by `hyperref` or the `url` package.\n\n```latex\n\\url{https://example.org/resources}\n```"),
+  usepackage: command("usepackage", "Loads a LaTeX package and makes its commands and environments available. It belongs in the preamble.\n\n```latex\n\\usepackage{graphicx}\n```\n\nAvoid loading a package twice unless its documentation explicitly supports it."),
+  value: command("value", "Expands to the current numeric value of a counter. Use it where TeX expects an integer, not as ordinary formatted prose."),
 } as const satisfies Readonly<Record<string, LatexDocumentation>>

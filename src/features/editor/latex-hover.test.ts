@@ -92,6 +92,30 @@ describe("LaTeX documentation catalog", () => {
     })
   })
 
+  it("documents structure and text commands used in everyday files", () => {
+    for (const name of [
+      "part",
+      "subsubsection",
+      "tableofcontents",
+      "appendix",
+      "frontmatter",
+      "pageref",
+      "newcommand",
+      "textbf",
+      "emph",
+      "footnote",
+      "hspace",
+      "vspace",
+      "mbox",
+      "fbox",
+      "today",
+      "textcolor",
+      "definecolor",
+    ] as const) {
+      expect(commandDocumentation(name)).toBeDefined()
+    }
+  })
+
   it("returns undefined for unknown documentation names", () => {
     expect(commandDocumentation("unknowncommand")).toBeUndefined()
     expect(documentClassDocumentation("unknownclass")).toBeUndefined()
