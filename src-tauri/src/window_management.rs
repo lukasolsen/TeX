@@ -5,11 +5,15 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 #[cfg(target_os = "macos")]
 use tauri::{LogicalPosition, TitleBarStyle};
 
 static NEXT_WINDOW_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+
+/// Upper bound on concurrently open windows, so a buggy or hostile frontend
+/// cannot exhaust memory/GPU resources by requesting windows in a loop.
+const MAX_WINDOWS: usize = 24;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +37,11 @@ pub fn create_main_window(app: &AppHandle) -> Result<(), WindowCreationError> {
 /// Creates a project-home window without copying the caller's workspace state.
 #[tauri::command]
 pub fn create_new_window(app: AppHandle) -> Result<(), WindowCreationError> {
+    if app.webview_windows().len() >= MAX_WINDOWS {
+        return Err(WindowCreationError {
+            message: "TeX has reached its window limit. Close a window before opening another.",
+        });
+    }
     let label = window_label(NEXT_WINDOW_SEQUENCE.fetch_add(1, Ordering::Relaxed));
     create_window(&app, &label)
 }
