@@ -36,12 +36,10 @@ fn create_entry(
     name: &str,
     directory: bool,
 ) -> Result<(), ProjectFileError> {
-    let target = parent.join(entry_name(name)?);
-    let verified_parent = parent.canonicalize().map_err(|_| unavailable())?;
-    if verified_parent != parent || !verified_parent.is_dir() || !verified_parent.starts_with(root)
-    {
-        return Err(invalid());
-    }
+    let components = entry_path(name)?;
+    let (entry_name, parent_components) = components.split_last().ok_or_else(invalid)?;
+    let parent = create_parent_directories(root, parent, parent_components)?;
+    let target = parent.join(entry_name);
 
     if directory {
         fs::create_dir(&target)
@@ -53,6 +51,40 @@ fn create_entry(
             .map(|_| ())
     }
     .map_err(|_| unavailable())
+}
+
+fn create_parent_directories(
+    root: &Path,
+    parent: &Path,
+    components: &[&str],
+) -> Result<PathBuf, ProjectFileError> {
+    let mut current = verified_directory(root, parent)?;
+
+    for component in components {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(invalid());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&current).map_err(|_| unavailable())?;
+            }
+            Err(_) => return Err(unavailable()),
+        }
+        current = verified_directory(root, &current)?;
+    }
+
+    Ok(current)
+}
+
+fn verified_directory(root: &Path, directory: &Path) -> Result<PathBuf, ProjectFileError> {
+    let verified = directory.canonicalize().map_err(|_| unavailable())?;
+    if verified != directory || !verified.is_dir() || !verified.starts_with(root) {
+        return Err(invalid());
+    }
+    Ok(verified)
 }
 
 /// Renames an existing project entry without allowing it to leave the project root.
@@ -185,6 +217,28 @@ fn entry_name(name: &str) -> Result<&str, ProjectFileError> {
     }
 }
 
+fn entry_path(name: &str) -> Result<Vec<&str>, ProjectFileError> {
+    if name.is_empty() || name.contains('\\') {
+        return Err(invalid());
+    }
+
+    let components = name.split('/').collect::<Vec<_>>();
+    if components.iter().any(|component| {
+        component.is_empty()
+            || *component == "."
+            || *component == ".."
+            || !matches!(
+                Path::new(component).components().next(),
+                Some(std::path::Component::Normal(_))
+            )
+            || Path::new(component).components().nth(1).is_some()
+    }) {
+        Err(invalid())
+    } else {
+        Ok(components)
+    }
+}
+
 fn invalid() -> ProjectFileError {
     ProjectFileError {
         code: "invalid-project-entry",
@@ -215,17 +269,10 @@ mod tests {
     }
 
     #[test]
-    fn rejects_path_like_entry_names() {
+    fn rejects_path_like_rename_names() {
         assert!(entry_name("../outside.tex").is_err());
         assert!(entry_name("chapter/main.tex").is_err());
         assert!(entry_name("main.tex").is_ok());
-    }
-
-    #[test]
-    fn rejects_nested_entry_names() {
-        assert!(entry_name("chapters/intro.tex").is_err());
-        assert!(entry_name("../outside.tex").is_err());
-        assert!(entry_name("/outside.tex").is_err());
     }
 
     #[test]
@@ -233,6 +280,41 @@ mod tests {
         let directory = temporary_directory()?;
         assert!(create_entry(&directory, &directory, "intro.tex", false).is_ok());
         assert!(directory.join("intro.tex").is_file());
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn creates_nested_file_and_missing_parent_directories() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = temporary_directory()?;
+
+        assert!(create_entry(
+            &directory,
+            &directory,
+            "testing/large_tasks/hello.txt",
+            false
+        )
+        .is_ok());
+        assert!(directory.join("testing/large_tasks/hello.txt").is_file());
+        assert!(create_entry(&directory, &directory, "testing/a_major_file", false).is_ok());
+        assert!(directory.join("testing/a_major_file").is_file());
+        assert!(create_entry(&directory, &directory, "other/new_folder", true).is_ok());
+        assert!(directory.join("other/new_folder").is_dir());
+
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_creation_paths_that_escape_or_are_ambiguous(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let directory = temporary_directory()?;
+
+        assert!(create_entry(&directory, &directory, "../outside.tex", false).is_err());
+        assert!(create_entry(&directory, &directory, "chapter//main.tex", false).is_err());
+        assert!(create_entry(&directory, &directory, "chapter\\main.tex", false).is_err());
+
         fs::remove_dir_all(directory)?;
         Ok(())
     }

@@ -51,6 +51,7 @@ function CreateEntryInput({
   directory,
   onCancel,
   onCreate,
+  onComplete,
   parentPath,
 }: CreationTarget & {
   onCancel: () => void
@@ -59,6 +60,7 @@ function CreateEntryInput({
     name: string,
     directory: boolean
   ) => Promise<boolean>
+  onComplete: (created: boolean) => void
 }): ReactElement {
   const [name, setName] = useState("")
   const input = useRef<HTMLInputElement>(null)
@@ -77,7 +79,9 @@ function CreateEntryInput({
     }
     submitting.current = true
     try {
-      if (await onCreate(parentPath, value, directory)) onCancel()
+      const created = await onCreate(parentPath, value, directory)
+      onComplete(created)
+      onCancel()
     } finally {
       submitting.current = false
     }
@@ -213,6 +217,7 @@ function TreeBranch({
   onPreviewFile,
   onOpenPdf,
   onCreate,
+  onCompleteCreate,
   onCancelCreate,
   onStartCreate,
   onRename,
@@ -234,6 +239,7 @@ function TreeBranch({
     name: string,
     directory: boolean
   ) => Promise<boolean>
+  onCompleteCreate: (created: boolean) => void
   onCancelCreate: () => void
   onStartCreate: (target: CreationTarget) => void
   onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
@@ -387,6 +393,7 @@ function TreeBranch({
               onPreviewFile={onPreviewFile}
               onOpenPdf={onOpenPdf}
               onCreate={onCreate}
+              onCompleteCreate={onCompleteCreate}
               onCancelCreate={onCancelCreate}
               onStartCreate={onStartCreate}
               onRename={onRename}
@@ -402,6 +409,7 @@ function TreeBranch({
               directory={creation.directory}
               onCancel={onCancelCreate}
               onCreate={onCreate}
+              onComplete={onCompleteCreate}
               parentPath={entry.path}
             />
           ) : null}
@@ -441,9 +449,21 @@ export function ProjectTree({
   tree: ProjectEntry
 }): ReactElement {
   const [creation, setCreation] = useState<CreationTarget | null>(null)
+  const [creationError, setCreationError] = useState<string | null>(null)
   const clipboard = useClipboard()
   const copyPath = (path: string): void => {
     runDetached(clipboard.copyText(path))
+  }
+  const startCreation = (target: CreationTarget): void => {
+    setCreationError(null)
+    setCreation(target)
+  }
+  const completeCreation = (created: boolean): void => {
+    if (!created) {
+      setCreationError(
+        "Could not create the project entry. Your remaining files are safe."
+      )
+    }
   }
 
   return (
@@ -466,8 +486,9 @@ export function ProjectTree({
                   onPreviewFile={onPreviewFile}
                   onOpenPdf={onOpenPdf}
                   onCreate={onCreate}
+                  onCompleteCreate={completeCreation}
                   onCancelCreate={() => setCreation(null)}
-                  onStartCreate={setCreation}
+                  onStartCreate={startCreation}
                   onRename={onRename}
                   onDelete={onDelete}
                   rootFiles={rootFiles}
@@ -481,11 +502,17 @@ export function ProjectTree({
                   directory={creation.directory}
                   onCancel={() => setCreation(null)}
                   onCreate={onCreate}
+                  onComplete={completeCreation}
                   parentPath={null}
                 />
               ) : null}
             </ul>
           </ScrollArea>
+          {creationError !== null ? (
+            <p className="border-t px-3 py-2 text-xs text-destructive" role="alert">
+              {creationError}
+            </p>
+          ) : null}
           {clipboard.status !== null ? (
             <p
               className="border-t px-3 py-1.5 text-xs text-muted-foreground"
@@ -501,7 +528,7 @@ export function ProjectTree({
       <ContextMenuContent>
         <ContextMenuItem
           onClick={() => {
-            setCreation({ parentPath: null, directory: false })
+            startCreation({ parentPath: null, directory: false })
           }}
         >
           <FilePlus />
@@ -509,7 +536,7 @@ export function ProjectTree({
         </ContextMenuItem>
         <ContextMenuItem
           onClick={() => {
-            setCreation({ parentPath: null, directory: true })
+            startCreation({ parentPath: null, directory: true })
           }}
         >
           <FolderPlus />
