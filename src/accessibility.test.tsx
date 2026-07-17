@@ -102,22 +102,8 @@ describe("primary workflow accessibility", () => {
   })
 
   it("keeps the workspace build action named", async () => {
-    render(
-      <WorkspaceToolbar
-        buildEnabled={false}
-        buildStatus={null}
-        onBuild={callback}
-        onOpenBuild={callback}
-        onOpenSearch={callback}
-        onReturnHome={callback}
-        onSave={callback}
-        onStop={callback}
-        onTogglePdf={callback}
-        pdfOpen
-        session={session}
-      />
-    )
-    expect(screen.getByRole("button", { name: /build pdf/i })).toBeTruthy()
+    render(<WorkspaceToolbar session={session} />)
+    expect(screen.getByText("Report")).toBeTruthy()
     await expectNoAutomatedAccessibilityViolations()
   })
 

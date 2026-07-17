@@ -1,6 +1,7 @@
 import {
   BookOpenText,
   FileCode2,
+  FolderOpen,
   Image,
   Library,
   Link2,
@@ -203,6 +204,7 @@ export function ProjectSidebar({
   tree,
   tab,
   onTabChange,
+  projectName,
 }: {
   activeLine: number | null
   documentState: AsyncDocumentState
@@ -224,21 +226,26 @@ export function ProjectSidebar({
   tree: ProjectEntry
   tab: ProjectSidebarTab
   onTabChange: (tab: ProjectSidebarTab) => void
+  projectName: string
 }): ReactElement {
   return (
     <Tabs
       className="size-full min-h-0 gap-0 bg-sidebar"
       onValueChange={(value) => {
-        if (
-          value === "files" ||
-          value === "outline" ||
-          value === "references"
-        ) {
+        if (value === "files" || value === "outline" || value === "references")
           onTabChange(value)
-        }
       }}
       value={tab}
     >
+      <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3">
+        <FolderOpen
+          aria-hidden="true"
+          className="size-3.5 text-muted-foreground"
+        />
+        <p className="truncate text-xs font-semibold" title={projectName}>
+          {projectName}
+        </p>
+      </div>
       <TabsList
         className="h-10 w-full shrink-0 justify-start gap-0 rounded-none border-b bg-sidebar p-0"
         variant="line"

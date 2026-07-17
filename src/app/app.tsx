@@ -165,6 +165,14 @@ export default function App(): ReactElement {
             ? () => window.dispatchEvent(new Event("tex:open-command-palette"))
             : null
         }
+        onWorkspaceAction={
+          state.status === "workspace" && !settingsOpen
+            ? (action) =>
+                window.dispatchEvent(
+                  new CustomEvent("tex:workspace-action", { detail: action })
+                )
+            : null
+        }
         onOpenProject={
           applicationReady ? () => runDetached(chooseAndOpenProject()) : null
         }

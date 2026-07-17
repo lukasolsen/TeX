@@ -23,8 +23,13 @@ import {
 import { stex } from "@codemirror/legacy-modes/mode/stex"
 import {
   highlightSelectionMatches,
-  openSearchPanel,
-  searchKeymap,
+  findNext,
+  findPrevious,
+  replaceAll,
+  replaceNext,
+  SearchQuery,
+  search,
+  setSearchQuery,
 } from "@codemirror/search"
 import {
   Compartment,
@@ -272,6 +277,7 @@ export function LatexEditor({
   onChange,
   onCursorChange,
   onOpenReference,
+  onOpenFind,
   onSave,
   onViewerStateChange,
   path,
@@ -287,6 +293,7 @@ export function LatexEditor({
   onChange: (change: EditorDocumentChange) => void
   onCursorChange: (line: number, column: number) => void
   onOpenReference: (path: ProjectRelativePath) => void
+  onOpenFind: () => void
   onSave: () => void
   onViewerStateChange: (
     path: ProjectRelativePath,
@@ -303,6 +310,7 @@ export function LatexEditor({
   const onChangeRef = useRef(onChange)
   const onCursorChangeRef = useRef(onCursorChange)
   const onOpenReferenceRef = useRef(onOpenReference)
+  const onOpenFindRef = useRef(onOpenFind)
   const onSaveRef = useRef(onSave)
   const onViewerStateChangeRef = useRef(onViewerStateChange)
   const viewerStateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -352,9 +360,17 @@ export function LatexEditor({
     onChangeRef.current = onChange
     onCursorChangeRef.current = onCursorChange
     onOpenReferenceRef.current = onOpenReference
+    onOpenFindRef.current = onOpenFind
     onSaveRef.current = onSave
     onViewerStateChangeRef.current = onViewerStateChange
-  }, [onChange, onCursorChange, onOpenReference, onSave, onViewerStateChange])
+  }, [
+    onChange,
+    onCursorChange,
+    onOpenFind,
+    onOpenReference,
+    onSave,
+    onViewerStateChange,
+  ])
 
   useEffect(() => {
     contentRef.current = content
@@ -468,6 +484,7 @@ export function LatexEditor({
         { hoverTime: 350, hideOnChange: true }
       ),
       projectReferenceField,
+      search({ top: true }),
       EditorView.domEventHandlers({
         compositionend: (_event, editor) => {
           queueMicrotask(() => {
@@ -513,12 +530,12 @@ export function LatexEditor({
       }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },
+        { key: "Mod-f", run: () => (onOpenFindRef.current(), true) },
         { key: "Mod-/", run: toggleComment },
         { key: "Mod-Enter", run: openReferenceAtSelection },
         indentWithTab,
         ...closeBracketsKeymap,
         ...completionKeymap,
-        ...searchKeymap,
         ...historyKeymap,
         ...defaultKeymap,
       ]),
@@ -569,9 +586,70 @@ export function LatexEditor({
     const onScroll = () => scheduleViewerState(editor)
     editor.scrollDOM.addEventListener("scroll", onScroll, { passive: true })
     const toggleLineComment = () => toggleComment(editor)
-    const findInFile = () => openSearchPanel(editor)
+    const findInFile = () => onOpenFindRef.current()
+    const runFind = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail !== "object" ||
+        event.detail === null
+      )
+        return
+      const detail = event.detail
+      if (
+        typeof detail.query !== "string" ||
+        typeof detail.caseSensitive !== "boolean" ||
+        typeof detail.wholeWord !== "boolean" ||
+        typeof detail.regexp !== "boolean"
+      )
+        return
+      const query = new SearchQuery({
+        search: detail.query,
+        caseSensitive: detail.caseSensitive,
+        wholeWord: detail.wholeWord,
+        regexp: detail.regexp,
+      })
+      editor.dispatch({
+        effects: setSearchQuery.of(query),
+      })
+      let matches = 0
+      const cursor = query.getCursor(editor.state)
+      for (let match = cursor.next(); !match.done; match = cursor.next()) {
+        matches += 1
+      }
+      window.dispatchEvent(
+        new CustomEvent("tex:source-find-status", {
+          detail: { matches, valid: query.valid },
+        })
+      )
+      if (query.valid && detail.query !== "") findNext(editor)
+    }
+    const findPreviousInFile = () => findPrevious(editor)
+    const findNextInFile = () => findNext(editor)
+    const replaceInFile = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return
+      const detail = event.detail
+      if (
+        typeof detail !== "object" ||
+        detail === null ||
+        typeof detail.query !== "string" ||
+        typeof detail.replacement !== "string" ||
+        (detail.action !== "next" && detail.action !== "all")
+      )
+        return
+      editor.dispatch({
+        effects: setSearchQuery.of(
+          new SearchQuery({ search: detail.query, replace: detail.replacement })
+        ),
+      })
+      if (detail.action === "next") replaceNext(editor)
+      else replaceAll(editor)
+    }
     window.addEventListener("tex:toggle-comment", toggleLineComment)
     window.addEventListener("tex:find-in-file", findInFile)
+    window.addEventListener("tex:source-find", runFind)
+    window.addEventListener("tex:source-find-previous", findPreviousInFile)
+    window.addEventListener("tex:source-find-next", findNextInFile)
+    window.addEventListener("tex:source-replace", replaceInFile)
     view.current = editor
     onCursorChangeRef.current(
       initialViewerStateRef.current?.line ?? 1,
@@ -580,6 +658,10 @@ export function LatexEditor({
     return () => {
       window.removeEventListener("tex:toggle-comment", toggleLineComment)
       window.removeEventListener("tex:find-in-file", findInFile)
+      window.removeEventListener("tex:source-find", runFind)
+      window.removeEventListener("tex:source-find-previous", findPreviousInFile)
+      window.removeEventListener("tex:source-find-next", findNextInFile)
+      window.removeEventListener("tex:source-replace", replaceInFile)
       editor.scrollDOM.removeEventListener("scroll", onScroll)
       if (viewerStateTimer.current !== null) {
         clearTimeout(viewerStateTimer.current)
