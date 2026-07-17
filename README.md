@@ -5,14 +5,12 @@ TeX is a local-first desktop workspace for multi-file LaTeX projects. It is buil
 The application currently supports safe local project opening, root detection,
 multi-file editing and search, recovery-aware autosave, controlled LaTeX builds,
 diagnostic logs, PDF viewing with retained reading state, and two-way SyncTeX
-navigation. The original product direction is documented in
-[docs/plans/project.md](docs/plans/project.md); the historical foundation and
-security decisions are in [docs/phase-0.md](docs/phase-0.md).
+navigation.
 
 ## Development
 
 Install the pinned Rust and Bun versions from
-[the support policy](docs/support.md), then use the committed lockfiles:
+[the support policy](docs/requirements/policies/support.md), then use the committed lockfiles:
 
 ```sh
 bun install --frozen-lockfile
@@ -32,10 +30,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
 
 Release and user-facing policies:
 
-- [Supported systems and tool versions](docs/support.md)
-- [Privacy](docs/privacy.md)
-- [Known limitations](docs/known-limitations.md)
-- [Project build configuration](docs/project-build-configuration.md)
+- [Supported systems and tool versions](docs/requirements/policies/support.md)
+- [Privacy](docs/requirements/policies/privacy.md)
+- [Repository branch policy](docs/requirements/policies/repository-policy.md)
 
-Read [AGENTS.md](AGENTS.md) and [docs/code-quality.md](docs/code-quality.md)
+Read [AGENTS.md](AGENTS.md) and [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md)
 before contributing.

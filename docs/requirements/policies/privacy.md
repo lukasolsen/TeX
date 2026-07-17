@@ -22,4 +22,4 @@ specific consent design, and an update to this statement.
 
 Removing a recent-project entry only removes TeX's reference to it. It does not
 delete the project. Conversely, the current in-project delete command is
-permanent; see [known limitations](known-limitations.md).
+permanent.

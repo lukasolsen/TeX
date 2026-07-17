@@ -1,6 +1,6 @@
 # Engineering instructions
 
-Read [docs/code-quality.md](docs/code-quality.md) and [docs/ui-ux-requirements.md](docs/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines.
+Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md) and [docs/requirements/standards/ui-ux-requirements.md](docs/requirements/standards/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines. The full review authority is [docs/requirements/standards/engineering-standard.md](docs/requirements/standards/engineering-standard.md); repository, privacy, and support policy live in [docs/requirements/policies/](docs/requirements/policies/).
 
 ## Product constraints
 
@@ -13,8 +13,8 @@ Read [docs/code-quality.md](docs/code-quality.md) and [docs/ui-ux-requirements.m
 
 - `src/`: React/TypeScript presentation layer. It does not directly access the filesystem or execute build commands.
 - `src-tauri/`: Rust application boundary. It owns filesystem access, process execution, persistence, and validation.
-- `docs/plans/project.md`: product decisions and release criteria.
-- `docs/code-quality.md`: required implementation and review rules.
+- `docs/requirements/standards/`: required implementation, review, and product-experience rules.
+- `docs/requirements/policies/`: repository, privacy, and support policy.
 
 ## Required verification
 
@@ -33,9 +33,7 @@ Do not modify generated bundles, `target/`, or lockfiles by hand. Keep dependenc
 
 ## Branch and pull-request workflow
 
-Follow [docs/plans/code-review-plan.md](docs/plans/code-review-plan.md) for
-hardening work and use this workflow for every substantial implementation or
-review wave:
+Use this workflow for every substantial implementation or review wave:
 
 1. Inspect `git status`, the current branch, remote, recent history, and
    overlapping user changes before editing. Never discard or absorb unrelated

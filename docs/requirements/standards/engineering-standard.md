@@ -7,8 +7,9 @@ workflows, and documentation
 
 This standard is the review authority for TeX. `MUST` and `MUST NOT` are
 release requirements. `SHOULD` identifies the expected design; deviation
-requires stronger local evidence. Product constraints in `docs/plans/project.md`
-and user-work protections in `docs/ui-ux-requirements.md` remain binding.
+requires stronger local evidence. The product constraints in `AGENTS.md` and the
+user-work protections in [`ui-ux-requirements.md`](ui-ux-requirements.md) remain
+binding.
 
 ## 1. Cross-stack communication
 
@@ -165,7 +166,7 @@ and user-work protections in `docs/ui-ux-requirements.md` remain binding.
   tracked finding or issue and state the blocking condition.
 - Keep documentation truthful and update it with behavior, permission, schema,
   dependency, workflow, or support changes. Version claims tied to external
-  tools and record the source in `docs/reviews/source-register.md`.
+  tools and cite their primary source.
 - Document user-visible limitations where a reasonable user could otherwise
   infer that work is protected or an operation is supported.
 
@@ -356,11 +357,11 @@ and user-work protections in `docs/ui-ux-requirements.md` remain binding.
 | React lifecycle/accessibility | Oxlint, component tests, keyboard/screen-reader smoke evidence |
 | Dependencies/workflows | lockfiles, advisory/licence/source review, pinned Actions, PR review |
 | User-context preservation | deterministic reducer/model tests and end-to-end smoke evidence |
-| Documentation/ownership | file ledger, finding register, reviewer inspection |
+| Documentation/ownership | reviewer inspection and change history |
 
-An exception is valid only when `docs/reviews/exceptions.md` records exact
-scope, unmet rule, owner, reason, compensating control, linked finding, and an
-expiry or review date. Exceptions MUST NOT waive source loss, project-root
+An exception is valid only when it records exact scope, unmet rule, owner,
+reason, compensating control, linked finding, and an expiry or review date.
+Exceptions MUST NOT waive source loss, project-root
 escape, arbitrary command execution, credential exposure, fabricated UI, or
 silent loss of the last known-good PDF. Expired exceptions fail the release
 gate.
