@@ -28,6 +28,7 @@ const MAX_REPLACE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
 const MAX_REPLACEMENT_BYTES: usize = 64 * 1024;
 const MAX_TRANSACTION_BYTES: u64 = 40 * 1024 * 1024;
 const TRANSACTION_ID_LENGTH: usize = 64;
+const MAX_TRANSACTION_HISTORY: usize = 50;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -203,11 +204,20 @@ pub fn replace_project_sources(
         |item| atomic_write(&item.absolute_path, item.before.as_bytes()).map_err(|_| ()),
     ) {
         return Err(match failure {
-            WriteSetFailure::Restored => unavailable(),
+            WriteSetFailure::Restored => {
+                // Every file was rolled back to its original content, so the
+                // persisted backup is now an orphan whose after_revision can never
+                // match disk and which undo could never consume. Remove it.
+                if let Ok(path) = transaction_path(&app, &transaction_id) {
+                    let _ = fs::remove_file(path);
+                }
+                unavailable()
+            }
             WriteSetFailure::Incomplete => replace_incomplete(),
         });
     }
 
+    prune_transaction_history(&app);
     Ok(ReplaceResponse {
         transaction_id,
         changed_files: pending.len(),
@@ -425,6 +435,33 @@ fn transaction_path(app: &AppHandle, transaction_id: &str) -> Result<PathBuf, Se
         .join("replace-history");
     fs::create_dir_all(&directory).map_err(|_| unavailable())?;
     Ok(directory.join(format!("{transaction_id}.json")))
+}
+
+/// Caps the replace-history directory at the most recent transactions so backups
+/// that are never undone cannot grow without bound.
+fn prune_transaction_history(app: &AppHandle) {
+    let Ok(directory) = app.path().app_data_dir() else {
+        return;
+    };
+    let directory = directory.join("replace-history");
+    let Ok(read) = fs::read_dir(&directory) else {
+        return;
+    };
+    let mut entries: Vec<(SystemTime, PathBuf)> = read
+        .flatten()
+        .filter_map(|entry| {
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, entry.path()))
+        })
+        .collect();
+    if entries.len() <= MAX_TRANSACTION_HISTORY {
+        return;
+    }
+    entries.sort_by_key(|(modified, _)| *modified);
+    let excess = entries.len() - MAX_TRANSACTION_HISTORY;
+    for (_, path) in entries.into_iter().take(excess) {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn transaction_id(project_path: &str) -> String {
