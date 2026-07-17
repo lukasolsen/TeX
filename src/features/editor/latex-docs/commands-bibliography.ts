@@ -81,6 +81,10 @@ export const commandsBibliography = {
     "Creates a parenthetical natbib citation, with optional pre- and post-notes before the key list. Its starred form requests the full author list where the chosen style supports it." +
       natbibOnly
   ),
+  citepalt: command(
+    "citepalt",
+    "Is not provided by `natbib`. If a document defines this command, consult that document class or package; use natbib's `\\citealt` for a textual citation without enclosing parentheses, or `\\citealp` for parenthetical-style citation content without them."
+  ),
   citepalias: command(
     "citepalias",
     "Prints a natbib citation alias in parenthetical form." + natbibOnly

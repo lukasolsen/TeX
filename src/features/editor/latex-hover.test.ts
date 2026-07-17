@@ -179,6 +179,14 @@ describe("LaTeX documentation catalog", () => {
     expect(Object.keys(commandsBibliography).length).toBeGreaterThanOrEqual(35)
   })
 
+  it("explains that citepalt is not a natbib command", () => {
+    const documentation = commandDocumentation("citepalt")
+
+    expect(documentation).toMatchObject({ title: "\\citepalt" })
+    expect(documentation?.markdown).toContain("not provided by `natbib`")
+    expect(documentation?.markdown).toContain("\\citealt")
+  })
+
   it("documents float and graphics commands", () => {
     for (const name of [
       "includegraphics",
