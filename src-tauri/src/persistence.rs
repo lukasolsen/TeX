@@ -583,21 +583,33 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
                 writable: true,
             })
         }
-        Err(error) if error.kind() == io::ErrorKind::InvalidData => return Ok(corrupted_state()),
+        // "Too large" is distinct from "malformed": keep the existing file
+        // untouched (writable: false) rather than overwriting it with defaults.
+        Err(error) if error.kind() == io::ErrorKind::InvalidData => {
+            return Ok(ReadState {
+                state: PersistedState::default(),
+                restoration_notice: Some(
+                    "The saved workspace is too large to read. TeX started with safe defaults and left the existing file in place."
+                        .to_owned(),
+                ),
+                migrated: false,
+                writable: false,
+            })
+        }
         Err(_) => return Err(unavailable()),
     };
     let value: serde_json::Value = match serde_json::from_slice(&source) {
         Ok(value) => value,
-        Err(_) => return Ok(corrupted_state()),
+        Err(_) => return Ok(corrupt_and_default(path)),
     };
     let Some(version) = value.get("version").and_then(serde_json::Value::as_u64) else {
-        return Ok(corrupted_state());
+        return Ok(corrupt_and_default(path));
     };
     match version {
         1 => {
             let mut state: PersistedState = match serde_json::from_value(value) {
                 Ok(state) => state,
-                Err(_) => return Ok(corrupted_state()),
+                Err(_) => return Ok(corrupt_and_default(path)),
             };
             state.version = STATE_VERSION;
             Ok(ReadState {
@@ -613,7 +625,7 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
         current if current == u64::from(STATE_VERSION) => {
             let state = match serde_json::from_value(value) {
                 Ok(state) => state,
-                Err(_) => return Ok(corrupted_state()),
+                Err(_) => return Ok(corrupt_and_default(path)),
             };
             Ok(ReadState {
                 state,
@@ -632,6 +644,15 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
             writable: false,
         }),
     }
+}
+
+/// Preserves the unreadable state file by renaming it aside before returning
+/// defaults, so a stray byte of corruption does not permanently discard recents
+/// and preferences the next time state is written.
+fn corrupt_and_default(path: &Path) -> ReadState {
+    let quarantined = path.with_extension(format!("corrupt-{}.json", now_millis()));
+    let _ = fs::rename(path, quarantined);
+    corrupted_state()
 }
 
 fn corrupted_state() -> ReadState {
@@ -674,13 +695,18 @@ fn write_state(path: &Path, state: &PersistedState) -> Result<(), PersistenceErr
 
 fn retain_bounded<K, V>(values: &mut HashMap<K, V>, limit: usize)
 where
-    K: Eq + std::hash::Hash,
+    K: Eq + std::hash::Hash + Ord + Clone,
 {
-    let mut retained = 0_usize;
-    values.retain(|_, _| {
-        retained += 1;
-        retained <= limit
-    });
+    if values.len() <= limit {
+        return;
+    }
+    // Truncate deterministically by key so which viewer states survive is stable
+    // across runs, rather than depending on unordered HashMap iteration.
+    let mut keys: Vec<K> = values.keys().cloned().collect();
+    keys.sort();
+    for key in keys.into_iter().skip(limit) {
+        values.remove(&key);
+    }
 }
 
 fn validate_optional_file(root: &Path, relative: Option<&str>) -> Result<(), PersistenceError> {
