@@ -92,7 +92,9 @@ fn enclosing_brace(source: &str, line_start: usize, position: usize) -> Option<u
 /// backslash-prefixed name precedes the group.
 fn owning_command(source: &str, line_start: usize, brace_open: usize) -> Option<String> {
     let mut name_end = brace_open;
-    if source[line_start..name_end].ends_with(']') {
+    if source[line_start..name_end].ends_with(']')
+        && !is_escaped(source, name_end - ']'.len_utf8())
+    {
         name_end = matching_bracket(source, line_start, name_end)?;
     }
     let mut name_start = name_end;
@@ -126,7 +128,9 @@ fn matching_bracket(source: &str, line_start: usize, close: usize) -> Option<usi
         match character {
             ']' => depth += 1,
             '[' => {
-                depth -= 1;
+                // Bail rather than underflow if an unbalanced `[` is reached
+                // (e.g. an escaped closing bracket left `depth` at zero).
+                depth = depth.checked_sub(1)?;
                 if depth == 0 {
                     return Some(index);
                 }
