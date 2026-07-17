@@ -116,6 +116,41 @@ describe("LaTeX documentation catalog", () => {
     }
   })
 
+  it("documents common math commands", () => {
+    for (const name of [
+      "frac",
+      "sqrt",
+      "sum",
+      "int",
+      "lim",
+      "infty",
+      "partial",
+      "leq",
+      "geq",
+      "neq",
+      "rightarrow",
+      "hat",
+      "vec",
+      "mathbb",
+      "mathcal",
+      "operatorname",
+      "binom",
+      "left",
+      "right",
+      "sin",
+      "cos",
+      "log",
+      "displaystyle",
+      "DeclareMathOperator",
+      "intertext",
+      "tag",
+      "substack",
+      "xrightarrow",
+    ] as const) {
+      expect(commandDocumentation(name)).toBeDefined()
+    }
+  })
+
   it("attributes nolinkurl to hyperref", () => {
     const documentation = commandDocumentation("nolinkurl")
 
