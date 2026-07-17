@@ -1,10 +1,23 @@
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum CompletionContext {
     None,
-    Command { from: usize, prefix: String },
-    BeginEnvironment { from: usize, prefix: String },
-    EndEnvironment { from: usize, prefix: String },
-    Argument { from: usize, command: String, prefix: String },
+    Command {
+        from: usize,
+        prefix: String,
+    },
+    BeginEnvironment {
+        from: usize,
+        prefix: String,
+    },
+    EndEnvironment {
+        from: usize,
+        prefix: String,
+    },
+    Argument {
+        from: usize,
+        command: String,
+        prefix: String,
+    },
 }
 
 fn completion_context(source: &str, position: usize) -> CompletionContext {
@@ -45,7 +58,11 @@ fn completion_context(source: &str, position: usize) -> CompletionContext {
             return match command.as_str() {
                 "begin" => CompletionContext::BeginEnvironment { from, prefix },
                 "end" => CompletionContext::EndEnvironment { from, prefix },
-                _ => CompletionContext::Argument { from, command, prefix },
+                _ => CompletionContext::Argument {
+                    from,
+                    command,
+                    prefix,
+                },
             };
         }
     }
@@ -143,7 +160,7 @@ fn is_escaped(source: &str, position: usize) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        completion_context, resolve_completions, query, query_labels, CompletionContext,
+        completion_context, query, query_labels, resolve_completions, CompletionContext,
         CompletionProvenance, CompletionRequest,
     };
 
@@ -338,7 +355,10 @@ mod tests {
 
         assert_eq!(response.items[0].label, "sec:intro");
         assert_eq!(response.items[0].source.as_deref(), Some("intro.tex"));
-        assert!(matches!(response.items[0].provenance, CompletionProvenance::Project));
+        assert!(matches!(
+            response.items[0].provenance,
+            CompletionProvenance::Project
+        ));
 
         fs::remove_dir_all(root).ok();
     }
@@ -348,12 +368,12 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::{project_access::ProjectAccess, source_read};
 use crate::latex_project_scan::{scan_project, ProjectSources};
 use crate::latex_symbols::{
     bib_keys_in, bibitem_keys_in, classify_command, file_extensions, format_file_label, labels_in,
     match_symbols, ArgumentTarget, ResolvedSymbol, SymbolKind,
 };
+use crate::{project_access::ProjectAccess, source_read};
 use std::path::Path;
 
 #[derive(Debug, Deserialize)]
@@ -676,7 +696,11 @@ fn query(source: &str, position: usize) -> CompletionResponse {
 
 fn resolve_completions(root: &Path, request: &CompletionRequest) -> CompletionResponse {
     match completion_context(&request.content, request.position) {
-        CompletionContext::Argument { from, command, prefix } => CompletionResponse {
+        CompletionContext::Argument {
+            from,
+            command,
+            prefix,
+        } => CompletionResponse {
             items: symbol_items(root, request, &command, from, request.position, &prefix),
         },
         _ => query(&request.content, request.position),
@@ -720,7 +744,11 @@ fn text_symbols(
             let source = path.to_string_lossy().replace('\\', "/");
             extract(content)
                 .into_iter()
-                .map(move |label| ResolvedSymbol { kind, label, source: source.clone() })
+                .map(move |label| ResolvedSymbol {
+                    kind,
+                    label,
+                    source: source.clone(),
+                })
         })
         .collect()
 }
@@ -735,7 +763,11 @@ fn citation_symbols(sources: &ProjectSources) -> Vec<ResolvedSymbol> {
                 .extension()
                 .and_then(|extension| extension.to_str())
                 .is_some_and(|extension| extension.eq_ignore_ascii_case("bib"));
-            let keys = if is_bib { bib_keys_in(content) } else { bibitem_keys_in(content) };
+            let keys = if is_bib {
+                bib_keys_in(content)
+            } else {
+                bibitem_keys_in(content)
+            };
             keys.into_iter().map(move |label| ResolvedSymbol {
                 kind: SymbolKind::Citation,
                 label,

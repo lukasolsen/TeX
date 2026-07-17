@@ -68,7 +68,9 @@ pub(crate) fn bib_keys_in(bib: &str) -> Vec<String> {
             continue;
         };
         let end = after_brace
-            .find(|character: char| character == ',' || character == '}' || character.is_whitespace())
+            .find(|character: char| {
+                character == ',' || character == '}' || character.is_whitespace()
+            })
             .unwrap_or(after_brace.len());
         let key = after_brace[..end].trim();
         if !key.is_empty() {
@@ -111,9 +113,7 @@ pub(crate) fn file_extensions(target: ArgumentTarget) -> &'static [&'static str]
 pub(crate) fn format_file_label(relative: &str, target: ArgumentTarget) -> String {
     let slashed = relative.replace('\\', "/");
     match target {
-        ArgumentTarget::SourceFile => {
-            slashed.strip_suffix(".tex").unwrap_or(&slashed).to_owned()
-        }
+        ArgumentTarget::SourceFile => slashed.strip_suffix(".tex").unwrap_or(&slashed).to_owned(),
         _ => slashed,
     }
 }
@@ -175,7 +175,10 @@ mod tests {
 
     #[test]
     fn extracts_bibtex_and_bibitem_keys() {
-        assert_eq!(bib_keys_in("@article{knuth1984,\n  title = {x}\n}"), vec!["knuth1984"]);
+        assert_eq!(
+            bib_keys_in("@article{knuth1984,\n  title = {x}\n}"),
+            vec!["knuth1984"]
+        );
         assert_eq!(
             bibitem_keys_in("\\bibitem{lamport1994} x \\bibitem[LT]{knuth1984} y"),
             vec!["lamport1994", "knuth1984"]
@@ -192,17 +195,36 @@ mod tests {
         assert_eq!(classify_command("eqref"), Some(ArgumentTarget::Label));
         assert_eq!(classify_command("citep"), Some(ArgumentTarget::Citation));
         assert_eq!(classify_command("input"), Some(ArgumentTarget::SourceFile));
-        assert_eq!(classify_command("includegraphics"), Some(ArgumentTarget::ImageFile));
+        assert_eq!(
+            classify_command("includegraphics"),
+            Some(ArgumentTarget::ImageFile)
+        );
         assert_eq!(classify_command("section"), None);
     }
 
     #[test]
     fn filters_ranks_and_deduplicates_matches() {
         let symbols = vec![
-            ResolvedSymbol { kind: SymbolKind::Label, label: "sec:intro".into(), source: "b.tex".into() },
-            ResolvedSymbol { kind: SymbolKind::Label, label: "sec".into(), source: "a.tex".into() },
-            ResolvedSymbol { kind: SymbolKind::Label, label: "sec:intro".into(), source: "a.tex".into() },
-            ResolvedSymbol { kind: SymbolKind::Label, label: "other".into(), source: "a.tex".into() },
+            ResolvedSymbol {
+                kind: SymbolKind::Label,
+                label: "sec:intro".into(),
+                source: "b.tex".into(),
+            },
+            ResolvedSymbol {
+                kind: SymbolKind::Label,
+                label: "sec".into(),
+                source: "a.tex".into(),
+            },
+            ResolvedSymbol {
+                kind: SymbolKind::Label,
+                label: "sec:intro".into(),
+                source: "a.tex".into(),
+            },
+            ResolvedSymbol {
+                kind: SymbolKind::Label,
+                label: "other".into(),
+                source: "a.tex".into(),
+            },
         ];
         let matched: Vec<(String, String)> = match_symbols(symbols, "sec")
             .into_iter()

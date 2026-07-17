@@ -92,7 +92,10 @@ fn collect_dir(
 
 fn is_text_source(path: &Path) -> bool {
     matches!(
-        path.extension().and_then(OsStr::to_str).map(str::to_ascii_lowercase).as_deref(),
+        path.extension()
+            .and_then(OsStr::to_str)
+            .map(str::to_ascii_lowercase)
+            .as_deref(),
         Some("tex") | Some("bib")
     )
 }
@@ -135,7 +138,10 @@ mod tests {
     fn represents_an_unsaved_active_file_absent_on_disk() {
         let root = temp_root("unsaved");
         let sources = scan_project(&root, Path::new("draft.tex"), "\\label{fresh}");
-        assert!(sources.files.iter().any(|path| path == Path::new("draft.tex")));
+        assert!(sources
+            .files
+            .iter()
+            .any(|path| path == Path::new("draft.tex")));
         assert!(sources
             .texts
             .iter()
@@ -152,7 +158,10 @@ mod tests {
         fs::write(root.join("plot.png"), [0x89_u8, 0x50, 0x4e, 0x47]).expect("png");
         let sources = scan_project(&root, Path::new("main.tex"), "");
 
-        assert!(sources.files.iter().any(|path| path == Path::new("plot.png")));
+        assert!(sources
+            .files
+            .iter()
+            .any(|path| path == Path::new("plot.png")));
         assert!(sources
             .texts
             .iter()
