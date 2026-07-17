@@ -1,4 +1,5 @@
 import { Copy, FileCode2, Scissors, X } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -11,6 +12,23 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 import type { AsyncDocumentState } from "@/domain/project"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
+import { runDetached } from "@/lib/promises"
+import { useClipboard } from "@/lib/use-clipboard"
+
+function absoluteDisplayPath(
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
+): string {
+  const windowsPath = projectPath.includes("\\") && !projectPath.includes("/")
+  const separator = windowsPath ? "\\" : "/"
+  const root = projectPath.replace(/[\\/]$/, "")
+  const child = windowsPath ? relativePath.replaceAll("/", "\\") : relativePath
+  return `${root}${separator}${child}`
+}
 
 export function SourceTabs({
   onClose,
@@ -22,15 +40,16 @@ export function SourceTabs({
   projectPath,
   selectedFile,
 }: {
-  onClose: (path: string) => void
-  onCloseMany: (paths: string[]) => void
-  onPin: (path: string) => void
-  onSelect: (path: string) => void
+  onClose: (path: ProjectRelativePath) => void
+  onCloseMany: (paths: ReadonlyArray<ProjectRelativePath>) => void
+  onPin: (path: ProjectRelativePath) => void
+  onSelect: (path: ProjectRelativePath) => void
   documentState: AsyncDocumentState
-  pinnedFiles: string[]
-  projectPath: string
-  selectedFile: string | null
-}) {
+  pinnedFiles: ReadonlyArray<ProjectRelativePath>
+  projectPath: CanonicalProjectPath
+  selectedFile: ProjectRelativePath | null
+}): ReactElement {
+  const clipboard = useClipboard()
   const previewFile =
     selectedFile !== null && !pinnedFiles.includes(selectedFile)
       ? selectedFile
@@ -48,7 +67,7 @@ export function SourceTabs({
 
   return (
     <Tabs
-      className="min-w-0 gap-0"
+      className="relative min-w-0 gap-0"
       onValueChange={onSelect}
       value={selectedFile}
     >
@@ -126,14 +145,16 @@ export function SourceTabs({
                 <ContextMenuSeparator />
                 <ContextMenuItem
                   onClick={() =>
-                    void navigator.clipboard.writeText(`${projectPath}/${path}`)
+                    runDetached(
+                      clipboard.copyText(absoluteDisplayPath(projectPath, path))
+                    )
                   }
                 >
                   <Copy />
                   Copy path
                 </ContextMenuItem>
                 <ContextMenuItem
-                  onClick={() => void navigator.clipboard.writeText(path)}
+                  onClick={() => runDetached(clipboard.copyText(path))}
                 >
                   <Copy />
                   Copy relative path
@@ -143,6 +164,14 @@ export function SourceTabs({
           )
         })}
       </TabsList>
+      {clipboard.status !== null ? (
+        <span
+          className="pointer-events-none absolute top-2 right-2 rounded bg-popover px-2 py-1 text-[11px] shadow-sm"
+          role="status"
+        >
+          {clipboard.status === "copied" ? "Path copied" : "Copy failed"}
+        </span>
+      ) : null}
     </Tabs>
   )
 }

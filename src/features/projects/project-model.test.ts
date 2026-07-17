@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { ProjectSummary } from "@/domain/project"
+import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
 import {
   formatLastOpened,
   isReadableSource,
@@ -15,7 +16,7 @@ import {
 
 const project: ProjectSummary = {
   name: "Thesis",
-  path: "/projects/thesis",
+  path: canonicalProjectPath("/projects/thesis"),
   tree: {
     name: "thesis",
     kind: "directory",
@@ -29,7 +30,9 @@ const project: ProjectSummary = {
       { name: "main.pdf", kind: "file", children: [] },
     ],
   },
-  rootCandidates: [{ path: "main.tex", evidence: ["documentClass"] }],
+  rootCandidates: [
+    { path: projectRelativePath("main.tex"), evidence: ["documentClass"] },
+  ],
   rootDetectionNote: null,
   persistenceNote: null,
 }
@@ -42,24 +45,37 @@ describe("project model", () => {
       "main.tex",
       "main.pdf",
     ])
-    expect(projectTreeNodes(rootNodes[0], rootNodes[0].path)[0].path).toBe(
+    const chapters = rootNodes[0]
+    expect(chapters).toBeDefined()
+    if (chapters === undefined) return
+    expect(projectTreeNodes(chapters, chapters.path)[0]?.path).toBe(
       "chapters/intro.tex"
     )
   })
 
   it("restores only roots and source files that still exist", () => {
-    expect(preferredRoot(project, "missing.tex")).toBe("main.tex")
-    expect(preferredRoot(project, "chapters/intro.tex")).toBe(
+    expect(preferredRoot(project, projectRelativePath("missing.tex"))).toBe("main.tex")
+    expect(preferredRoot(project, projectRelativePath("chapters/intro.tex"))).toBe(
       "chapters/intro.tex"
     )
-    expect(preferredSourceFile(project, "chapters/intro.tex", "main.tex")).toBe(
-      "chapters/intro.tex"
-    )
-    expect(preferredSourceFile(project, "missing.tex", "main.tex")).toBe(
-      "main.tex"
-    )
-    expect(treeContainsPath(project.tree, "chapters/intro.tex")).toBe(true)
-    expect(treeContainsPath(project.tree, "chapters")).toBe(false)
+    expect(
+      preferredSourceFile(
+        project,
+        projectRelativePath("chapters/intro.tex"),
+        projectRelativePath("main.tex")
+      )
+    ).toBe("chapters/intro.tex")
+    expect(
+      preferredSourceFile(
+        project,
+        projectRelativePath("missing.tex"),
+        projectRelativePath("main.tex")
+      )
+    ).toBe("main.tex")
+    expect(
+      treeContainsPath(project.tree, projectRelativePath("chapters/intro.tex"))
+    ).toBe(true)
+    expect(treeContainsPath(project.tree, projectRelativePath("chapters"))).toBe(false)
   })
 
   it("keeps preview support explicit and case-insensitive", () => {
@@ -69,9 +85,15 @@ describe("project model", () => {
   })
 
   it("restores a project PDF or selects the root output", () => {
-    expect(preferredPdf(project, null, "main.tex")).toBe("main.pdf")
-    expect(preferredPdf(project, "missing.pdf", "main.tex")).toBe("main.pdf")
-    expect(preferredPdf(project, "main.pdf", null)).toBe("main.pdf")
+    expect(preferredPdf(project, null, projectRelativePath("main.tex"))).toBe("main.pdf")
+    expect(
+      preferredPdf(
+        project,
+        projectRelativePath("missing.pdf"),
+        projectRelativePath("main.tex")
+      )
+    ).toBe("main.pdf")
+    expect(preferredPdf(project, projectRelativePath("main.pdf"), null)).toBe("main.pdf")
   })
 
   it("finds direct LaTeX dependencies and ignores comments", () => {
@@ -81,7 +103,7 @@ describe("project model", () => {
 % \include{ignored}
 \addbibresource{references}
 \includegraphics[width=\textwidth]{figures/result.pdf}`,
-        "chapters/main.tex"
+        projectRelativePath("chapters/main.tex")
       )
     ).toEqual([
       { command: "input", kind: "source", path: "chapters/sections/intro.tex" },

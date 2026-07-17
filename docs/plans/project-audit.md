@@ -60,7 +60,7 @@ performance/accessibility/platform qualification.
 | Project search with file/line/context/count | **Implemented** | `project_search.rs` and `project-search-panel.tsx` provide bounded literal search and navigable results. |
 | Previewable and undoable replacement | **Implemented** | Replacements revalidate revisions, persist backups outside the project, preview changes, and expose undo. |
 | Unsaved, recovery, write-failure, and external-change states | **Implemented** | Atomic revision-checked writes, local recovery drafts, conflict comparison, and visible save states are implemented. Autosave now also runs when the window loses focus or becomes hidden. |
-| High contrast, focus, reduced motion, font zoom, and announcements | **Partial** | Forced-colors CSS, visible focus, reduced-motion rules, font zoom, and save/build live regions exist. Formal screen-reader, IME, and keyboard-only smoke-test evidence is absent. |
+| High contrast, focus, reduced motion, font zoom, and announcements | **Partial** | Complete forced-colors token mappings, visible focus, reduced-motion rules, font zoom, and scoped live regions exist. JSDOM workflow tests cover accessible names, structure, and selected keyboard routes. Packaged screen-reader, IME, forced-colors, scaling, and keyboard-only qualification remains open. |
 | Environment matching and configurable snippets | **Partial** | Bracket matching and fixed snippets exist; explicit LaTeX environment-pair matching and user-configurable snippets do not. |
 
 ### Phase 3 — trustworthy builds
@@ -102,7 +102,7 @@ performance/accessibility/platform qualification.
 | Bibliography assistance, configurable snippets, Git-aware status, import/export | **Not scheduled** | These are optional Phase 5 items and should remain behind the reliability work above. |
 | No advertising, engagement loops, uploads, or hidden remote behavior | **Implemented** | No such product surfaces or runtime capabilities exist. |
 | Supported versions, limitations, and test conditions published | **Partial** | `docs/support.md`, `docs/known-limitations.md`, and `docs/benchmarks/` publish the pre-release policy and reproducible procedure. Cross-platform qualification results are not yet published. |
-| “Small cruelties” regression suite | **Partial** | Tests cover parsing, workspace path restoration, PDF state models, external-write protection, build serialization, and logs/diagnostics. Focus theft, selected-text preservation, watch loops, disabled-shortcut audits, and repeated PDF replacement are not covered. |
+| “Small cruelties” regression suite | **Partial** | Tests cover parsing, workspace restoration, PDF context and repeated replacement, external-write protection, build serialization, watch filtering/overflow, logs/diagnostics, primary accessible names, and selected keyboard routes. Packaged focus theft, browser text-selection restoration, disabled-shortcut, screen-reader, IME, and platform failure-path evidence remains open. |
 
 ## Small changes completed during this audit
 

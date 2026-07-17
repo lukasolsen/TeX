@@ -3,26 +3,36 @@ use std::{
     env,
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex, MutexGuard,
     },
     thread,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use command_group::{CommandGroup, GroupChild};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, State};
 
-use crate::project_config::{
-    validate_configuration, BibliographyTool, EnvironmentSetting, ProjectBuildConfiguration,
+use crate::{
+    project_access::ProjectAccess,
+    project_config::{
+        load_configuration_for_project, validate_configuration, BibliographyTool,
+        EnvironmentSetting, ProjectBuildConfiguration,
+    },
+    source_read::{resolve_source_path, valid_relative_path},
 };
-use crate::source_read::resolve_source_path;
 
 const BUILD_EVENT: &str = "tex://build-event";
-const MAX_RETAINED_RUNS: usize = 20;
-const MAX_RETAINED_ENTRIES: usize = 10_000;
+const MAX_RETAINED_RUNS: usize = 10;
+const MAX_RETAINED_ENTRIES: usize = 500;
+const MAX_RETAINED_LOG_BYTES: usize = 512 * 1024;
+const MAX_LOG_LINE_BYTES: usize = 4 * 1024;
+const OUTPUT_CHANNEL_CAPACITY: usize = 256;
+const MAX_PROJECT_HISTORIES: usize = 16;
+const MAX_BUILD_DURATION: Duration = Duration::from_secs(30 * 60);
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -35,13 +45,11 @@ pub enum BuildEngine {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BuildRequest {
     project_path: String,
     root_file: String,
     engine: BuildEngine,
-    #[serde(default)]
-    configuration: Option<ProjectBuildConfiguration>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -55,7 +63,6 @@ pub struct BuildInvocation {
     environment: Vec<EnvironmentSetting>,
     bibliography_tool: BibliographyTool,
     custom: bool,
-    tool_version: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -124,6 +131,8 @@ pub struct BuildRun {
     exit_code: Option<i32>,
     entries: Vec<BuildLogEntry>,
     diagnostics: Vec<BuildDiagnostic>,
+    #[serde(skip)]
+    retained_log_bytes: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -178,8 +187,14 @@ struct ValidatedBuild {
 
 /// Returns the exact safe command TeX will execute without starting a process.
 #[tauri::command]
-pub fn preview_build(request: BuildRequest) -> Result<BuildInvocation, BuildError> {
-    Ok(validate_build(request)?.invocation)
+pub fn preview_build(
+    request: BuildRequest,
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<BuildInvocation, BuildError> {
+    let request = authorize_request(request, &access)?;
+    let configuration = configuration_for_request(&app, &request)?;
+    Ok(validate_build(request, configuration)?.invocation)
 }
 
 /// Reports installed build tools without executing project code or compiler processes.
@@ -197,15 +212,12 @@ pub fn start_build(
     request: BuildRequest,
     app: AppHandle,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<BuildRun, BuildError> {
-    let mut validated = validate_build(request)?;
-    validated.invocation.tool_version = tool_version(&validated.invocation);
+    let request = authorize_request(request, &access)?;
+    let configuration = configuration_for_request(&app, &request)?;
+    let validated = validate_build(request, configuration)?;
     let mut command = command_for(&validated.invocation);
-    let mut child = command.spawn().map_err(|_| BuildError {
-        code: "build-tool-unavailable",
-        message:
-            "The selected LaTeX build tool is unavailable. Install it or choose another engine.",
-    })?;
 
     let run_id = format!(
         "{}-{}",
@@ -223,42 +235,91 @@ pub fn start_build(
         exit_code: None,
         entries: Vec::new(),
         diagnostics: Vec::new(),
+        retained_log_bytes: 0,
     };
 
-    {
+    let child = {
         let mut projects = lock_projects(&controller)?;
+        reserve_project_history(&mut projects, &validated.project_root)?;
         let project = projects.entry(validated.project_root.clone()).or_default();
         if project.active.is_some() {
-            let _ = child.kill();
-            let _ = child.wait();
             return Err(BuildError {
                 code: "build-already-running",
                 message:
                     "A build is already running for this project. Stop it before starting another.",
             });
         }
+        let child = command.group_spawn().map_err(|_| BuildError {
+            code: "build-tool-unavailable",
+            message:
+                "The selected LaTeX build tool is unavailable. Install it or choose another engine.",
+        })?;
         project.active = Some(ActiveBuild {
             run_id: run_id.clone(),
             stop_requested: Arc::clone(&stop_requested),
         });
         project.runs.push_front(run.clone());
         project.runs.truncate(MAX_RETAINED_RUNS);
-    }
+        child
+    };
 
     let owned_controller = controller.inner().clone();
     let project_root = validated.project_root;
-    thread::spawn(move || {
-        supervise_build(
-            &mut child,
-            &app,
-            &owned_controller,
-            &project_root,
-            &run_id,
-            &stop_requested,
-        );
-    });
+    let shared_child = Arc::new(Mutex::new(Some(child)));
+    let worker_child = Arc::clone(&shared_child);
+    let worker_run_id = run_id.clone();
+    let worker_root = project_root.clone();
+    let worker_stop = Arc::clone(&stop_requested);
+    if thread::Builder::new()
+        .name("tex-build-supervisor".to_owned())
+        .spawn(move || {
+            let Ok(mut guard) = worker_child.lock() else {
+                return;
+            };
+            let Some(mut child) = guard.take() else {
+                return;
+            };
+            drop(guard);
+            supervise_build(
+                &mut child,
+                &app,
+                &owned_controller,
+                &worker_root,
+                &worker_run_id,
+                &worker_stop,
+            );
+        })
+        .is_err()
+    {
+        if let Ok(mut guard) = shared_child.lock() {
+            if let Some(mut child) = guard.take() {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+        }
+        discard_run(&controller, &project_root, &run_id);
+        return Err(BuildError {
+            code: "build-supervisor-unavailable",
+            message: "TeX could not supervise the build process. No build remains running.",
+        });
+    }
 
     Ok(run)
+}
+
+fn discard_run(controller: &BuildController, project_root: &Path, run_id: &str) {
+    if let Ok(mut projects) = controller.projects.lock() {
+        if let Some(project) = projects.get_mut(project_root) {
+            if project
+                .active
+                .as_ref()
+                .is_some_and(|active| active.run_id == run_id)
+            {
+                project.active = None;
+            }
+            project.runs.retain(|run| run.id != run_id);
+        }
+    }
 }
 
 /// Requests cancellation without blocking the UI while the child process exits.
@@ -266,8 +327,9 @@ pub fn start_build(
 pub fn stop_build(
     project_path: String,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), BuildError> {
-    let project_root = canonical_project_root(Path::new(&project_path))?;
+    let project_root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let projects = lock_projects(&controller)?;
     let active = projects
         .get(&project_root)
@@ -285,24 +347,52 @@ pub fn stop_build(
 pub fn get_build_history(
     project_path: String,
     controller: State<'_, BuildController>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Vec<BuildRun>, BuildError> {
-    let project_root = canonical_project_root(Path::new(&project_path))?;
+    let project_root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let projects = lock_projects(&controller)?;
     Ok(projects
         .get(&project_root)
         .map_or_else(Vec::new, |project| project.runs.iter().cloned().collect()))
 }
 
-fn validate_build(request: BuildRequest) -> Result<ValidatedBuild, BuildError> {
-    validate_build_with_resolver(request, resolve_executable)
+fn authorize_request(
+    mut request: BuildRequest,
+    access: &ProjectAccess,
+) -> Result<BuildRequest, BuildError> {
+    request.project_path = access
+        .resolve(&request.project_path)
+        .map_err(|_| unavailable())?
+        .to_string_lossy()
+        .into_owned();
+    Ok(request)
+}
+
+fn configuration_for_request(
+    app: &AppHandle,
+    request: &BuildRequest,
+) -> Result<ProjectBuildConfiguration, BuildError> {
+    load_configuration_for_project(app, Path::new(&request.project_path)).map_err(|error| {
+        BuildError {
+            code: error.code,
+            message: error.message,
+        }
+    })
+}
+
+fn validate_build(
+    request: BuildRequest,
+    configuration: ProjectBuildConfiguration,
+) -> Result<ValidatedBuild, BuildError> {
+    validate_build_with_resolver(request, configuration, resolve_executable)
 }
 
 fn validate_build_with_resolver(
     request: BuildRequest,
+    configuration: ProjectBuildConfiguration,
     executable_resolver: impl Fn(&str) -> Option<PathBuf>,
 ) -> Result<ValidatedBuild, BuildError> {
     let project_root = canonical_project_root(Path::new(&request.project_path))?;
-    let configuration = request.configuration.unwrap_or_default();
     validate_configuration(&project_root, &configuration).map_err(|error| BuildError {
         code: error.code,
         message: error.message,
@@ -358,7 +448,6 @@ fn validate_build_with_resolver(
             environment: configuration.environment,
             bibliography_tool: configuration.bibliography_tool,
             custom,
-            tool_version: None,
         },
     })
 }
@@ -413,24 +502,24 @@ fn executable_available(executable: &str) -> bool {
     resolve_executable(executable).is_some()
 }
 
-fn resolve_executable(executable: &str) -> Option<PathBuf> {
-    env::var_os("PATH").and_then(|path| {
-        env::split_paths(&path).find_map(|directory| {
-            executable_candidates(&directory, executable)
-                .into_iter()
-                .find(|candidate| is_executable_file(candidate))
-                .and_then(|candidate| candidate.canonicalize().ok())
-        })
+pub(crate) fn resolve_executable(executable: &str) -> Option<PathBuf> {
+    env::var_os("PATH").and_then(|path| resolve_executable_in(executable, env::split_paths(&path)))
+}
+
+fn resolve_executable_in(
+    executable: &str,
+    mut directories: impl Iterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    directories.find_map(|directory| {
+        executable_candidates(&directory, executable)
+            .into_iter()
+            .find(|candidate| is_executable_file(candidate))
     })
 }
 
 #[cfg(test)]
 fn executable_available_in(executable: &str, directories: impl Iterator<Item = PathBuf>) -> bool {
-    directories.into_iter().any(|directory| {
-        executable_candidates(&directory, executable)
-            .into_iter()
-            .any(|candidate| is_executable_file(&candidate))
-    })
+    resolve_executable_in(executable, directories).is_some()
 }
 
 #[cfg(not(windows))]
@@ -483,51 +572,67 @@ fn command_for(invocation: &BuildInvocation) -> Command {
     command
 }
 
-fn tool_version(invocation: &BuildInvocation) -> Option<String> {
-    if invocation.custom {
-        return None;
-    }
-    let output = Command::new(&invocation.executable)
-        .arg("--version")
-        .output()
-        .ok()?;
-    let text = if output.stdout.is_empty() {
-        String::from_utf8_lossy(&output.stderr)
-    } else {
-        String::from_utf8_lossy(&output.stdout)
-    };
-    text.lines()
-        .next()
-        .map(|line| line.chars().take(240).collect())
-}
-
 fn supervise_build(
-    child: &mut Child,
+    child: &mut GroupChild,
     app: &AppHandle,
     controller: &BuildController,
     project_root: &Path,
     run_id: &str,
     stop_requested: &AtomicBool,
 ) {
-    let (sender, receiver) = mpsc::channel();
+    let (sender, receiver) = mpsc::sync_channel(OUTPUT_CHANNEL_CAPACITY);
     let stdout_reader = child
+        .inner()
         .stdout
         .take()
-        .map(|stdout| spawn_output_reader(stdout, BuildLogStream::Stdout, sender.clone()));
+        .map(|stdout| spawn_output_reader(stdout, BuildLogStream::Stdout, sender.clone()))
+        .transpose();
     let stderr_reader = child
+        .inner()
         .stderr
         .take()
-        .map(|stderr| spawn_output_reader(stderr, BuildLogStream::Stderr, sender));
+        .map(|stderr| spawn_output_reader(stderr, BuildLogStream::Stderr, sender))
+        .transpose();
+    let (Ok(stdout_reader), Ok(stderr_reader)) = (stdout_reader, stderr_reader) else {
+        let _ = child.kill();
+        let _ = child.wait();
+        append_log(
+            app,
+            controller,
+            project_root,
+            run_id,
+            BuildLogStream::Stderr,
+            "Build stopped because output supervision was unavailable.".to_owned(),
+        );
+        finish_run(
+            app,
+            controller,
+            project_root,
+            run_id,
+            BuildStatus::Failed,
+            None,
+        );
+        return;
+    };
 
+    let deadline = Instant::now() + MAX_BUILD_DURATION;
+    let mut timed_out = false;
+    let mut termination_sent = false;
     let exit_status = loop {
         drain_output(&receiver, app, controller, project_root, run_id);
-        if stop_requested.load(Ordering::Acquire) {
+        timed_out |= Instant::now() >= deadline;
+        if (stop_requested.load(Ordering::Acquire) || timed_out) && !termination_sent {
             let _ = child.kill();
+            termination_sent = true;
         }
         match child.try_wait() {
             Ok(Some(status)) => break Some(status),
             Ok(None) => thread::sleep(Duration::from_millis(30)),
-            Err(_) => break None,
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break None;
+            }
         }
     };
 
@@ -538,6 +643,16 @@ fn supervise_build(
         let _ = reader.join();
     }
     drain_output(&receiver, app, controller, project_root, run_id);
+    if timed_out {
+        append_log(
+            app,
+            controller,
+            project_root,
+            run_id,
+            BuildLogStream::Stderr,
+            "Build stopped after reaching the 30-minute execution limit.".to_owned(),
+        );
+    }
 
     let cancelled = stop_requested.load(Ordering::Acquire);
     let exit_code = exit_status
@@ -559,26 +674,50 @@ fn supervise_build(
 fn spawn_output_reader<R: Read + Send + 'static>(
     stream: R,
     kind: BuildLogStream,
-    sender: mpsc::Sender<(BuildLogStream, String)>,
-) -> thread::JoinHandle<()> {
-    thread::spawn(move || {
-        let mut reader = BufReader::new(stream);
-        let mut bytes = Vec::new();
-        loop {
-            bytes.clear();
-            match reader.read_until(b'\n', &mut bytes) {
-                Ok(0) | Err(_) => break,
-                Ok(_) => {
-                    let text = String::from_utf8_lossy(&bytes)
-                        .trim_end_matches(['\r', '\n'])
-                        .to_owned();
-                    if sender.send((kind.clone(), text)).is_err() {
-                        break;
-                    }
+    sender: mpsc::SyncSender<(BuildLogStream, String)>,
+) -> std::io::Result<thread::JoinHandle<()>> {
+    thread::Builder::new()
+        .name("tex-build-output".to_owned())
+        .spawn(move || {
+            let mut reader = BufReader::new(stream);
+            while let Ok(Some((bytes, truncated))) = read_bounded_line(&mut reader) {
+                let mut text = String::from_utf8_lossy(&bytes)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_owned();
+                if truncated {
+                    text.push_str(" … [line truncated]");
+                }
+                if sender.send((kind.clone(), text)).is_err() {
+                    break;
                 }
             }
+        })
+}
+
+fn read_bounded_line(reader: &mut impl BufRead) -> std::io::Result<Option<(Vec<u8>, bool)>> {
+    let mut bytes = Vec::new();
+    let mut observed = false;
+    let mut truncated = false;
+    loop {
+        let available = reader.fill_buf()?;
+        if available.is_empty() {
+            return Ok(observed.then_some((bytes, truncated)));
         }
-    })
+        observed = true;
+        let consumed = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map_or(available.len(), |position| position + 1);
+        let remaining = MAX_LOG_LINE_BYTES.saturating_sub(bytes.len());
+        let copied = consumed.min(remaining);
+        bytes.extend_from_slice(&available[..copied]);
+        truncated |= copied < consumed;
+        let complete = available.get(consumed.saturating_sub(1)) == Some(&b'\n');
+        reader.consume(consumed);
+        if complete {
+            return Ok(Some((bytes, truncated)));
+        }
+    }
 }
 
 fn drain_output(
@@ -619,9 +758,13 @@ fn append_log(
             text,
         };
         let diagnostic = parse_diagnostic(&entry, project_root);
+        run.retained_log_bytes = run.retained_log_bytes.saturating_add(entry.text.len());
         run.entries.push(entry.clone());
-        if run.entries.len() > MAX_RETAINED_ENTRIES {
-            run.entries.remove(0);
+        while run.entries.len() > MAX_RETAINED_ENTRIES
+            || run.retained_log_bytes > MAX_RETAINED_LOG_BYTES
+        {
+            let removed = run.entries.remove(0);
+            run.retained_log_bytes = run.retained_log_bytes.saturating_sub(removed.text.len());
         }
         if let Some(item) = diagnostic.clone() {
             run.diagnostics.push(item);
@@ -637,6 +780,27 @@ fn append_log(
         }
     };
     let _ = app.emit(BUILD_EVENT, event);
+}
+
+fn reserve_project_history(
+    projects: &mut HashMap<PathBuf, ProjectBuildState>,
+    root: &Path,
+) -> Result<(), BuildError> {
+    if projects.contains_key(root) || projects.len() < MAX_PROJECT_HISTORIES {
+        return Ok(());
+    }
+    let candidate = projects
+        .iter()
+        .filter(|(_, state)| state.active.is_none())
+        .min_by_key(|(_, state)| state.runs.front().map_or(0, |run| run.started_at))
+        .map(|(path, _)| path.clone())
+        .ok_or(BuildError {
+            code: "build-capacity-reached",
+            message:
+                "Too many projects are building at once. Stop a build before starting another.",
+        })?;
+    projects.remove(&candidate);
+    Ok(())
 }
 
 fn finish_run(
@@ -715,13 +879,14 @@ fn parse_diagnostic(entry: &BuildLogEntry, project_root: &Path) -> Option<BuildD
         candidate.strip_prefix(project_root).ok()
     } else {
         Some(candidate)
-    };
+    }
+    .filter(|path| valid_relative_path(path));
 
     Some(BuildDiagnostic {
         severity,
         message: message.to_owned(),
         file: mapped.map(|path| path.to_string_lossy().into_owned()),
-        line: Some(line),
+        line: Some(line.max(1)),
         mapping_uncertain: mapped.is_none(),
         log_sequence: entry.sequence,
     })
@@ -776,17 +941,36 @@ fn unix_timestamp() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path};
+    use std::{fs, io::Cursor, path::Path};
 
     use super::{
-        executable_available_in, file_line_message, parse_diagnostic, validate_build,
-        validate_build_with_resolver, BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream,
-        BuildRequest, BuildStatus, DiagnosticSeverity,
+        executable_available_in, file_line_message, parse_diagnostic, read_bounded_line,
+        resolve_executable_in, validate_build, validate_build_with_resolver, BuildEngine,
+        BuildEvent, BuildLogEntry, BuildLogStream, BuildRequest, BuildStatus, DiagnosticSeverity,
     };
     use crate::project_config::{CustomCommand, ProjectBuildConfiguration};
 
     fn fixture_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/root-detection")
+    }
+
+    #[test]
+    fn truncates_one_log_line_and_preserves_the_next() -> Result<(), Box<dyn std::error::Error>> {
+        let mut input = vec![b'x'; super::MAX_LOG_LINE_BYTES + 100];
+        input.extend_from_slice(b"\nnext\n");
+        let mut reader = Cursor::new(input);
+
+        let Some((first, truncated)) = read_bounded_line(&mut reader)? else {
+            return Err("first line missing".into());
+        };
+        let Some((second, second_truncated)) = read_bounded_line(&mut reader)? else {
+            return Err("second line missing".into());
+        };
+        assert_eq!(first.len(), super::MAX_LOG_LINE_BYTES);
+        assert!(truncated);
+        assert_eq!(second, b"next\n");
+        assert!(!second_truncated);
+        Ok(())
     }
 
     #[test]
@@ -797,8 +981,8 @@ mod tests {
                 project_path: root.to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
-                configuration: None,
             },
+            ProjectBuildConfiguration::default(),
             |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
@@ -835,8 +1019,8 @@ mod tests {
                 project_path: fixture_root().to_string_lossy().into_owned(),
                 root_file: "main.tex".to_owned(),
                 engine: BuildEngine::LatexmkPdf,
-                configuration: Some(configuration),
             },
+            configuration,
             |_| Some(std::path::PathBuf::from("/usr/bin/latexmk")),
         )
         .map_err(|_| "validation failed")?;
@@ -854,17 +1038,40 @@ mod tests {
     }
 
     #[test]
+    fn rejects_frontend_supplied_build_configuration() -> Result<(), Box<dyn std::error::Error>> {
+        let request = serde_json::from_value::<BuildRequest>(serde_json::json!({
+            "projectPath": fixture_root().to_string_lossy(),
+            "rootFile": "main.tex",
+            "engine": "latexmkPdf",
+            "configuration": {
+                "schemaVersion": 1,
+                "customCommand": {
+                    "executable": "/tmp/forged-command",
+                    "arguments": []
+                },
+                "customCommandConsent": true,
+                "shellEscapeConsent": true
+            }
+        }));
+
+        assert!(request.is_err());
+        Ok(())
+    }
+
+    #[test]
     fn rejects_roots_outside_the_project() -> Result<(), Box<dyn std::error::Error>> {
         let root = fixture_root();
         let parent = root.parent().ok_or("fixture has no parent")?;
         let outside = parent.join("outside-build.tex");
         fs::write(&outside, "\\documentclass{article}")?;
-        let result = validate_build(BuildRequest {
-            project_path: root.to_string_lossy().into_owned(),
-            root_file: "../outside-build.tex".to_owned(),
-            engine: BuildEngine::PdfLatex,
-            configuration: None,
-        });
+        let result = validate_build(
+            BuildRequest {
+                project_path: root.to_string_lossy().into_owned(),
+                root_file: "../outside-build.tex".to_owned(),
+                engine: BuildEngine::PdfLatex,
+            },
+            ProjectBuildConfiguration::default(),
+        );
         fs::remove_file(outside)?;
 
         assert!(result.is_err());
@@ -897,6 +1104,20 @@ mod tests {
             file_line_message(r"C:\work\main.tex:12: Undefined control sequence"),
             Some((r"C:\work\main.tex", 12, " Undefined control sequence"))
         );
+    }
+
+    #[test]
+    fn does_not_map_traversing_diagnostic_paths() {
+        let root = fixture_root();
+        let entry = BuildLogEntry {
+            sequence: 9,
+            timestamp: 0,
+            stream: BuildLogStream::Stderr,
+            text: "../outside.tex:3: error: escaped path".to_owned(),
+        };
+        let diagnostic = parse_diagnostic(&entry, &root);
+
+        assert!(diagnostic.is_some_and(|item| item.file.is_none() && item.mapping_uncertain));
     }
 
     #[test]
@@ -975,6 +1196,29 @@ mod tests {
             "unavailable-tex",
             [directory.clone()].into_iter()
         ));
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserves_a_latex_engine_symlink_path() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        let directory = std::env::temp_dir().join(format!(
+            "tex-build-engine-link-{}",
+            super::NEXT_RUN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        fs::create_dir(&directory)?;
+        let target = directory.join("xetex");
+        let latex_engine = directory.join("xelatex");
+        fs::write(&target, "#!/bin/sh\n")?;
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700))?;
+        symlink(&target, &latex_engine)?;
+
+        let resolved = resolve_executable_in("xelatex", [directory.clone()].into_iter());
+
+        assert_eq!(resolved.as_deref(), Some(latex_engine.as_path()));
         fs::remove_dir_all(directory)?;
         Ok(())
     }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, type ReactElement } from "react"
 import {
   autocompletion,
   closeBrackets,
@@ -55,14 +55,27 @@ import {
   latexSemanticHighlighting,
   setLatexSemanticContext,
 } from "@/features/editor/latex-semantic-highlighting"
-import type { EditorViewerState, ProjectEntry } from "@/domain/project"
+import type {
+  EditorDocumentChange,
+  EditorViewerState,
+  ProjectEntry,
+} from "@/domain/project"
+import {
+  projectRelativePath,
+  type CanonicalProjectPath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import {
   isReadableSource,
   treeContainsPath,
 } from "@/features/projects/project-model"
 import { referencedFileAt } from "@/features/editor/latex-hover"
 
-export type EditorTarget = { line: number; column: number; token: number }
+export type EditorTarget = Readonly<{
+  line: number
+  column: number
+  token: number
+}>
 
 type ProjectReference = { from: number; to: number } | null
 
@@ -104,11 +117,13 @@ const projectReferenceField = StateField.define({
 
 function projectFilePaths(
   entry: ProjectEntry,
-  parentPath = "",
-  paths = new Set<string>()
-): Set<string> {
+  parentPath: ProjectRelativePath | null = null,
+  paths = new Set<ProjectRelativePath>()
+): Set<ProjectRelativePath> {
   for (const child of entry.children) {
-    const path = parentPath === "" ? child.name : `${parentPath}/${child.name}`
+    const path = projectRelativePath(
+      parentPath === null ? child.name : `${parentPath}/${child.name}`
+    )
     if (child.kind === "file") paths.add(path)
     projectFilePaths(child, path, paths)
   }
@@ -164,17 +179,28 @@ function sourceEditorTheme(fontSize: number) {
       borderRadius: "0.75rem",
       backgroundColor: "var(--popover)",
       color: "var(--popover-foreground)",
-      boxShadow:
-        "0 18px 40px color-mix(in oklch, var(--foreground) 18%, transparent)",
-      maxWidth: "34rem",
+      maxWidth: "min(34rem, calc(100vw - 2rem))",
+      maxHeight: "calc(100vh - 2rem)",
       overflow: "hidden",
     },
-    ".tex-hover-card": { padding: "0.75rem 0.875rem" },
-    ".tex-hover-card strong": {
+    ".tex-hover-card": {
+      boxSizing: "border-box",
+      maxHeight: "calc(100vh - 2rem)",
+      overflowY: "auto",
+      padding: "0.75rem 0.875rem",
+    },
+    ".tex-hover-card h2": {
+      margin: "0",
       display: "block",
       fontFamily: "var(--font-sans)",
       fontSize: "0.8125rem",
     },
+    ".tex-hover-card h3, .tex-hover-card h4, .tex-hover-card h5, .tex-hover-card h6":
+      {
+        margin: "0.8rem 0 0",
+        fontFamily: "var(--font-sans)",
+        fontSize: "0.75rem",
+      },
     ".tex-hover-card p": {
       margin: "0.3rem 0 0",
       fontFamily: "var(--font-sans)",
@@ -182,15 +208,22 @@ function sourceEditorTheme(fontSize: number) {
       lineHeight: "1.35",
       color: "var(--muted-foreground)",
     },
-    ".tex-hover-card-label": {
-      display: "block",
-      marginTop: "0.7rem",
+    ".tex-hover-card ul, .tex-hover-card ol": {
+      margin: "0.45rem 0 0",
+      paddingLeft: "1.25rem",
       fontFamily: "var(--font-sans)",
-      fontSize: "0.625rem",
-      fontWeight: "700",
-      letterSpacing: "0.06em",
-      textTransform: "uppercase",
+      fontSize: "0.75rem",
+      lineHeight: "1.35",
       color: "var(--muted-foreground)",
+    },
+    ".tex-hover-card a": {
+      color: "var(--primary)",
+      textDecoration: "underline",
+      textUnderlineOffset: "0.14em",
+    },
+    ".tex-hover-card a:focus-visible": {
+      outline: "2px solid var(--ring)",
+      outlineOffset: "2px",
     },
     ".tex-hover-card pre": {
       maxHeight: "18rem",
@@ -204,9 +237,9 @@ function sourceEditorTheme(fontSize: number) {
       lineHeight: "1.5",
       color: "var(--editor-preview-foreground)",
     },
-    ".tex-hover-card-caution": {
-      marginTop: "0.2rem",
-      color: "var(--source-foreground)",
+    ".tex-hover-card code": {
+      fontFamily: "var(--font-mono)",
+      fontSize: "0.92em",
     },
   })
 }
@@ -251,17 +284,20 @@ export function LatexEditor({
   fontSize: number
   label: string
   initialViewerState: EditorViewerState | undefined
-  onChange: (content: string) => void
+  onChange: (change: EditorDocumentChange) => void
   onCursorChange: (line: number, column: number) => void
-  onOpenReference: (path: string) => void
+  onOpenReference: (path: ProjectRelativePath) => void
   onSave: () => void
-  onViewerStateChange: (path: string, state: EditorViewerState) => void
-  path: string
-  projectPath: string
+  onViewerStateChange: (
+    path: ProjectRelativePath,
+    state: EditorViewerState
+  ) => void
+  path: ProjectRelativePath
+  projectPath: CanonicalProjectPath
   projectTree: ProjectEntry
-  retainedPaths: string[]
+  retainedPaths: ReadonlyArray<ProjectRelativePath>
   target: EditorTarget | null
-}) {
+}): ReactElement {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
@@ -283,7 +319,7 @@ export function LatexEditor({
   const extensions = useRef<Extension[]>([])
   const documentStates = useRef(
     new Map<
-      string,
+      ProjectRelativePath,
       { state: EditorState; scrollTop: number; scrollLeft: number }
     >()
   )
@@ -433,6 +469,15 @@ export function LatexEditor({
       ),
       projectReferenceField,
       EditorView.domEventHandlers({
+        compositionend: (_event, editor) => {
+          queueMicrotask(() => {
+            onChangeRef.current({
+              content: editor.state.doc.toString(),
+              composing: false,
+            })
+          })
+          return false
+        },
         mousemove: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
           updateReferenceDecoration(editor, referenceAtPointer(editor, event))
@@ -479,7 +524,10 @@ export function LatexEditor({
       ]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !applyingExternalContent.current) {
-          onChangeRef.current(update.state.doc.toString())
+          onChangeRef.current({
+            content: update.state.doc.toString(),
+            composing: update.view.composing,
+          })
         }
         if (update.selectionSet || update.docChanged) {
           const head = update.state.selection.main.head

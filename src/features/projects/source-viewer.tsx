@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useId, useState, type ReactElement } from "react"
 import {
   CircleAlert,
   FileCode2,
@@ -26,8 +26,16 @@ import {
 } from "@/components/ui/empty"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import type { AsyncDocumentState, EditorViewerState } from "@/domain/project"
+import type {
+  AsyncDocumentState,
+  EditorDocumentChange,
+  EditorViewerState,
+} from "@/domain/project"
 import type { ProjectEntry } from "@/domain/project"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 import { shortcutLabel } from "@/lib/shortcuts"
 
@@ -49,19 +57,28 @@ export function SourceViewer({
 }: {
   fontSize: number
   initialViewerState: EditorViewerState | undefined
-  onChange: (path: string, content: string) => void
-  onCursorChange: (path: string, line: number, column: number) => void
-  onOpenReference: (path: string) => void
+  onChange: (path: ProjectRelativePath, change: EditorDocumentChange) => void
+  onCursorChange: (
+    path: ProjectRelativePath,
+    line: number,
+    column: number
+  ) => void
+  onOpenReference: (path: ProjectRelativePath) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onSave: () => void
-  onViewerStateChange: (path: string, state: EditorViewerState) => void
-  projectPath: string
+  onViewerStateChange: (
+    path: ProjectRelativePath,
+    state: EditorViewerState
+  ) => void
+  projectPath: CanonicalProjectPath
   projectTree: ProjectEntry
-  retainedPaths: string[]
+  retainedPaths: ReadonlyArray<ProjectRelativePath>
   state: AsyncDocumentState
   target: EditorTarget | null
-}) {
+}): ReactElement {
+  const editorConflictId = useId()
+  const diskConflictId = useId()
   const [reviewingConflict, setReviewingConflict] = useState(false)
 
   if (state.status === "empty") {
@@ -175,7 +192,7 @@ export function SourceViewer({
         fontSize={fontSize}
         initialViewerState={initialViewerState}
         label={`Edit ${state.document.path}`}
-        onChange={(content) => onChange(state.document.path, content)}
+        onChange={(change) => onChange(state.document.path, change)}
         onCursorChange={(line, column) =>
           onCursorChange(state.document.path, line, column)
         }
@@ -212,18 +229,26 @@ export function SourceViewer({
             </DialogDescription>
           </DialogHeader>
           <div className="grid min-h-64 gap-4 md:grid-cols-2">
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+            <label
+              className="flex min-w-0 flex-col gap-2 text-xs font-medium"
+              htmlFor={editorConflictId}
+            >
               Your editor
               <Textarea
                 className="min-h-64 resize-none font-mono text-xs"
+                id={editorConflictId}
                 readOnly
                 value={state.content}
               />
             </label>
-            <label className="flex min-w-0 flex-col gap-2 text-xs font-medium">
+            <label
+              className="flex min-w-0 flex-col gap-2 text-xs font-medium"
+              htmlFor={diskConflictId}
+            >
               File on disk
               <Textarea
                 className="min-h-64 resize-none font-mono text-xs"
+                id={diskConflictId}
                 readOnly
                 value={conflict?.content ?? ""}
               />

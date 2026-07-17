@@ -2,8 +2,18 @@ import { describe, expect, it } from "vitest"
 
 import {
   applyPdfCandidate,
+  boundedPdfOutputScale,
+  flattenPdfOutline,
+  MAX_PDF_CANVAS_DIMENSION,
+  MAX_PDF_CANVAS_PIXELS,
+  MAX_PDF_SEARCH_MATCH_PAGES,
+  MAX_SUPPORTED_PDF_PAGES,
   normalizePdfOutline,
+  pdfPageSizeSupported,
+  pdfViewportScale,
+  rotatePdfClockwise,
   stateAfterPdfReplacement,
+  shouldRenderPdfPage,
 } from "@/features/pdf/pdf-viewer-model"
 import type { PdfViewerState } from "@/domain/project"
 
@@ -15,6 +25,81 @@ describe("PDF viewer model", () => {
   it("retains available outline entries", () => {
     const outline = [{ title: "Introduction" }]
     expect(normalizePdfOutline(outline)).toEqual(outline)
+  })
+
+  it("flattens nested entries in order and enforces the render budget", () => {
+    const leaf = { title: "Leaf", items: [] }
+    const outline = [
+      { title: "One", items: [leaf] },
+      { title: "Two", items: [] },
+    ]
+    expect(flattenPdfOutline(outline, 2)).toEqual({
+      items: [
+        { depth: 0, item: outline[0] },
+        { depth: 1, item: leaf },
+      ],
+      truncated: true,
+    })
+  })
+})
+
+describe("PDF resource limits", () => {
+  it("renders 100% zoom at the CSS 96-DPI reference size", () => {
+    expect(612 * pdfViewportScale(1)).toBe(816)
+    expect(792 * pdfViewportScale(1)).toBe(1_056)
+    expect(pdfViewportScale(1.5)).toBe(2)
+  })
+
+  it("rejects invalid page geometry and defines a finite page budget", () => {
+    expect(MAX_SUPPORTED_PDF_PAGES).toBe(2_048)
+    expect(MAX_PDF_SEARCH_MATCH_PAGES).toBe(500)
+    expect(pdfPageSizeSupported(Number.POSITIVE_INFINITY, 792)).toBe(false)
+    expect(pdfPageSizeSupported(612, 792)).toBe(true)
+  })
+
+  it("keeps continuous rendering to a five-page neighborhood", () => {
+    expect(
+      Array.from({ length: 100 }, (_, index) => index + 1).filter((page) =>
+        shouldRenderPdfPage(page, 50)
+      )
+    ).toEqual([48, 49, 50, 51, 52])
+  })
+
+  it("ensures at least 2× oversampling for text sharpness on 1× displays", () => {
+    const scale = boundedPdfOutputScale(612, 792, 1)
+    expect(scale).toBe(2)
+  })
+
+  it("does not cap 3× device scale when page fits within budgets", () => {
+    const scale = boundedPdfOutputScale(612, 792, 3)
+    expect(scale).toBe(3)
+  })
+
+  it("enforces the pixel budget even when the requested scale is above the budget", () => {
+    const scale = boundedPdfOutputScale(3_060, 3_960, 3)
+    expect(scale).not.toBeNull()
+    if (scale === null) return
+    const canvasPixels = Math.floor(3_060 * scale) * Math.floor(3_960 * scale)
+    expect(canvasPixels).toBeLessThanOrEqual(MAX_PDF_CANVAS_PIXELS)
+  })
+
+  it("bounds high-density canvas allocation", () => {
+    const scale = boundedPdfOutputScale(10_000, 10_000, 3)
+    expect(scale).not.toBeNull()
+    if (scale === null) return
+    expect(10_000 * scale).toBeLessThanOrEqual(MAX_PDF_CANVAS_DIMENSION)
+    const canvasDimension = Math.floor(10_000 * scale)
+    expect(canvasDimension * canvasDimension).toBeLessThanOrEqual(
+      MAX_PDF_CANVAS_PIXELS
+    )
+  })
+})
+
+describe("PDF rotation", () => {
+  it("cycles through the supported quarter turns", () => {
+    expect(
+      ([0, 90, 180, 270] as const).map((value) => rotatePdfClockwise(value))
+    ).toEqual([90, 180, 270, 0])
   })
 })
 

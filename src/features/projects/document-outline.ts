@@ -1,9 +1,9 @@
-export type DocumentOutlineItem = {
+export type DocumentOutlineItem = Readonly<{
   command: string
   level: number
   line: number
   title: string
-}
+}>
 
 const sectionLevels: Record<string, number> = {
   part: 0,

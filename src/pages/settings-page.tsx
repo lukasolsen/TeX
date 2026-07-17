@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useState, type ReactElement, type ReactNode } from "react"
 import {
   ArrowLeft,
   Check,
@@ -66,7 +66,7 @@ const themeOptions: {
   },
 ]
 
-function SettingsGroup({ children }: { children: ReactNode }) {
+function SettingsGroup({ children }: { children: ReactNode }): ReactElement {
   return (
     <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
       <div className="px-5 sm:px-6">{children}</div>
@@ -84,7 +84,7 @@ function SettingRow({
   description: string
   modified?: boolean
   title: string
-}) {
+}): ReactElement {
   return (
     <div
       className={cn(
@@ -94,7 +94,7 @@ function SettingRow({
       )}
     >
       <div className={cn("max-w-xl", modified && "sm:pl-3")}>
-        <h3 className="text-sm font-medium">{title}</h3>
+        <h2 className="text-sm font-medium">{title}</h2>
         <p className="mt-1 text-sm leading-6 text-muted-foreground">
           {description}
         </p>
@@ -124,7 +124,7 @@ export function SettingsPage({
   onSetSidebarWidth: (width: number) => void
   saveError: string | null
   workspace: WorkspaceState | null
-}) {
+}): ReactElement {
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("appearance")
   const [query, setQuery] = useState("")
@@ -139,7 +139,7 @@ export function SettingsPage({
     : sections.filter((section) => section.id === activeSection)
 
   return (
-    <main className="h-svh overflow-y-auto bg-home-surface">
+    <main className="h-full overflow-y-auto bg-home-surface">
       <header className="sticky top-0 z-10 border-b bg-workspace-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-workspace-chrome/85">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-5 sm:px-8">
           <Button
@@ -230,7 +230,7 @@ export function SettingsPage({
                 <AlertDescription>{saveError}</AlertDescription>
               </Alert>
             ) : null}
-            {visibleSections.includes(sections[0]) &&
+            {visibleSections.some((section) => section.id === "appearance") &&
             matches(
               "appearance color theme system light dark custom accent"
             ) ? (
@@ -299,7 +299,7 @@ export function SettingsPage({
               </SettingsGroup>
             ) : null}
 
-            {visibleSections.includes(sections[1]) &&
+            {visibleSections.some((section) => section.id === "editor") &&
             matches("editor source font text size writing") ? (
               <SettingsGroup>
                 <SettingRow
@@ -353,7 +353,7 @@ export function SettingsPage({
               </SettingsGroup>
             ) : null}
 
-            {visibleSections.includes(sections[2]) &&
+            {visibleSections.some((section) => section.id === "workspace") &&
             matches("workspace project sidebar files layout width") ? (
               <SettingsGroup>
                 <SettingRow

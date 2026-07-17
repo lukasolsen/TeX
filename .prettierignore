@@ -1,7 +1,12 @@
 node_modules/
+dist/
 coverage/
 .pnpm-store/
+src-tauri/gen/
+src-tauri/target/
+tests/fixtures/**/*.pdf
+tests/fixtures/**/*.synctex.gz
+src-tauri/icons/
 pnpm-lock.yaml
 package-lock.json
-pnpm-lock.yaml
 yarn.lock

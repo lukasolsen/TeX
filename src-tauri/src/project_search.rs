@@ -7,9 +7,12 @@ use std::{
 
 use regex::{NoExpand, Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use sha2::{Digest, Sha256};
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
+    bounded_io,
+    project_access::ProjectAccess,
     source_edit::atomic_write,
     source_read::{
         is_readable_source, read_source, revision_for_content, SourceRevision, MAX_SOURCE_BYTES,
@@ -18,9 +21,13 @@ use crate::{
 
 const MAX_SEARCH_RESULTS: usize = 500;
 const MAX_SEARCH_FILES: usize = 2_048;
+const MAX_SEARCH_ENTRIES: usize = 4_096;
+const MAX_SEARCH_DEPTH: usize = 32;
 const MAX_REPLACE_FILES: usize = 128;
 const MAX_REPLACE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
 const MAX_REPLACEMENT_BYTES: usize = 64 * 1024;
+const MAX_TRANSACTION_BYTES: u64 = 40 * 1024 * 1024;
+const TRANSACTION_ID_LENGTH: usize = 64;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +49,7 @@ pub struct ProjectSearchResponse {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FileRevisionExpectation {
     pub path: String,
     pub revision: SourceRevision,
@@ -64,14 +71,14 @@ pub struct SearchError {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReplaceTransaction {
     project_path: String,
     files: Vec<ReplaceBackup>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ReplaceBackup {
     path: String,
     content: String,
@@ -88,14 +95,21 @@ struct PendingReplacement {
     matches: usize,
 }
 
+#[derive(Debug, Eq, PartialEq)]
+enum WriteSetFailure {
+    Restored,
+    Incomplete,
+}
+
 /// Searches bounded text sources without sending project-wide file access to the webview.
 #[tauri::command]
 pub fn search_project_sources(
     project_path: String,
     query: String,
     case_sensitive: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ProjectSearchResponse, SearchError> {
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let matcher = literal_matcher(&query, case_sensitive)?;
     search(&root, &matcher)
 }
@@ -109,8 +123,9 @@ pub fn replace_project_sources(
     replacement: String,
     case_sensitive: bool,
     expected_files: Vec<FileRevisionExpectation>,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ReplaceResponse, SearchError> {
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let matcher = literal_matcher(&query, case_sensitive)?;
     if replacement.len() > MAX_REPLACEMENT_BYTES || expected_files.len() > MAX_REPLACE_FILES {
         return Err(replace_too_large());
@@ -162,9 +177,10 @@ pub fn replace_project_sources(
         });
     }
 
-    let transaction_id = transaction_id(&project_path);
+    let canonical_project_path = root.to_string_lossy().into_owned();
+    let transaction_id = transaction_id(&canonical_project_path);
     let transaction = ReplaceTransaction {
-        project_path,
+        project_path: canonical_project_path,
         files: pending
             .iter()
             .map(|item| ReplaceBackup {
@@ -176,17 +192,15 @@ pub fn replace_project_sources(
     };
     persist_transaction(&app, &transaction_id, &transaction)?;
 
-    for (written, item) in pending.iter().enumerate() {
-        if atomic_write(&item.absolute_path, item.after.as_bytes()).is_err() {
-            let restored = pending.iter().take(written).all(|rollback| {
-                atomic_write(&rollback.absolute_path, rollback.before.as_bytes()).is_ok()
-            });
-            return Err(if restored {
-                unavailable()
-            } else {
-                replace_incomplete()
-            });
-        }
+    if let Err(failure) = apply_write_set(
+        &pending,
+        |item| atomic_write(&item.absolute_path, item.after.as_bytes()).map_err(|_| ()),
+        |item| atomic_write(&item.absolute_path, item.before.as_bytes()).map_err(|_| ()),
+    ) {
+        return Err(match failure {
+            WriteSetFailure::Restored => unavailable(),
+            WriteSetFailure::Incomplete => replace_incomplete(),
+        });
     }
 
     Ok(ReplaceResponse {
@@ -201,18 +215,25 @@ pub fn replace_project_sources(
 pub fn undo_project_replace(
     app: AppHandle,
     transaction_id: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ReplaceResponse, SearchError> {
-    if !transaction_id
-        .chars()
-        .all(|character| character.is_ascii_hexdigit())
+    if transaction_id.len() != TRANSACTION_ID_LENGTH
+        || !transaction_id
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
     {
         return Err(unavailable());
     }
     let path = transaction_path(&app, &transaction_id)?;
-    let encoded = fs::read(&path).map_err(|_| unavailable())?;
+    let encoded = bounded_io::read(&path, MAX_TRANSACTION_BYTES).map_err(|_| unavailable())?;
     let transaction: ReplaceTransaction =
         serde_json::from_slice(&encoded).map_err(|_| unavailable())?;
-    let root = canonical_project(&transaction.project_path)?;
+    if transaction.files.is_empty() || transaction.files.len() > MAX_REPLACE_FILES {
+        return Err(unavailable());
+    }
+    let root = access
+        .resolve(&transaction.project_path)
+        .map_err(|_| unavailable())?;
 
     let mut targets = Vec::new();
     for backup in &transaction.files {
@@ -224,10 +245,17 @@ pub fn undo_project_replace(
             .join(&backup.path)
             .canonicalize()
             .map_err(|_| unavailable())?;
-        targets.push((absolute, backup));
+        targets.push((absolute, backup, document.content));
     }
-    for (target, backup) in &targets {
-        atomic_write(target, backup.content.as_bytes()).map_err(|_| unavailable())?;
+    if let Err(failure) = apply_write_set(
+        &targets,
+        |(target, backup, _)| atomic_write(target, backup.content.as_bytes()).map_err(|_| ()),
+        |(target, _, after)| atomic_write(target, after.as_bytes()).map_err(|_| ()),
+    ) {
+        return Err(match failure {
+            WriteSetFailure::Restored => unavailable(),
+            WriteSetFailure::Incomplete => replace_incomplete(),
+        });
     }
     fs::remove_file(path).map_err(|_| unavailable())?;
 
@@ -238,9 +266,34 @@ pub fn undo_project_replace(
     })
 }
 
+fn apply_write_set<T>(
+    items: &[T],
+    mut apply: impl FnMut(&T) -> Result<(), ()>,
+    mut rollback: impl FnMut(&T) -> Result<(), ()>,
+) -> Result<(), WriteSetFailure> {
+    for (written, item) in items.iter().enumerate() {
+        if apply(item).is_err() {
+            let mut restored = true;
+            for completed in items.iter().take(written).rev() {
+                if rollback(completed).is_err() {
+                    restored = false;
+                }
+            }
+            return Err(if restored {
+                WriteSetFailure::Restored
+            } else {
+                WriteSetFailure::Incomplete
+            });
+        }
+    }
+    Ok(())
+}
+
 fn search(root: &Path, matcher: &Regex) -> Result<ProjectSearchResponse, SearchError> {
     let mut files = Vec::new();
-    collect_source_files(root, root, &mut files)?;
+    let mut visited_entries = 0_usize;
+    let traversal_truncated =
+        collect_source_files(root, root, 0, &mut visited_entries, &mut files)?;
     let searched_files = files.len();
     let mut results = Vec::new();
     let mut total_matches = 0;
@@ -267,7 +320,7 @@ fn search(root: &Path, matcher: &Regex) -> Result<ProjectSearchResponse, SearchE
     }
 
     Ok(ProjectSearchResponse {
-        truncated: total_matches > results.len(),
+        truncated: traversal_truncated || total_matches > results.len(),
         results,
         total_matches,
         searched_files,
@@ -277,11 +330,14 @@ fn search(root: &Path, matcher: &Regex) -> Result<ProjectSearchResponse, SearchE
 fn collect_source_files(
     root: &Path,
     directory: &Path,
+    depth: usize,
+    visited_entries: &mut usize,
     files: &mut Vec<PathBuf>,
-) -> Result<(), SearchError> {
-    if files.len() >= MAX_SEARCH_FILES {
-        return Ok(());
+) -> Result<bool, SearchError> {
+    if files.len() >= MAX_SEARCH_FILES || depth > MAX_SEARCH_DEPTH {
+        return Ok(true);
     }
+    let mut truncated = false;
     let entries = fs::read_dir(directory).map_err(|_| unavailable())?;
     for entry in entries {
         let entry = entry.map_err(|_| unavailable())?;
@@ -289,18 +345,25 @@ fn collect_source_files(
         if file_type.is_symlink() || ignored_name(&entry.file_name()) {
             continue;
         }
+        *visited_entries += 1;
+        if *visited_entries > MAX_SEARCH_ENTRIES {
+            truncated = true;
+            break;
+        }
         if file_type.is_dir() {
-            collect_source_files(root, &entry.path(), files)?;
+            truncated |=
+                collect_source_files(root, &entry.path(), depth + 1, visited_entries, files)?;
         } else if file_type.is_file() && is_readable_source(&entry.path()) {
             if let Ok(relative) = entry.path().strip_prefix(root) {
                 files.push(relative.to_path_buf());
             }
         }
-        if files.len() >= MAX_SEARCH_FILES {
+        if files.len() >= MAX_SEARCH_FILES || *visited_entries >= MAX_SEARCH_ENTRIES {
+            truncated = true;
             break;
         }
     }
-    Ok(())
+    Ok(truncated)
 }
 
 fn literal_matcher(query: &str, case_sensitive: bool) -> Result<Regex, SearchError> {
@@ -326,17 +389,6 @@ fn compact_context(line: &str) -> String {
     context
 }
 
-fn canonical_project(project_path: &str) -> Result<PathBuf, SearchError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
-}
-
 fn persist_transaction(
     app: &AppHandle,
     transaction_id: &str,
@@ -344,10 +396,20 @@ fn persist_transaction(
 ) -> Result<(), SearchError> {
     let path = transaction_path(app, transaction_id)?;
     let encoded = serde_json::to_vec(transaction).map_err(|_| unavailable())?;
+    if encoded.len() as u64 > MAX_TRANSACTION_BYTES {
+        return Err(replace_too_large());
+    }
     atomic_write(&path, &encoded).map_err(|_| unavailable())
 }
 
 fn transaction_path(app: &AppHandle, transaction_id: &str) -> Result<PathBuf, SearchError> {
+    if transaction_id.len() != TRANSACTION_ID_LENGTH
+        || !transaction_id
+            .chars()
+            .all(|character| character.is_ascii_hexdigit())
+    {
+        return Err(unavailable());
+    }
     let directory = app
         .path()
         .app_data_dir()
@@ -361,12 +423,10 @@ fn transaction_id(project_path: &str) -> String {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_nanos());
-    let mut hash = 0xcbf29ce484222325_u64;
-    for byte in project_path.as_bytes() {
-        hash ^= u64::from(*byte);
-        hash = hash.wrapping_mul(0x100000001b3);
-    }
-    format!("{timestamp:x}{hash:016x}")
+    let mut digest = Sha256::new();
+    digest.update(timestamp.to_le_bytes());
+    digest.update(project_path.as_bytes());
+    format!("{:x}", digest.finalize())
 }
 
 fn ignored_name(name: &std::ffi::OsStr) -> bool {
@@ -417,9 +477,40 @@ fn unavailable() -> SearchError {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path, time::SystemTime};
+    use std::{cell::RefCell, fs, path::Path, time::SystemTime};
 
-    use super::{literal_matcher, search};
+    use super::{
+        apply_write_set, literal_matcher, search, transaction_id, WriteSetFailure,
+        TRANSACTION_ID_LENGTH,
+    };
+
+    #[test]
+    fn replacement_transaction_ids_are_fixed_length_hex() {
+        let id = transaction_id("/approved/project");
+        assert_eq!(id.len(), TRANSACTION_ID_LENGTH);
+        assert!(id.chars().all(|character| character.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn rollback_attempts_every_completed_write_after_a_failure() {
+        let applied = RefCell::new(Vec::new());
+        let rolled_back = RefCell::new(Vec::new());
+        let result = apply_write_set(
+            &[0, 1, 2, 3],
+            |item| {
+                applied.borrow_mut().push(*item);
+                (*item != 3).then_some(()).ok_or(())
+            },
+            |item| {
+                rolled_back.borrow_mut().push(*item);
+                (*item != 2).then_some(()).ok_or(())
+            },
+        );
+
+        assert_eq!(result, Err(WriteSetFailure::Incomplete));
+        assert_eq!(*applied.borrow(), vec![0, 1, 2, 3]);
+        assert_eq!(*rolled_back.borrow(), vec![2, 1, 0]);
+    }
 
     #[test]
     fn search_reports_file_line_context_and_count() -> Result<(), Box<dyn std::error::Error>> {

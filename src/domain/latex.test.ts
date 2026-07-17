@@ -4,7 +4,9 @@ import {
   latexCommands,
   latexFileReferenceAt,
   latexFileReferences,
+  latexFileReferencesFromCommands,
 } from "@/domain/latex"
+import { projectRelativePath } from "@/domain/identifiers"
 
 describe("LaTeX source parsing", () => {
   it("parses nested groups and ignores commented commands", () => {
@@ -24,7 +26,9 @@ describe("LaTeX source parsing", () => {
   it("resolves comma-separated and parent-relative file references", () => {
     const source = "\\bibliography{../shared/core, local}"
 
-    expect(latexFileReferences(source, "chapters/method.tex")).toMatchObject([
+    expect(
+      latexFileReferences(source, projectRelativePath("chapters/method.tex"))
+    ).toMatchObject([
       { path: "shared/core.bib", command: "bibliography" },
       { path: "chapters/local.bib", command: "bibliography" },
     ])
@@ -34,10 +38,18 @@ describe("LaTeX source parsing", () => {
     const source = "\\input{chapter}"
 
     expect(
-      latexFileReferenceAt(source, "main.tex", source.indexOf("chapter"))
+      latexFileReferenceAt(
+        source,
+        projectRelativePath("main.tex"),
+        source.indexOf("chapter")
+      )
     ).toMatchObject({ path: "chapter.tex" })
     expect(
-      latexFileReferenceAt(source, "main.tex", source.indexOf("}"))
+      latexFileReferenceAt(
+        source,
+        projectRelativePath("main.tex"),
+        source.indexOf("}")
+      )
     ).toBeNull()
   })
 
@@ -47,9 +59,20 @@ describe("LaTeX source parsing", () => {
       "\\inputminted{rust}{examples/main.rs}",
     ].join("\n")
 
-    expect(latexFileReferences(source, "main.tex")).toMatchObject([
+    expect(
+      latexFileReferences(source, projectRelativePath("main.tex"))
+    ).toMatchObject([
       { path: "appendices/proof.tex", command: "subimport" },
       { path: "examples/main.rs", command: "inputminted" },
     ])
+  })
+
+  it("resolves pre-parsed commands without changing reference semantics", () => {
+    const source = "\\input{chapter}\n\\addbibresource{references.bib}"
+    const sourcePath = projectRelativePath("main.tex")
+
+    expect(
+      latexFileReferencesFromCommands(latexCommands(source), sourcePath)
+    ).toEqual(latexFileReferences(source, sourcePath))
   })
 })

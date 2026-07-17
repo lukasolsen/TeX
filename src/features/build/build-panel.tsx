@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import type { Dispatch } from "react"
+import type { Dispatch, ReactElement } from "react"
 import {
   AlertCircle,
   CheckCircle2,
@@ -50,6 +50,7 @@ import {
 } from "@/domain/build"
 import type { ProjectError } from "@/domain/project"
 import type { BuildPanelTab } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
 import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 
@@ -83,7 +84,7 @@ export function BuildPanel({
   engine: BuildEngine
   onBuild: () => void
   onClose: () => void
-  onNavigate: (path: string, line: number) => void
+  onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelectDiagnostic: (index: number) => void
   onStop: () => void
   onStartWatch: () => void
@@ -99,7 +100,7 @@ export function BuildPanel({
   state: ProjectBuildState
   tab: BuildPanelTab
   watch: ProjectWatchState
-}) {
+}): ReactElement {
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const run = selectedBuildRun(state)
   const running = state.runs.some((item) => item.status === "running")
@@ -260,7 +261,11 @@ export function BuildPanel({
                 }}
                 value={state.selectedRunId ?? undefined}
               >
-                <SelectTrigger className="ml-auto w-44" size="sm">
+                <SelectTrigger
+                  aria-label="Build run"
+                  className="ml-auto w-44"
+                  size="sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent align="end" className="min-w-44">
@@ -361,7 +366,12 @@ function BuildProfileSelect({
       }}
       value={engine}
     >
-      <SelectTrigger className="w-48" size="sm" title={current?.description}>
+      <SelectTrigger
+        aria-label="Build profile"
+        className="w-48"
+        size="sm"
+        title={current?.description}
+      >
         <SelectValue>
           {profiles.status === "loading"
             ? "Detecting tools…"
@@ -423,9 +433,6 @@ function SelectedRunMetadata({ run }: { run: BuildRun | null }) {
         ? ""
         : ` · finished ${formatRunTime(run.finishedAt)}`}{" "}
       · exit {run.exitCode ?? "—"}
-      {run.invocation.toolVersion === null
-        ? ""
-        : ` · ${run.invocation.toolVersion}`}
     </p>
   )
 }
@@ -582,7 +589,7 @@ function BuildProblems({
 }: {
   activeIndex: number | null
   issue: ProjectError | null
-  onNavigate: (path: string, line: number) => void
+  onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelect: (index: number) => void
   run: BuildRun | null
 }) {

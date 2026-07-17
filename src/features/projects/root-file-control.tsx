@@ -1,4 +1,5 @@
 import { FileCheck2, Info } from "lucide-react"
+import type { ReactElement } from "react"
 
 import {
   Select,
@@ -9,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type { ProjectSummary } from "@/domain/project"
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import { rootEvidenceLabel } from "@/features/projects/project-model"
 
 export function RootFileControl({
@@ -16,10 +18,10 @@ export function RootFileControl({
   project,
   selectedRoot,
 }: {
-  onSelectRoot: (path: string) => void
+  onSelectRoot: (path: ProjectRelativePath) => void
   project: ProjectSummary
-  selectedRoot: string | null
-}) {
+  selectedRoot: ProjectRelativePath | null
+}): ReactElement | null {
   const selectedCandidate = project.rootCandidates.find(
     (candidate) => candidate.path === selectedRoot
   )
@@ -46,6 +48,7 @@ export function RootFileControl({
 
   if (project.rootCandidates.length === 1 && selectedRoot !== null) {
     const candidate = project.rootCandidates[0]
+    if (candidate === undefined) return null
     return (
       <span
         className="flex min-w-0 items-center gap-1.5 text-xs text-status-foreground"

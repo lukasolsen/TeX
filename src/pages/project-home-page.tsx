@@ -6,6 +6,7 @@ import {
   Settings,
   ShieldCheck,
 } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { AppBrand } from "@/components/brand/app-brand"
 import { OpenProjectFeedbackView } from "@/components/feedback/open-project-feedback"
@@ -21,6 +22,7 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, StartupState } from "@/domain/project"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { RecentProjectList } from "@/features/projects/recent-project-list"
 
 export function ProjectHomePage({
@@ -34,18 +36,18 @@ export function ProjectHomePage({
 }: {
   feedback: OpenProjectFeedback
   onClearFeedback: () => void
-  onForgetProject: (path: string) => void
+  onForgetProject: (path: CanonicalProjectPath) => void
   onOpenProject: () => void
-  onOpenRecent: (path: string) => void
+  onOpenRecent: (path: CanonicalProjectPath) => void
   onOpenSettings: () => void
   startup: StartupState
-}) {
+}): ReactElement {
   const isOpening =
     feedback.status === "choosing" || feedback.status === "opening"
 
   return (
-    <main className="grid min-h-svh bg-home-surface md:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <aside className="hidden min-h-svh flex-col border-r bg-home-nav text-home-nav-foreground md:flex">
+    <main className="grid h-full min-h-0 bg-home-surface md:grid-cols-[14.5rem_minmax(0,1fr)]">
+      <aside className="hidden min-h-0 flex-col border-r bg-home-nav text-home-nav-foreground md:flex">
         <div className="flex h-20 items-center px-6">
           <AppBrand />
         </div>
@@ -93,7 +95,7 @@ export function ProjectHomePage({
         </div>
       </aside>
 
-      <div className="min-h-svh min-w-0 overflow-y-auto bg-background">
+      <div className="min-h-0 min-w-0 overflow-y-auto bg-background">
         <div className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14 lg:px-14">
           <header className="flex items-start gap-4">
             <div className="pt-0.5 md:hidden">

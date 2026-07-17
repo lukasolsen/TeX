@@ -60,6 +60,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -77,7 +78,7 @@
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: oklch(0.47 0.13 243);
   --radius: 0.625rem;
   --home-surface: oklch(0.965 0.003 250);
   --home-document: oklch(0.992 0.002 250);
@@ -122,10 +123,11 @@
   --sidebar-primary-foreground: oklch(0.977 0.013 236.62);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.47 0.13 243);
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -143,7 +145,7 @@
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: oklch(0.76 0.1 243);
   --home-surface: oklch(0.15 0.004 250);
   --home-document: oklch(0.195 0.007 250);
   --home-nav: oklch(0.18 0.005 250);
@@ -187,7 +189,7 @@
   --sidebar-primary-foreground: oklch(0.293 0.066 243.157);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.76 0.1 243);
 }
 
 @layer base {
@@ -210,14 +212,14 @@ body {
 .pdf-page .textLayer {
   inset: 0;
   opacity: 1;
+  pointer-events: auto;
 }
 
-.pdf-page .textLayer span {
-  color: transparent;
-  cursor: text;
+.pdf-page[role="button"] {
+  cursor: default;
 }
 
-.pdf-page .textLayer ::selection {
+.pdf-page .textLayer span:not([role="img"])::selection {
   background: color-mix(in oklch, var(--primary) 34%, transparent);
 }
 
@@ -356,14 +358,15 @@ button,
 @media (forced-colors: active) {
   :root,
   .dark {
+    color-scheme: light dark;
     --background: Canvas;
     --foreground: CanvasText;
     --card: Canvas;
     --card-foreground: CanvasText;
     --popover: Canvas;
     --popover-foreground: CanvasText;
-    --primary: Highlight;
-    --primary-foreground: HighlightText;
+    --primary: Highlight !important;
+    --primary-foreground: HighlightText !important;
     --secondary: ButtonFace;
     --secondary-foreground: ButtonText;
     --muted: Canvas;
@@ -373,12 +376,22 @@ button,
     --destructive: Mark;
     --border: ButtonBorder;
     --input: Field;
-    --ring: Highlight;
+    --ring: Highlight !important;
+    --home-surface: Canvas;
+    --home-document: Canvas;
+    --home-nav: Canvas;
+    --home-nav-foreground: CanvasText;
+    --home-nav-active: Highlight;
     --workspace: Canvas;
     --workspace-chrome: Canvas;
     --sidebar: Canvas;
     --sidebar-foreground: CanvasText;
     --sidebar-accent: Highlight;
+    --sidebar-accent-foreground: HighlightText;
+    --sidebar-primary: Highlight;
+    --sidebar-primary-foreground: HighlightText;
+    --sidebar-border: ButtonBorder;
+    --sidebar-ring: Highlight;
     --source: Canvas;
     --source-foreground: CanvasText;
     --status: Canvas;
@@ -401,5 +414,7 @@ button,
     --editor-package: CanvasText;
     --editor-heading: CanvasText;
     --editor-url: LinkText;
+    --editor-preview: Canvas;
+    --editor-preview-foreground: CanvasText;
   }
 }

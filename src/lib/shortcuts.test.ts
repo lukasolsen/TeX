@@ -13,5 +13,6 @@ describe("shortcut labels", () => {
     expect(shortcutLabel(["primary", "shift", "p"], "other")).toBe(
       "Ctrl + Shift + P"
     )
+    expect(shortcutLabel(["primary", "shift", "n"], "macos")).toBe("⌘ ⇧ N")
   })
 })

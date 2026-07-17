@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactElement } from "react"
 import {
   CaseSensitive,
   ChevronRight,
@@ -15,12 +15,18 @@ import type {
   ProjectSearchResponse,
   ReplaceResponse,
 } from "@/domain/project"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 import {
   projectErrorFromUnknown,
   replaceProjectSources,
   searchProjectSources,
   undoProjectReplace,
 } from "@/services/project-service"
+import { runDetached } from "@/lib/promises"
+import { createLatestRequest } from "@/lib/latest-request"
 
 type SearchState =
   | { status: "idle" }
@@ -52,42 +58,46 @@ export function ProjectSearchPanel({
 }: {
   onClose: () => void
   onFilesChanged: () => void
-  onNavigate: (path: string, line: number, column: number) => void
-  projectPath: string
-}) {
+  onNavigate: (path: ProjectRelativePath, line: number, column: number) => void
+  projectPath: CanonicalProjectPath
+}): ReactElement {
   const [query, setQuery] = useState("")
   const [replacement, setReplacement] = useState("")
   const [caseSensitive, setCaseSensitive] = useState(false)
   const [showReplace, setShowReplace] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [state, setState] = useState<SearchState>({ status: "idle" })
-  const request = useRef(0)
+  const requests = useRef(createLatestRequest()).current
+  const mutationInFlight = useRef(false)
   const searchInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     searchInput.current?.focus()
-  }, [])
+    return () => {
+      requests.invalidate()
+    }
+  }, [requests])
 
   useEffect(() => {
-    const currentRequest = ++request.current
+    const currentRequest = requests.begin()
     if (query.trim() === "") return
     const timer = window.setTimeout(async () => {
       try {
-        const response = await searchProjectSources(
+        const response = await searchProjectSources({
           projectPath,
           query,
-          caseSensitive
-        )
-        if (request.current === currentRequest)
+          caseSensitive,
+        })
+        if (requests.isCurrent(currentRequest))
           setState({ status: "ready", response })
       } catch (error: unknown) {
-        if (request.current === currentRequest) {
+        if (requests.isCurrent(currentRequest)) {
           setState({ status: "error", error: projectErrorFromUnknown(error) })
         }
       }
     }, 220)
     return () => window.clearTimeout(timer)
-  }, [caseSensitive, projectPath, query])
+  }, [caseSensitive, projectPath, query, requests])
 
   function updateQuery(value: string) {
     setPreviewing(false)
@@ -107,7 +117,7 @@ export function ProjectSearchPanel({
       : null
   const expectedFiles = useMemo(() => {
     const files = new Map<
-      string,
+      ProjectRelativePath,
       ProjectSearchResponse["results"][number]["revision"]
     >()
     for (const result of response?.results ?? [])
@@ -115,40 +125,58 @@ export function ProjectSearchPanel({
     return [...files].map(([path, revision]) => ({ path, revision }))
   }, [response])
 
-  async function applyReplacement() {
-    if (response === null) return
+  async function applyReplacement(): Promise<void> {
+    if (response === null || mutationInFlight.current) return
+    mutationInFlight.current = true
+    const operation = requests.begin()
     setState({ status: "replacing", response })
     try {
-      const result = await replaceProjectSources(
+      const result = await replaceProjectSources({
         projectPath,
         query,
         replacement,
         caseSensitive,
-        expectedFiles
-      )
+        expectedFiles,
+      })
+      if (!requests.isCurrent(operation)) return
       setPreviewing(false)
       setState({ status: "replaced", result })
       onFilesChanged()
     } catch (error: unknown) {
-      setState({ status: "error", error: projectErrorFromUnknown(error) })
+      if (requests.isCurrent(operation)) {
+        setState({ status: "error", error: projectErrorFromUnknown(error) })
+      }
+    } finally {
+      mutationInFlight.current = false
     }
   }
 
-  async function undoReplacement(result: ReplaceResponse) {
+  async function undoReplacement(result: ReplaceResponse): Promise<void> {
+    if (mutationInFlight.current) return
+    mutationInFlight.current = true
+    const operation = requests.begin()
     setState({ status: "undoing", result })
     try {
       await undoProjectReplace(result.transactionId)
+      if (!requests.isCurrent(operation)) return
       onFilesChanged()
-      const response = await searchProjectSources(
+      const response = await searchProjectSources({
         projectPath,
         query,
-        caseSensitive
-      )
-      setState({ status: "ready", response })
+        caseSensitive,
+      })
+      if (requests.isCurrent(operation)) setState({ status: "ready", response })
     } catch (error: unknown) {
-      setState({ status: "error", error: projectErrorFromUnknown(error) })
+      if (requests.isCurrent(operation)) {
+        setState({ status: "error", error: projectErrorFromUnknown(error) })
+      }
+    } finally {
+      mutationInFlight.current = false
     }
   }
+
+  const mutationPending =
+    state.status === "replacing" || state.status === "undoing"
 
   return (
     <section
@@ -173,6 +201,7 @@ export function ProjectSearchPanel({
           <Input
             aria-label="Search project"
             className="min-w-0 flex-1"
+            disabled={mutationPending}
             onChange={(event) => updateQuery(event.target.value)}
             placeholder="Search project"
             ref={searchInput}
@@ -181,6 +210,7 @@ export function ProjectSearchPanel({
           <Button
             aria-label="Match case"
             aria-pressed={caseSensitive}
+            disabled={mutationPending}
             onClick={toggleCaseSensitive}
             size="icon-sm"
             title="Match case"
@@ -191,6 +221,7 @@ export function ProjectSearchPanel({
           <Button
             aria-label="Show replace"
             aria-pressed={showReplace}
+            disabled={mutationPending}
             onClick={() => (
               setPreviewing(false),
               setShowReplace((value) => !value)
@@ -207,6 +238,7 @@ export function ProjectSearchPanel({
             <Input
               aria-label="Replace with"
               className="min-w-0 flex-1"
+              disabled={mutationPending}
               onChange={(event) => (
                 setPreviewing(false),
                 setReplacement(event.target.value)
@@ -269,7 +301,7 @@ export function ProjectSearchPanel({
             ))}
           </ul>
           <div className="flex gap-2">
-            <Button onClick={() => void applyReplacement()} size="xs">
+            <Button onClick={() => runDetached(applyReplacement())} size="xs">
               Apply replacement
             </Button>
             <Button
@@ -309,7 +341,7 @@ export function ProjectSearchPanel({
             </p>
             {state.status === "replaced" ? (
               <Button
-                onClick={() => void undoReplacement(state.result)}
+                onClick={() => runDetached(undoReplacement(state.result))}
                 size="sm"
                 variant="outline"
               >

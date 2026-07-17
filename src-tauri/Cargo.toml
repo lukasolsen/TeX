@@ -5,6 +5,7 @@ description = "A local-first LaTeX project editor"
 authors = ["TeX contributors"]
 edition = "2021"
 rust-version = "1.88"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -28,7 +29,21 @@ atomic-write-file = "0.3.0"
 regex = "1"
 sha2 = "0.10"
 notify = "8"
+renamore = "0.3.2"
+command-group = "5.0.1"
 
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[lints.clippy]
+dbg_macro = "deny"
+expect_used = "deny"
+panic = "deny"
+print_stdout = "deny"
+todo = "deny"
+unimplemented = "deny"
+unwrap_used = "deny"
 
 [profile.dev]
 incremental = true

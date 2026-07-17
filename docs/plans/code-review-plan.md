@@ -1,425 +1,829 @@
-# Comprehensive code review and hardening plan
+# TeX engineering standards, audit, and hardening plan
 
-Status: proposed  
+Status: in progress — Phase 4 Waves A–H complete; Phase 5 active
 Created: 2026-07-16  
-Scope: every maintained source, configuration, workflow, test, fixture contract,
-and documentation file in TeX
+Scope: every maintained Rust, React, TypeScript, configuration, test, workflow,
+fixture, and documentation file in TeX
 
-## Goal
+## Direction
 
-Perform a source-backed, line-by-line review that improves security,
-correctness, performance, maintainability, accessibility, and consistency
-without turning the exercise into a cosmetic rewrite. The review must establish
-rules from authoritative sources, measure the current baseline, record every
-finding, and deliver fixes in small branches and pull requests with regression
-evidence.
+This work starts by defining one TeX Engineering Standard. It applies across
+Rust and React/TypeScript, states how the two sides communicate, and gives
+specific policy for TypeScript, declarations and file structure, comments and
+documentation, React, Tauri/webview security, and Oxlint.
 
-“Line by line” means every maintained file is assigned to a review wave and
-marked reviewed in a ledger. It does not mean changing every line. Unnecessary
-churn makes security review harder and must be avoided.
+The standard is the authority for the review. Do not start a repository-wide
+cleanup, lint migration, or rule rollout until it has been written, reviewed,
+and accepted. Then review every maintained file against it, record every
+finding, and fix findings in small, evidence-backed branches. The target is a
+safe, direct, maintainable local-first LaTeX editor—not a style exercise or a
+generic application framework.
 
-## Non-negotiable review principles
+“Every file” means every maintained file is inventoried, assigned to a review
+wave, read in full with its relevant callers, contracts, and tests, and marked
+in the review ledger. It does not mean changing every file. Do not create
+churn without a finding and a clear correction.
 
-- Evidence before rules: research current upstream guidance and record version,
-  retrieval date, relevance, and adopted/rejected decision.
-- Correctness and security before style; measured performance before
-  optimization.
-- Do not enable whole lint groups blindly. In particular, Clippy documents that
-  its complete `restriction` group should not be enabled because individual
-  lints can be inappropriate or contradictory.
-- Baseline first: capture test, lint, dependency, size, timing, and architecture
-  state before changing configuration.
-- One concern per branch/PR. Separate rule adoption, mechanical cleanup,
-  behavior fixes, dependency changes, and performance work.
-- Every behavior defect receives a deterministic regression test where possible.
-- Every suppression needs the narrowest scope, a `reason`, and a linked review
-  finding. Suppressions without rationale are defects.
-- Preserve local-first boundaries, user work, focus, PDF context, last-known-good
-  output, and raw diagnostic evidence throughout the review.
+## Non-negotiable principles
 
-## Authoritative research dossier
+- Standards before findings; findings before fixes; tests before completion.
+- Correctness, user-work preservation, and security take priority over style.
+- The frontend owns presentation and state coordination. Rust owns filesystem,
+  process, validation, persistence, and privileged operations. No exception
+  crosses this boundary without an explicit typed contract.
+- All external input is untrusted until validated at the receiving boundary:
+  IPC payloads, paths, files, watcher events, compiler output, PDFs, persisted
+  state, environment, command arguments, dependencies, and CI input.
+- Prefer the smallest cohesive design. Do not add abstractions, dependencies,
+  permissions, configuration, or comments without a concrete need.
+- Measure performance before optimizing. Preserve focus, selection, scroll,
+  PDF page/zoom/layout, and the last known-good PDF on every successful or
+  failed automatic update.
+- A suppression or exception is a defect until it names the exact scope,
+  reason, owner, compensating control, review finding, and expiry date.
+- One concern per branch and PR. Do not combine policy, mechanical migration,
+  behavior repair, dependency updates, or broad formatting without necessity.
 
-Before changing rules, create `docs/reviews/source-register.md` with one entry
-per source: URL, owner, version/date, claims used, affected repository area,
-decision, and revisit date. Prefer standards and primary maintainers over blog
-posts. At minimum, review these sources and their directly relevant subpages:
+## Maintainer rule proposals — required input before adoption
 
-### Rust language, API, Cargo, and linting
+The maintainer may write proposed rules below in any format: fragments,
+examples, commands, non-negotiable statements, or questions. Preserve the
+original wording. Review each proposal for correctness, conflicts, enforceable
+scope, user impact, security impact, and maintenance cost. Record the decision
+as **adopt**, **adopt with revision**, **defer**, or **reject**, with a direct
+reason and an implementation recommendation in `docs/reviews/rule-decisions.md`.
 
-- [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/) — naming,
-  type safety, predictability, documentation, debug representation, and API
-  evolution checklist.
-- [Clippy documentation](https://doc.rust-lang.org/stable/clippy/) and
-  [configuration](https://doc.rust-lang.org/stable/clippy/configuration.html) —
-  lint groups, lint stability, MSRV behavior, configuration, and scoped allows.
-- [rustc lint levels](https://doc.rust-lang.org/stable/rustc/lints/levels.html)
-  and [lint groups](https://doc.rust-lang.org/stable/rustc/lints/groups.html) —
-  `allow`/`warn`/`deny`/`forbid`, reasons, future compatibility, and unused code.
-- [Cargo lint configuration](https://doc.rust-lang.org/cargo/reference/lints.html),
-  [Rust version policy](https://doc.rust-lang.org/cargo/reference/rust-version.html),
-  [profiles](https://doc.rust-lang.org/cargo/reference/profiles.html), and
-  dependency/feature documentation.
-- [RustSec](https://rustsec.org/) and
-  [`cargo-audit`](https://github.com/rustsec/rustsec/tree/main/cargo-audit) —
-  lockfile vulnerability review, advisory exceptions, and CI operation.
-- Evaluate `cargo-deny` from its maintained documentation for advisories,
-  licenses, sources, bans, and duplicate dependencies. Do not add it until a
-  policy file and exception ownership are designed.
+No proposal is silently ignored. A proposal is not made blocking until its
+meaning, enforcement, exceptions, and migration path are explicit.
 
-### Tauri and desktop trust boundaries
+### Cross-stack communication
 
-- [Tauri security model](https://v2.tauri.app/security/),
-  [capabilities](https://v2.tauri.app/security/capabilities/), and
-  [Content Security Policy](https://v2.tauri.app/security/csp/) — command
-  exposure, window permissions, CSP, remote content, IPC, and least privilege.
-- Review official documentation for every enabled Tauri plugin and every future
-  opener/filesystem/process capability before changing permissions.
+#### TEX-ARCH-001 — Privilege separation
 
-### TypeScript, React, linting, and webview safety
+React and TypeScript code MUST be treated as an untrusted presentation layer.
 
-- [TypeScript TSConfig reference](https://www.typescriptlang.org/tsconfig/) —
-  strictness options including `noUncheckedIndexedAccess`,
-  `exactOptionalPropertyTypes`, and `useUnknownInCatchVariables`.
-- [typescript-eslint shared configurations](https://typescript-eslint.io/users/configs/)
-  and rule documentation — evaluate typed recommended/strict/stylistic rules
-  individually and pin decisions because strict presets may change outside
-  major releases.
-- [ESLint configuration and rules](https://eslint.org/docs/latest/) — flat
-  configuration, suppression reporting, and unused disable directives.
-- Official React documentation for effects, external-store synchronization,
-  state preservation, concurrency, accessibility, and performance measurement.
-- Official CodeMirror and PDF.js contracts for cancellation, disposal,
-  accessibility, large documents, and worker boundaries.
+The frontend MUST NOT be considered authoritative for:
 
-### Security standards and supply chain
+- filesystem authorization;
+- path containment;
+- command arguments;
+- LaTeX compiler selection;
+- process execution;
+- allowed URL schemes;
+- project-root membership;
+- file extension validation;
+- write permissions;
+- build-output locations.
 
-- [OWASP ASVS](https://owasp.org/www-project-application-security-verification-standard/)
-  as a control catalog, adapted to a local desktop/webview threat model. Record
-  versioned requirement IDs for adopted controls, especially validation,
-  command execution, file handling, error handling, logging, and stored data.
-- Relevant OWASP cheat sheets for input validation, path traversal, OS command
-  injection, logging, file handling, and supply chain security.
-- [GitHub supply-chain security](https://docs.github.com/en/code-security/concepts/supply-chain-security/supply-chain-security),
-  Actions [secure-use reference](https://docs.github.com/en/actions/reference/security/secure-use),
-  Dependabot, dependency review, CodeQL availability, secret scanning, and
-  artifact provenance.
+Every privileged request MUST be revalidated in Rust.
 
-### Collaboration and review workflow
+Tauri capabilities restrict which commands and plugin permissions are exposed to each window or webview, but capability authorization does not replace validation inside the command.
 
-- [GitHub pull requests](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests),
-  protected branches/rulesets, required checks, CODEOWNERS, PR templates, and
-  draft PRs.
-- Record repository-plan limitations before requiring paid GitHub features;
-  define a local or CI fallback for unavailable controls.
+#### TEX-ARCH-002 — Least authority
 
-## Phase 0 — freeze scope and capture the baseline
+Each Tauri window or webview MUST receive only the capabilities it requires.
 
-Create `docs/reviews/baseline.md` containing:
+Capabilities MUST be divided by responsibility rather than collecting all permissions in one global capability. For example:
 
-- commit SHA, branch, dirty-worktree state, OS, architecture, Rust/Bun/Node/TeX
-  versions, build mode, and date;
-- source/config/test line counts and a complete maintained-file inventory;
-- current lint/type/build/test outputs and durations;
-- release binary/bundle sizes and Vite chunk report;
-- current Tauri commands, plugins, permissions, CSP directives, process
-  executables, persisted stores, filesystem mutations, and event channels;
-- direct/transitive dependency trees, duplicate versions, licenses, sources,
-  known advisories, and abandoned/unmaintained advisories;
-- current test matrix and uncovered product invariants;
-- baseline startup, project-open, search, save, build-start, log-update, PDF-load,
-  and PDF-refresh measurements on named fixtures.
+```
+capabilities/
+  editor.json
+  pdf-viewer.json
+  diagnostics.json
+  settings.json
+```
 
-Starting hypotheses to verify, not silently “fix” in the baseline PR:
+A PDF viewer should not automatically have project-write or process-execution authority.
+
+#### TEX-ARCH-003 — Explicit data flow
+
+Data MUST flow through identifiable layers:
+
+```
+React component
+    ↓
+application hook/controller
+    ↓
+typed frontend gateway
+    ↓
+Tauri invoke boundary
+    ↓
+Rust command
+    ↓
+domain service
+    ↓
+filesystem/process adapter
+```
+
+Components MUST NOT invoke arbitrary Tauri commands directly.
+
+#### TEX-ARCH-004 — Parse at boundaries
+
+All data entering a trust boundary MUST be parsed or validated:
+
+- Tauri command results;
+- persisted settings;
+- recovery records;
+- worker messages;
+- URL parameters;
+- drag-and-drop paths;
+- external process output;
+- JSON files;
+- plugin responses.
+
+A TypeScript annotation is not runtime validation.
+
+#### TEX-ARCH-005 — Invalid states should be unrepresentable
+
+Use discriminated unions instead of combinations of booleans.
+
+Bad:
+
+```typescript
+interface BuildState {
+  isBuilding: boolean;
+  hasFailed: boolean;
+  hasOutput: boolean;
+}
+```
+
+Preferred:
+
+```typescript
+type BuildState =
+  | { readonly kind: "idle" }
+  | { readonly kind: "running"; readonly buildId: BuildId }
+  | { readonly kind: "succeeded"; readonly artifact: PdfArtifact }
+  | { readonly kind: "failed"; readonly diagnostic: BuildDiagnostic };
+```
+
+### TypeScript
+
+#### TEX-TS-001 — No any
+
+Explicit and inferred any MUST NOT be introduced into application code.
+
+Exceptions require:
+
+- a narrow scope;
+- a lint suppression on the exact line;
+- a justification comment;
+- conversion to unknown as soon as possible.
+
+Bad:
+
+```typescript
+function processResult(value: any) {}
+```
+
+Preferred:
+
+```typescript
+function processResult(value: unknown): BuildResult {
+  return parseBuildResult(value);
+}
+```
+
+#### TEX-TS-002 — No unchecked assertions
+
+The following MUST NOT be used without a documented proof:
+
+```typescript
+value!
+value as SomeType
+value as unknown as SomeType
+```
+
+Assertions at validation boundaries SHOULD be replaced with parsers, predicates, or assertion functions.
+
+#### TEX-TS-003 — Exhaustive branching
+
+Discriminated unions MUST be exhaustively handled.
+
+```typescript
+function assertNever(value: never): never {
+  throw new Error(`Unhandled variant: ${String(value)}`);
+}
+```
+
+For security-sensitive state machines, use an exhaustive switch and reject unknown states.
+
+#### TEX-TS-004 — Nominal identifiers
+
+Semantically different identifiers and paths MUST NOT all be plain strings.
+
+```typescript
+declare const projectIdBrand: unique symbol;
+
+/**
+ * Identifies one project within the current application session.
+ *
+ * This value is opaque. It is not a filesystem path and must not be used
+ * to derive one.
+ */
+export type ProjectId = string & {
+  readonly [projectIdBrand]: true;
+};
+```
+
+Useful branded values include:
+
+- ProjectId
+- DocumentId
+- BuildId
+- CanonicalProjectPath
+- ProjectRelativePath
+- EditorRevision
+- SyncTexPageNumber
+
+Branding does not provide runtime security; Rust still validates path authority.
+
+#### TEX-TS-005 — Read-only by default
+
+Types crossing module boundaries SHOULD use readonly properties and readonly collections.
+
+```typescript
+export interface BuildDiagnostic {
+  readonly severity: DiagnosticSeverity;
+  readonly message: string;
+  readonly source: ProjectRelativePath | null;
+  readonly line: number | null;
+}
+```
+
+#### TEX-TS-006 — No ambiguous primitives
+
+Functions MUST NOT accept multiple adjacent primitive arguments when their meaning can be confused.
+
+Bad:
+
+```typescript
+openLocation(path, 12, 4, true);
+```
+
+Preferred:
+
+```typescript
+openLocation({
+  path,
+  line: 12,
+  column: 4,
+  preserveFocus: true,
+});
+```
+
+#### TEX-TS-007 — No boolean mode parameters
+
+Boolean parameters that materially change behavior MUST be replaced with named options or unions.
+
+```typescript
+type SaveMode = "automatic" | "explicit" | "recovery";
+```
+
+#### TEX-TS-008 — Return types on exported functions
+
+Every exported function MUST declare its return type.
+
+Internal callbacks MAY rely on inference where the result is obvious and local.
+
+#### TEX-TS-009 — Promise ownership
+
+Every promise MUST have an explicit owner:
+
+- await it;
+- return it;
+- aggregate it;
+- or intentionally detach it through a named helper.
+
+```typescript
+/**
+ * Starts work whose result is intentionally not awaited by the caller.
+ *
+ * Rejections are routed to the application error reporter, preventing an
+ * unhandled promise rejection.
+ */
+function runDetached(task: Promise<void>): void {
+  void task.catch(reportUnexpectedError);
+}
+```
+
+Oxlint’s type-aware support includes high-value rules such as no-floating-promises, no-misused-promises, and await-thenable.
+
+#### TEX-TS-010 — Error values are structured
+
+Application failures MUST NOT be represented only as free-form strings.
+
+```typescript
+export type OpenProjectError =
+  | { readonly kind: "path-not-found" }
+  | { readonly kind: "not-a-directory" }
+  | { readonly kind: "permission-denied" }
+  | { readonly kind: "unsafe-path"; readonly reason: string }
+  | { readonly kind: "unexpected"; readonly incidentId: string };
+```
+
+User-visible messages should be derived separately.
+
+### Declarations and file structure
+
+#### Mandatory rule
+
+##### TEX-ORG-001 — Declaration isolation
+
+A file containing React rendering logic MUST NOT declare domain types, enums, command contracts, or reusable interfaces.
+
+A component file MAY import its props type but MUST NOT define it inline.
+
+```
+project-tree/
+  project-tree.tsx
+  project-tree.props.ts
+  project-tree.types.ts
+  project-tree.constants.ts
+  project-tree.test.tsx
+  index.ts
+```
+
+Example:
+
+```typescript
+// project-tree.props.ts
+
+import type { ProjectTreeNode } from "./project-tree.types";
+
+/**
+ * Inputs required to render and control the project tree.
+ *
+ * `onOpenDocument` requests navigation only. It does not authorize filesystem
+ * access or imply that the referenced document remains valid.
+ */
+export interface ProjectTreeProps {
+  readonly nodes: readonly ProjectTreeNode[];
+  readonly selectedDocumentId: string | null;
+  readonly onOpenDocument: (documentId: string) => void;
+}
+```
+
+```typescript
+// project-tree.tsx
+
+import type { ProjectTreeProps } from "./project-tree.props";
+
+/**
+ * Renders the navigable document hierarchy for the active project.
+ *
+ * The component owns presentation and interaction only. Project discovery,
+ * path validation, and filesystem access remain outside the render layer.
+ */
+export function ProjectTree(props: ProjectTreeProps): React.JSX.Element {
+  // Render logic only.
+}
+```
+
+##### TEX-ORG-002 — No generic types.ts dumping grounds
+
+Files named only types.ts, interfaces.ts, models.ts, or enums.ts MUST NOT accumulate unrelated declarations.
+
+A feature-level types.ts MAY exist only when all declarations are private, tightly coupled, and below an agreed size threshold.
+
+##### TEX-ORG-003 — Enums are exceptional
+
+Prefer string-literal unions or as const objects over TypeScript enum.
+
+```typescript
+export const diagnosticSeverity = {
+  error: "error",
+  warning: "warning",
+  information: "information",
+} as const;
+
+export type DiagnosticSeverity =
+  (typeof diagnosticSeverity)[keyof typeof diagnosticSeverity];
+```
+
+A TypeScript enum MAY be used only when runtime reverse mapping, interoperability, or a concrete protocol requirement justifies it.
+
+const enum SHOULD NOT be used across module or package boundaries.
+
+### Comments and documentation
+
+#### TEX-DOC-001 — Exported contracts
+
+Every exported:
+
+- type;
+- interface;
+- class;
+- function;
+- hook;
+- constant with semantic significance;
+- Tauri gateway method;
+- validation function;
+
+MUST have a documentation comment.
+
+#### TEX-DOC-002 — Security-critical internals
+
+Non-exported code MUST also be documented when it handles:
+
+- path validation;
+- symlink behavior;
+- process execution;
+- command construction;
+- URL opening;
+- HTML insertion;
+- project-root containment;
+- autosave ordering;
+- recovery consistency;
+- revision tracking;
+- SyncTeX coordinate conversion;
+- PDF origin or asset loading;
+- capability assumptions.
+
+#### TEX-DOC-003 — Comment content
+
+A contract comment SHOULD answer the applicable questions:
+
+1. Purpose: What responsibility does this construct have?
+2. Semantic meaning: What does the value represent?
+3. Invariants: What must always remain true?
+4. Trust: Is the input trusted, parsed, canonicalized, or untrusted?
+5. Ownership: Who may mutate or dispose of it?
+6. Failure: How does failure appear?
+7. Side effects: What state or external resource can change?
+8. Concurrency: Can calls overlap or complete out of order?
+9. Security: What authority does it exercise?
+10. Rationale: Why is the non-obvious implementation necessary?
+
+Not every comment needs all ten sections.
+
+**Good type comment**
+
+```typescript
+/**
+ * A path relative to the canonical root of an opened project.
+ *
+ * The path uses forward-slash separators and cannot be absolute or contain
+ * parent traversal segments. This frontend representation is descriptive,
+ * not authoritative; Rust revalidates containment before every filesystem
+ * operation.
+ */
+export type ProjectRelativePath = string & ProjectRelativePathBrand;
+```
+
+**Good function comment**
+
+```typescript
+/**
+ * Requests an atomic save of the current document revision.
+ *
+ * The supplied revision identifies the editor snapshot that produced
+ * `content`. Completion does not imply that a newer revision has not already
+ * been queued. The caller must compare the returned revision before updating
+ * visible save state.
+ *
+ * @throws {SaveDocumentError} When the backend rejects the path, revision, or
+ * write operation.
+ */
+export async function saveDocument(
+  request: SaveDocumentRequest,
+): Promise<SaveDocumentResult> {
+  // ...
+}
+```
+
+**Good rationale comment**
+
+```typescript
+// Resolve and verify the parent directory before creating the temporary file.
+// Checking only the final destination would leave a race in which an ancestor
+// is replaced by a symlink between validation and rename.
+```
+
+**Prohibited comments**
+
+```typescript
+// Set loading to true.
+setLoading(true);
+
+// Loop over documents.
+for (const document of documents) {}
+
+// This interface represents props.
+interface Props {}
+```
+
+Also prohibited:
+
+- roadmap notes without an issue identifier;
+- historical narratives better suited to version control;
+- commented-out code;
+- claims such as “safe” or “secure” without stating the enforced invariant;
+- comments that contradict the implementation.
+
+## Phase 0 — inventory and baseline
+
+Before changing production code or tooling, create `docs/reviews/baseline.md`
+and `docs/reviews/file-ledger.md`.
+
+The baseline records commit SHA, branch, dirty-worktree state, platform and
+tool versions; a complete maintained-file inventory; line counts; current
+lint/type/build/test results and durations; bundle and binary sizes; direct and
+transitive dependencies; and the current test matrix. It also maps Tauri
+commands, plugins, capabilities, CSP, persisted stores, filesystem mutations,
+processes, event channels, and trust boundaries.
+
+Measure named fixtures for startup, project open, save, search, build start,
+log update, PDF load, and PDF refresh. Record method, build mode, machine, and
+date so later performance claims are comparable.
+
+Starting hypotheses to verify, not silently fix:
 
 - the working branch is `master` while CI listens for pushes to `main`;
 - Rust has no declared `rust-version` or manifest lint policy;
-- ESLint uses recommended syntax rules but not type-aware strict rules;
-- CI has no explicit RustSec/license/source/dependency-review gate;
+- ESLint is the current frontend linter and must be replaced by Oxlint;
+- CI lacks an explicit RustSec/license/source/dependency-review gate;
 - GitHub Actions use mutable version tags rather than full commit SHAs;
 - release installation is not frozen with `bun install --frozen-lockfile`;
-- there is no source-review ledger, threat model, benchmark harness, or security
-  exception register.
+- no source-review ledger, threat model, benchmark harness, or security
+  exception register exists.
 
-Exit gate: baseline commands are reproducible and no production code changed.
+Exit gate: the inventory and baseline are reproducible, and no production code
+has changed.
 
-## Phase 1 — establish the rule adoption process
+## Phase 1 — write and approve the TeX Engineering Standard
 
-Create these review artifacts:
+Create `docs/engineering-standard.md`. It must be short enough to use during
+daily review and strict enough to decide real cases. State requirements in
+imperative language. Include a rationale only where it prevents a likely
+misreading; do not repeat language syntax or explain obvious rules.
 
-- `docs/reviews/source-register.md` — external authority and version register.
-- `docs/reviews/rules.md` — accepted repository rules with rationale, examples,
-  enforcement mechanism, severity, and exception policy.
-- `docs/reviews/findings.md` — finding ID, severity, CWE/ASVS mapping where
-  relevant, file/line, evidence, exploit/failure scenario, fix, test, owner,
-  branch/PR, and status.
-- `docs/reviews/file-ledger.md` — every maintained file with reviewer, review
-  wave, security/performance/style status, findings, test evidence, and date.
-- `docs/reviews/exceptions.md` — temporary lint/advisory/policy exceptions with
-  scope, owner, reason, compensating control, and expiry/review date.
+The standard must contain these sections, in this order.
 
-Rule adoption sequence:
+### 1. Cross-stack communication
 
-1. Run a candidate rule in report-only mode.
-2. Classify findings as defect, beneficial cleanup, intentional pattern, false
-   positive, or not applicable.
-3. Estimate churn and identify conflicts with generated/vendor code.
-4. Adopt only rules with a documented repository benefit.
-5. Fix existing findings in a dedicated branch before making the rule blocking,
-   unless it is a critical correctness/security gate.
-6. Add narrow exceptions with reasons; never blanket-disable a useful rule.
-7. Make the rule blocking in CI and update `AGENTS.md` in the same PR.
+- Define the boundary: React/TypeScript never accesses the filesystem, starts
+  processes, or persists privileged state; Rust never owns webview presentation.
+- Require one typed request/response/event contract per IPC operation. Name the
+  contract owner, validation point, error code model, cancellation behavior,
+  event ordering, and compatibility expectation.
+- Prohibit raw backend errors, handles, document content, and unnecessary
+  absolute paths from crossing into the webview.
+- Require explicit state models for pending, success, cancellation, failure,
+  stale completion, and recovery. Preserve user context and last-good PDF.
 
-Exit gate: every blocking rule has rationale, clean baseline, and CI coverage.
+### 2. TypeScript
 
-## Phase 2 — threat model and architecture review
+- Keep strict TypeScript. Prohibit `any`, `@ts-ignore`, unchecked assertions,
+  and non-null assertions as contract bypasses. Receive untrusted data as
+  `unknown` and narrow it at the boundary.
+- Require named domain types and discriminated unions for state and IPC
+  protocols. Do not use boolean clusters or stringly typed state machines.
+- Define the approved policy for `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`, imports, module resolution, exhaustive
+  switching, promises, and runtime validation.
 
-Map assets, actors, trust boundaries, entry points, and failure modes before the
-line review:
+### 3. Declarations and file structure
 
-- assets: source, recovery drafts, PDF/build artifacts, logs, workspace state,
-  project paths, configuration, user focus/context, release signing credentials;
-- untrusted inputs: project trees, symlinks, file contents, LaTeX roots, PDFs,
-  SyncTeX output, compiler output, persisted JSON, dialog results, IPC payloads,
-  filesystem events, environment/PATH, command arguments, dependency artifacts;
-- boundaries: React/webview ↔ Tauri IPC, project root ↔ outside filesystem,
-  application ↔ compiler/SyncTeX, temporary files ↔ committed state, CI ↔
-  third-party Actions, release workflow ↔ GitHub token;
-- abuse/failure cases: traversal, symlink swaps/TOCTOU, command injection,
-  unsafe TeX execution, oversized/decompression-bomb inputs, malformed UTF-8,
-  log/content disclosure, stale async completion, concurrent writes/builds,
-  cancellation races, partial disk writes, permission loss, event storms,
-  compromised dependency or Action, and malicious PR workflow input.
+- Define where domain types, IPC wrappers, hooks, components, styles, tests,
+  fixtures, Rust commands, services, models, and error types belong.
+- Keep modules cohesive, acyclic where practical, and explicit about ownership.
+  Place a declaration beside the domain it describes; do not create ambient or
+  catch-all declaration files to avoid an import or type design decision.
+- Prohibit unused exports, obsolete compatibility layers, duplicate utilities,
+  and files whose name or location obscures their owner. State deletion rules
+  and the evidence required before removing apparently unused code.
 
-For each boundary, document validation owner, size/time limits, canonicalization
-strategy, race assumptions, error contract, logging/redaction, tests, and
-residual risk. Tauri commands should become thin adapters where business logic
-is currently embedded.
+### 4. Comments and documentation
 
-Exit gate: every IPC command and external process maps to a reviewed threat and
-test strategy.
+- Comments document invariants, ownership, security boundaries, externally
+  visible contracts, or non-obvious reasoning. They never narrate syntax,
+  repeat names, make unowned future promises, or excuse bad code.
+- Public or behaviorally significant APIs have concise documentation when the
+  contract is not apparent from the type and name. Document errors, cancellation,
+  ordering, lifetime, and safety constraints where applicable.
+- Documentation must be truthful, versioned when dependent on external tools,
+  and updated in the same change as the behavior it describes.
 
-## Phase 3 — configure review tooling in isolated PRs
+### 5. React
 
-Evaluate and, where justified, introduce:
+- Components are declarative presentation and state coordination units. Keep
+  privileged operations behind typed IPC wrappers.
+- Effects synchronize with external systems only; dependencies are complete;
+  subscriptions, timers, workers, observers, and async work always clean up.
+- Use native semantic controls first. Require keyboard operation, visible focus,
+  labels, text alternatives, stable layout, and complete pending/error/empty
+  state rendering.
+- For editor/PDF workflows, require deliberate ownership of focus, selection,
+  scrolling, IME, cancellation, render cost, and state restoration.
 
-### Rust/Cargo
+### 6. Tauri and webview security
 
-- `rust-toolchain.toml` and `package.rust-version` matching the support policy;
-- `[lints.rust]` and `[lints.clippy]` in `Cargo.toml`, starting from current
-  defaults and selected pedantic/restriction lints, not entire optional groups;
-- likely candidates for explicit review: `unsafe_code`, `unused_must_use`,
-  `unexpected_cfgs`, `missing_debug_implementations`, `unwrap_used`,
-  `expect_used`, `panic`, `todo`, `unimplemented`, `dbg_macro`, lossy casts,
-  suspicious arithmetic, redundant clones, large futures, and inefficient
-  collections;
-- `cargo audit` and, if policy is ready, `cargo deny check advisories bans
-  licenses sources`;
-- rustdoc checks for public contracts and documented errors/panics where
-  relevant;
-- optional future tools only after value/risk review: `cargo-semver-checks`,
-  `cargo-machete`, `cargo-udeps`, `cargo-nextest`, sanitizer/Miri runs for
-  applicable isolated code, and platform-specific profiling.
+- Commands are thin typed adapters over Rust services. Validate at the boundary
+  and apply least privilege to every capability, CSP directive, plugin, path,
+  operation, and process.
+- Canonicalize and validate paths against the approved project root before every
+  read, write, watch, delete, or invocation. Address traversal, symlinks, root
+  swaps, TOCTOU, bounds, atomicity, rollback, and error redaction.
+- Invoke fixed executables with separately supplied arguments; never construct
+  a shell command from strings. Require explicit consent for shell escape or
+  project-provided commands.
+- Treat watcher events as hints; bound untrusted resource use; do not expose
+  document contents or sensitive paths in logs, IPC, or UI errors.
 
-### TypeScript/React
+### 7. Oxlint policy
 
-- typed `typescript-eslint` recommended/strict rules in report-only mode first;
-- `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and other strict
-  TSConfig options one at a time with migration findings;
-- rules for floating promises, unsafe arguments/returns/assignments,
-  unnecessary assertions, exhaustive switches, consistent type imports,
-  unused disable directives, and React effect correctness;
-- tests for async cancellation, stale closures, event cleanup, focus, keyboard
-  operation, and state-machine exhaustiveness;
-- bundle analysis with explicit budgets for initial and lazy workspace chunks.
+- Oxlint replaces ESLint as TeX’s JavaScript/TypeScript linter. Do not retain
+  ESLint as a permanent parallel gate. A temporary compatibility exception must
+  be narrow, documented, owned, and time-limited.
+- Commit one root `.oxlintrc.json`/`.jsonc` configuration, not an executable
+  configuration, unless a documented need requires it. Declare explicit
+  ignores, environments, overrides, and rule severities.
+- Enable correctness as an error. Evaluate suspicious, performance, style,
+  pedantic, and restriction rules individually or in reviewable groups; never
+  adopt a broad category merely because it exists.
+- Enable and configure the React, TypeScript, import, and JSX accessibility
+  coverage required by the project. Type-aware linting is adopted only after
+  its runtime, TypeScript compatibility, reliability, and CI cost are measured.
+- CI runs Oxlint with warnings denied. Automated fixes are reviewed diffs;
+  dangerous or suggestion fixes are never applied blindly. Suppressions name a
+  reason and expire or link to a tracked finding.
 
-### CI and repository controls
+Exit gate: the maintainer proposal sections have decisions; the standard has
+been reviewed against product constraints; each rule has an enforcement method,
+exception rule, and migration implication.
 
-- frozen installs in CI and release jobs;
-- minimal job permissions and explicit permissions on every workflow;
-- full-length SHA pinning for third-party Actions, with a controlled update
-  mechanism and human-readable version comments;
-- protected default branch, required current-SHA checks, review requirement,
-  PR template, CODEOWNERS where useful, and merge strategy;
-- RustSec/Dependabot for Cargo, Bun/npm dependency monitoring, dependency review
-  where available, CodeQL where supported, and secret scanning/push protection;
-- release artifact integrity, provenance/signing design, reproducible metadata,
-  and rollback procedure.
+## Phase 2 — source register, rule register, and Oxlint migration design
 
-Each tooling PR must contain only configuration plus the mechanical fixes needed
-to establish a clean baseline.
+Create these artifacts:
 
-## Phase 4 — line-by-line review waves
+- `docs/reviews/source-register.md`: source URL, owner, version/date, claims
+  used, affected area, adopted/rejected decision, and revisit date.
+- `docs/reviews/rule-decisions.md`: every maintainer proposal and external rule,
+  its original wording, decision, rationale, enforcement, exception path,
+  migration work, owner, and review date.
+- `docs/reviews/findings.md`: ID, severity, file/line, evidence, failure or
+  exploit scenario, standard section, fix, test, owner, branch/PR, and status.
+- `docs/reviews/exceptions.md`: exact scope, owner, reason, compensating
+  control, finding, and expiry/review date.
 
-Review in dependency order. For each file, read the complete file and its tests,
-trace callers/callees and serialized contracts, add findings to the ledger, fix
-only the current wave, and rerun narrow plus full gates.
+Research primary sources before adopting external constraints: Rust API and
+lint guidance, Cargo/MSRV policy, Tauri security/capabilities/CSP and enabled
+plugin documentation, TypeScript TSConfig, React, CodeMirror, PDF.js, OWASP,
+and GitHub Actions supply-chain guidance. Record source versions; do not adopt
+blog advice as policy without a stronger source.
 
-### Wave A — manifests, capabilities, and workflows
+For Oxlint, inspect the installed project configuration and run the official
+migration tool in a disposable branch or report-only workspace. Build a
+rule-compatibility table for every current ESLint rule: native Oxlint mapping,
+equivalent Oxlint rule, temporary JS-plugin fallback, or rejected rule. Remove
+ESLint packages and configuration only after Oxlint has an equivalent clean
+baseline and CI command. Do not treat experimental type-aware support or JS
+plugins as a permanent requirement without a documented stability decision.
 
-Files: `Cargo.toml`, Cargo/Bun lockfiles, `package.json`, TypeScript/ESLint/Vite
-configuration, Tauri configuration/capabilities, build scripts, GitHub Actions,
-and repository instructions.
+Exit gate: every proposed and imported rule has a recorded decision; the Oxlint
+migration has a complete compatibility and deletion plan.
 
-Review: dependency necessity/features, versions/MSRV, scripts, generated-file
-boundaries, CSP, permissions, dev/release differences, action pinning,
-credentials, artifacts, caches, and branch triggers.
+## Phase 3 — threat model and architecture review
 
-### Wave B — Rust path and filesystem boundary
+Map assets, actors, boundaries, entry points, validation owners, limits, error
+contracts, logging/redaction, tests, and residual risk before line review.
+Cover source and recovery drafts, PDFs/build artifacts, logs, workspace state,
+project paths, compiler/SyncTeX invocation, IPC, filesystem watchers, temporary
+files, CI, dependencies, and release credentials.
 
-Files: project open/read/write/create/rename/delete/search, persistence, PDF
-reading, recovery, and related tests.
+Explicitly test traversal, symlink/root-swap races, command injection, unsafe
+TeX execution, malformed/oversized input, decompression bombs, stale async
+completion, concurrent writes/builds, cancellation, partial writes, permission
+loss, event storms, compromised dependencies, and malicious workflow input.
 
-Review every path from raw IPC string to canonical object. Check absolute and
-parent components, symlinks, root replacement races, file type, extension,
-size/count/depth limits, Unicode, atomicity, durability, permissions, cleanup,
-error redaction, and rollback after multi-file operations.
+Exit gate: each IPC command and external process maps to a reviewed threat,
+validation owner, and test strategy.
 
-### Wave C — Rust process and event boundary
+## Phase 4 — complete repository audit
 
-Files: build controller, diagnostics, SyncTeX, readiness, future watcher, and
-related tests.
+Review by dependency order. For every assigned file: read it in full; trace its
+callers, callees, serialized contracts, and tests; decide whether its location,
+name, ownership, exports, dependencies, and comments remain justified; record
+every finding; and mark the ledger. Findings include security, correctness,
+user experience, accessibility, maintainability, dead code, duplication,
+misplaced files, inappropriate abstractions, and measured or credible
+performance risks.
 
-Review executable selection, PATH trust, argument separation, environment,
-working directory, inherited handles, process-tree cancellation, concurrent
-requests, lock poisoning, thread lifecycle, bounded channels/logs, event
-ordering, stale run IDs, timestamps, parser complexity, and child cleanup.
+### Wave A — repository boundary
 
-### Wave D — serialized domain and IPC contracts
+Review manifests, lockfiles, package scripts, Oxlint/TypeScript/Vite
+configuration, Tauri configuration/capabilities, build scripts, Actions,
+repository instructions, docs, generated-file boundaries, dependency features,
+permissions, CSP, credentials, caches, artifacts, and branch triggers.
 
-Files: Rust request/response/event types, TypeScript domain types, and service
-wrappers.
+### Wave B — Rust filesystem and persistence boundary
 
-Review schema versioning, enum exhaustiveness, integer/float ranges, nullability,
-unknown-data validation, naming parity, error codes, backward compatibility,
-and contract tests. Consider generated bindings only after evaluating build
-complexity and trust implications.
+Review project open/read/write/create/rename/delete/search, recovery,
+persistence, PDF reading, and tests. Trace every raw path to its canonicalized
+approved object; review file type, extension, size/count/depth limits, Unicode,
+atomicity, durability, cleanup, rollback, and redaction.
 
-### Wave E — React session and persistence orchestration
+### Wave C — Rust process, parser, and event boundary
 
-Files: app/session hooks, build hook/reducer, preferences, pages, and command
-coordination.
+Review build control, diagnostics, SyncTeX, readiness, watchers, and tests.
+Check executable selection, PATH/environment trust, arguments, working
+directory, cancellation/process trees, concurrency, channels/log bounds, event
+ordering, stale IDs, parser complexity, thread lifetime, and child cleanup.
 
-Review explicit state machines, async request generations/cancellation, stale
-closures, timer/event cleanup, duplicate operations, focus ownership, save/build
-races, external changes, restoration, error retention, and render cost. Replace
-boolean clusters only where a discriminated model materially prevents invalid
-states.
+### Wave D — domain and IPC contracts
 
-### Wave F — editor, search, tree, and project UI
+Review Rust request/response/event types, TypeScript domain types, validation,
+and service wrappers. Check schema/versioning, range/nullability/unknown data,
+naming parity, error codes, compatibility, and contract tests.
 
-Review CodeMirror lifecycle/state caches, IME, large content, file references,
-hover async work, search/replace preview and undo, keyboard routes, path display,
-clipboard errors, dialogs, destructive operations, semantic HTML, labels, focus,
-and truthful disabled states.
+### Wave E — React orchestration
 
-### Wave G — PDF renderer and synchronization UI
+Review application/session hooks, reducers, preferences, pages, and command
+coordination. Check state models, request generations, cancellation, stale
+closures, cleanup, duplicate operations, focus, save/build races, restoration,
+error retention, and render cost.
 
-Review worker lifecycle, document/page/task disposal, cancellation, memory and
-canvas bounds, huge page/document behavior, text-layer safety, search
-complexity, observers, refresh races, last-good retention, focus/selection,
-scroll restoration, SyncTeX coordinates, keyboard behavior, and announcements.
+### Wave F — editor, search, project tree, and UI
 
-### Wave H — styles, components, docs, and fixtures
+Review CodeMirror lifecycle, IME, large documents, caches, search/replace
+preview and undo, file references, dialogs, clipboard errors, destructive
+operations, semantic HTML, keyboard routes, labels, focus, and truthful states.
+
+### Wave G — PDF and synchronization UI
+
+Review worker/document/page/task disposal, cancellation, memory/canvas bounds,
+large PDFs, text-layer safety, search complexity, observers, refresh races,
+last-good retention, scroll/selection restoration, SyncTeX coordinates,
+keyboard behavior, and announcements.
+
+### Wave H — styles, components, fixtures, and documentation
 
 Review semantic tokens, contrast, forced colors, reduced motion, global CSS,
-component modifications versus upstream shadcn contracts, dead assets, truthful
-documentation, fixture licensing/provenance, generated artifacts, and whether
-tests actually enforce documented outcomes.
+component contracts, dead assets, fixture provenance/licensing, generated
+artifacts, and whether documentation and tests describe actual behavior.
 
-Exit gate for each wave:
+Exit gate for each wave: every file is marked reviewed; critical/high findings
+are fixed or explicitly accepted with compensating controls; behavior fixes have
+deterministic regression tests where feasible; narrow and full checks pass; and
+the diff contains no unrelated formatting or generated output.
 
-- every assigned file is marked reviewed;
-- all critical/high findings in scope are fixed or explicitly accepted by the
-  user with compensating controls;
-- behavior changes have regression tests;
-- narrow and full checks pass;
-- the PR contains no unrelated formatting or generated output.
+## Phase 5 — performance and removal pass
 
-## Phase 5 — performance review
+Do not accept code merely because it is cleanly formatted. Use the baseline to
+measure and correct bottlenecks in traversal, hashing, search, persistence,
+log parsing, lock contention, process supervision, IPC copies, React renders,
+CodeMirror reconfiguration, PDF rendering/text extraction, chunk loading,
+memory, workers, descriptors, timers, observers, and retained history.
 
-Do not infer performance from code appearance. Establish traces/benchmarks and
-optimize measured bottlenecks:
+Run a dedicated removal pass after usage tracing and tests. Remove unused
+exports, files, dependencies, permissions, assets, configuration, obsolete
+fallbacks, duplicated utilities, stale comments, and dead branches. A candidate
+is deleted only with search/call-graph evidence and relevant test/build proof;
+it is not kept because its intent is uncertain.
 
-- Rust: project traversal, hashing/revisions, search/replace allocations,
-  persistence serialization, log parsing, lock duration/contention, process
-  supervision, event throughput, and PDF IPC copies;
-- React: render counts, large tree/search lists, reducer/event batching, session
-  object churn, CodeMirror reconfiguration, PDF page rendering, text extraction,
-  search scans, and lazy chunk boundaries;
-- resource limits: memory under large PDFs/logs/projects, worker/task cleanup,
-  file descriptors, threads, timers, observers, retained build history, editor
-  state cache, and recovery/replace-history retention;
-- build/release: frontend chunks, PDF worker, Rust binary size, compile times,
-  LTO settings, and startup cost.
-
-Every optimization PR must include before/after data on the same machine,
-fixture, build mode, and run protocol, plus a correctness regression guard.
+Every optimization records before/after data using the same machine, fixture,
+build mode, and protocol, plus a correctness regression guard.
 
 ## Phase 6 — consolidation and final review
 
-- Re-run every automated gate and platform matrix from a clean checkout.
-- Re-audit dependencies and workflows after all changes.
-- Confirm every file-ledger row and finding has a status and evidence.
-- Remove expired exceptions and ensure remaining exceptions name owners/dates.
+- Re-run all automated gates and the platform matrix from a clean checkout.
+- Re-audit dependencies, workflows, permissions, CSP, and generated outputs.
+- Confirm every inventory row and finding has a decision and evidence.
+- Remove expired exceptions and update architecture, security, privacy,
+  limitations, support, and release documentation.
 - Perform keyboard, screen-reader, IME, high-contrast, reduced-motion,
-  permission-failure, disk-failure, process-kill, and recovery smoke tests.
-- Update architecture, support, privacy, limitations, security, and release docs.
-- Produce `docs/reviews/final-report.md` with changes, residual risks, benchmark
-  results, uncompleted work, and exact release recommendation.
+  permission-failure, disk-failure, process-kill, large-project, and recovery
+  smoke tests.
+- Produce `docs/reviews/final-report.md` with standard decisions, findings,
+  fixes, removed code/dependencies, residual risks, benchmark results,
+  uncompleted work, and release recommendation.
 
-The review is complete only when the final report is approved; a clean lint run
-alone is not completion.
+The review is complete only when the final report is approved. A clean lint run
+is evidence, not completion.
 
-## Finding severity and handling
+## Finding severity
 
-| Severity | Definition | Required handling |
-| --- | --- | --- |
-| Critical | Credible source loss, arbitrary command execution, project-root escape, credential/release compromise | Stop the wave; isolate and fix before other work or release. |
-| High | Recoverable data corruption, broad permission bypass, last-good PDF loss, unsafe race with realistic trigger | Fix in current wave before merge. |
-| Medium | Incorrect state/error handling, significant accessibility failure, unbounded resource use, misleading UI | Fix in wave or open a scheduled issue with owner and gate. |
-| Low | Local maintainability/style issue with limited behavior risk | Fix only when low churn; otherwise record for a cleanup PR. |
+| Severity | Definition                                                                                                                                    | Required handling                                            |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Critical | Credible source loss, arbitrary command execution, project-root escape, credential or release compromise                                      | Stop the wave; isolate and fix before other work or release. |
+| High     | Recoverable data corruption, broad permission bypass, last-good PDF loss, realistic unsafe race                                               | Fix in the current wave before merge.                        |
+| Medium   | Incorrect state/error handling, meaningful accessibility failure, unbounded resource use, misleading UI, significant structure/dead-code risk | Fix in wave or schedule with owner and gate.                 |
+| Low      | Limited maintainability, style, documentation, or placement defect                                                                            | Fix when low churn; otherwise record a dedicated cleanup.    |
 
 ## Required PR evidence
 
-Every review PR must state:
+Every review PR states the files reviewed and finding IDs; relevant standard
+sections and rule decisions; failure scenario and fix rationale; tests and
+commands run; security, performance, compatibility, accessibility, and
+user-context impact; dependency/permission/schema changes; measurements where
+applicable; exceptions; residual risks; and confirmation that no generated or
+unrelated user changes are included.
 
-- finding IDs and files reviewed;
-- threat/failure scenario and why the fix is correct;
-- external rules adopted or rejected;
-- tests added and commands run;
-- security, performance, compatibility, accessibility, and user-context impact;
-- dependency/permission/schema changes;
-- before/after measurements for performance work;
-- residual risks, exceptions, and follow-up issues;
-- confirmation that generated output and unrelated user changes are absent.
+## Operating workflow
 
-## AGENTS.md workflow to enforce
-
-The repository-level `AGENTS.md` should require the following operating method
-for every substantial implementation or review wave:
-
-1. Read mandatory docs and inspect `git status`, current branch, remote, recent
-   history, and overlapping user changes before editing.
-2. Never perform review mutations directly on the protected default branch.
-   If the worktree is clean, create a descriptive branch such as
-   `review/rust-filesystem-boundary` or `feature/workspace-persistence`. If it is
-   dirty, preserve the user's work and ask before switching or branching when
-   ownership is ambiguous.
-3. Record scope, invariants, risks, and verification in a plan. Update the file
-   ledger for review work.
-4. Make cohesive changes; do not mix unrelated cleanup, dependency updates, or
-   formatting. Use the smallest safe dependency and permission scope.
-5. Run narrow checks while working, then the full applicable repository gates.
-6. Inspect the final diff, status, ignored/generated files, dependency/permission
-   changes, and accidental secret/path/content exposure.
-7. Commit intentionally with a message describing one logical change. Do not
-   amend, rebase, force-push, or rewrite user commits without explicit approval.
-8. Push and open a draft PR only when the user requested publishing or invoked
-   this workflow for delivery. The PR must use the evidence template above.
-9. Monitor CI, address failures from the branch, keep the PR draft until all
-   required checks and review findings pass, then request review. Never merge,
-   close, or delete the branch unless the user explicitly authorizes it.
-10. Update roadmap/audit/review ledgers in the same PR when status changes.
-
-This workflow is also summarized directly in the repository `AGENTS.md` so
-future agents encounter it before modifying source.
+Follow `AGENTS.md`: inspect repository state before editing; read mandatory
+quality and UI requirements; preserve unrelated work; use a cohesive branch for
+substantial review work; run narrow then full applicable checks; inspect the
+final diff; and publish only with explicit authorization. Update the ledger,
+findings, rule decisions, and roadmap in the same PR when their status changes.

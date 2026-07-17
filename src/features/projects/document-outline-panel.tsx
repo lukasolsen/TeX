@@ -1,4 +1,5 @@
 import { FileText, ListTree } from "lucide-react"
+import { useMemo, type ReactElement } from "react"
 
 import {
   Empty,
@@ -19,11 +20,17 @@ export function DocumentOutlinePanel({
   activeLine: number | null
   documentState: AsyncDocumentState
   onNavigate: (line: number) => void
-}) {
-  if (
-    documentState.status !== "ready" ||
-    !documentState.document.path.toLowerCase().endsWith(".tex")
-  ) {
+}): ReactElement {
+  const outlineContent =
+    documentState.status === "ready" &&
+    documentState.document.path.toLowerCase().endsWith(".tex")
+      ? documentState.content
+      : null
+  const items = useMemo(
+    () => (outlineContent === null ? [] : documentOutline(outlineContent)),
+    [outlineContent]
+  )
+  if (documentState.status !== "ready" || outlineContent === null) {
     return (
       <Empty className="h-full p-5">
         <EmptyHeader>
@@ -39,7 +46,6 @@ export function DocumentOutlinePanel({
     )
   }
 
-  const items = documentOutline(documentState.content)
   const activeIndex =
     activeLine === null
       ? -1

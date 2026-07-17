@@ -8,11 +8,12 @@ use std::{
 use atomic_write_file::AtomicWriteFile;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
 
 use crate::source_read::{
     resolve_source_path, revision_for_content, SourceDocument, SourceRevision, MAX_SOURCE_BYTES,
 };
+use crate::{bounded_io, project_access::ProjectAccess};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,7 +23,7 @@ pub struct SourceEditError {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecoveryDraft {
     pub project_path: String,
     pub relative_path: String,
@@ -39,16 +40,17 @@ pub fn save_project_source(
     relative_path: String,
     content: String,
     expected_revision: SourceRevision,
-    overwrite_external: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<SourceDocument, SourceEditError> {
     if content.len() as u64 > MAX_SOURCE_BYTES {
         return Err(too_large());
     }
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let canonical_project_path = root.to_string_lossy().into_owned();
     let relative = Path::new(&relative_path);
     let path = resolve_source_path(&root, relative).map_err(|_| unavailable())?;
-    let current = fs::read(&path).map_err(|_| unavailable())?;
-    if !overwrite_external && revision_for_content(&current) != expected_revision {
+    let current = bounded_io::read(&path, MAX_SOURCE_BYTES).map_err(|_| unavailable())?;
+    if revision_for_content(&current) != expected_revision {
         return Err(SourceEditError {
             code: "external-change",
             message:
@@ -57,7 +59,7 @@ pub fn save_project_source(
     }
 
     atomic_write(&path, content.as_bytes())?;
-    let _ = remove_recovery(&app, &project_path, &relative_path);
+    let _ = remove_recovery(&app, &canonical_project_path, &relative_path);
     Ok(SourceDocument {
         path: relative_path,
         byte_length: content.len() as u64,
@@ -74,14 +76,15 @@ pub fn save_recovery_draft(
     relative_path: String,
     content: String,
     base_revision: SourceRevision,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), SourceEditError> {
     if content.len() as u64 > MAX_SOURCE_BYTES {
         return Err(too_large());
     }
-    let root = canonical_project(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     resolve_source_path(&root, Path::new(&relative_path)).map_err(|_| unavailable())?;
     let draft = RecoveryDraft {
-        project_path,
+        project_path: root.to_string_lossy().into_owned(),
         relative_path,
         content,
         base_revision,
@@ -97,15 +100,19 @@ pub fn load_recovery_draft(
     app: AppHandle,
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Option<RecoveryDraft>, SourceEditError> {
-    let path = recovery_path(&app, &project_path, &relative_path)?;
-    let encoded = match fs::read(path) {
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    resolve_source_path(&root, Path::new(&relative_path)).map_err(|_| unavailable())?;
+    let canonical_project_path = root.to_string_lossy().into_owned();
+    let path = recovery_path(&app, &canonical_project_path, &relative_path)?;
+    let encoded = match bounded_io::read(&path, MAX_SOURCE_BYTES.saturating_add(16 * 1024)) {
         Ok(encoded) => encoded,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(unavailable()),
     };
     let draft: RecoveryDraft = serde_json::from_slice(&encoded).map_err(|_| unavailable())?;
-    if draft.project_path == project_path && draft.relative_path == relative_path {
+    if draft.project_path == canonical_project_path && draft.relative_path == relative_path {
         Ok(Some(draft))
     } else {
         Err(unavailable())
@@ -117,8 +124,11 @@ pub fn discard_recovery_draft(
     app: AppHandle,
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), SourceEditError> {
-    remove_recovery(&app, &project_path, &relative_path)
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    resolve_source_path(&root, Path::new(&relative_path)).map_err(|_| unavailable())?;
+    remove_recovery(&app, &root.to_string_lossy(), &relative_path)
 }
 
 pub(crate) fn atomic_write(path: &Path, content: &[u8]) -> Result<(), SourceEditError> {
@@ -128,17 +138,6 @@ pub(crate) fn atomic_write(path: &Path, content: &[u8]) -> Result<(), SourceEdit
     let mut file = AtomicWriteFile::open(path).map_err(|_| unavailable())?;
     file.write_all(content).map_err(|_| unavailable())?;
     file.commit().map_err(|_| unavailable())
-}
-
-fn canonical_project(project_path: &str) -> Result<PathBuf, SourceEditError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn recovery_path(

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import type { WatchStatus } from "@/domain/build"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import {
+  acknowledgeProjectWatchBuild,
   getProjectWatchStatus,
   listenForWatchEvents,
   startProjectWatch,
@@ -14,6 +16,13 @@ export type ProjectWatchState = {
   message: string | null
 }
 
+export type ProjectWatchController = Readonly<{
+  state: ProjectWatchState
+  start: () => Promise<void>
+  stop: () => Promise<void>
+  active: boolean
+}>
+
 export function useProjectWatch({
   build,
   buildRunning,
@@ -23,20 +32,34 @@ export function useProjectWatch({
   build: () => Promise<void>
   buildRunning: boolean
   onFilesChanged: () => void
-  projectPath: string
-}) {
+  projectPath: CanonicalProjectPath
+}): ProjectWatchController {
   const [state, setState] = useState<ProjectWatchState>({
     status: "off",
     message: null,
   })
   const [buildQueued, setBuildQueued] = useState(false)
+  const lifecycleRevision = useRef(0)
+  const activeProject = useRef(projectPath)
+  activeProject.current = projectPath
+
+  useEffect(() => {
+    lifecycleRevision.current += 1
+    return () => {
+      lifecycleRevision.current += 1
+    }
+  }, [projectPath])
 
   useEffect(() => {
     let active = true
     let unlisten: (() => void) | null = null
+    let statusEventRevision = 0
     void getProjectWatchStatus(projectPath)
       .then((status) => {
-        if (active) setState({ status, message: null })
+        if (active && statusEventRevision === 0) {
+          if (status === "buildQueued") setBuildQueued(true)
+          setState({ status, message: null })
+        }
       })
       .catch((error: unknown) => {
         if (!active) return
@@ -47,16 +70,26 @@ export function useProjectWatch({
       })
     void listenForWatchEvents((event) => {
       if (!active || event.projectPath !== projectPath) return
+      statusEventRevision += 1
       if (event.kind === "changed") {
         onFilesChanged()
         return
       }
       if (event.status === "buildQueued") setBuildQueued(true)
       setState({ status: event.status, message: event.message })
-    }).then((cleanup) => {
-      if (active) unlisten = cleanup
-      else cleanup()
     })
+      .then((cleanup) => {
+        if (active) unlisten = cleanup
+        else cleanup()
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setState({
+            status: "error",
+            message: projectErrorFromUnknown(error).message,
+          })
+        }
+      })
     return () => {
       active = false
       unlisten?.()
@@ -67,35 +100,60 @@ export function useProjectWatch({
 
   useEffect(() => {
     if (!buildQueued || buildRunning || !watchActive) return
+    let active = true
     const frame = window.requestAnimationFrame(() => {
       setBuildQueued(false)
       setState({ status: "watching", message: null })
-      void build()
+      void acknowledgeProjectWatchBuild(projectPath)
+        .then(() => (active ? build() : undefined))
+        .catch((error: unknown) => {
+          if (active) {
+            setState({
+              status: "error",
+              message: projectErrorFromUnknown(error).message,
+            })
+          }
+        })
     })
-    return () => window.cancelAnimationFrame(frame)
-  }, [build, buildQueued, buildRunning, watchActive])
+    return () => {
+      active = false
+      window.cancelAnimationFrame(frame)
+    }
+  }, [build, buildQueued, buildRunning, projectPath, watchActive])
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (): Promise<void> => {
+    const revision = ++lifecycleRevision.current
     setState({ status: "starting", message: null })
     try {
       await startProjectWatch(projectPath)
     } catch (error: unknown) {
-      setState({
-        status: "error",
-        message: projectErrorFromUnknown(error).message,
-      })
+      if (
+        revision === lifecycleRevision.current &&
+        activeProject.current === projectPath
+      ) {
+        setState({
+          status: "error",
+          message: projectErrorFromUnknown(error).message,
+        })
+      }
     }
   }, [projectPath])
 
-  const stop = useCallback(async () => {
+  const stop = useCallback(async (): Promise<void> => {
+    const revision = ++lifecycleRevision.current
     setState({ status: "stopping", message: null })
     try {
       await stopProjectWatch(projectPath)
     } catch (error: unknown) {
-      setState({
-        status: "error",
-        message: projectErrorFromUnknown(error).message,
-      })
+      if (
+        revision === lifecycleRevision.current &&
+        activeProject.current === projectPath
+      ) {
+        setState({
+          status: "error",
+          message: projectErrorFromUnknown(error).message,
+        })
+      }
     }
   }, [projectPath])
 

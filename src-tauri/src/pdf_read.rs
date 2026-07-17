@@ -1,11 +1,13 @@
 use std::{
     fs, io,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     time::UNIX_EPOCH,
 };
 
 use serde::Serialize;
-use tauri::ipc::Response;
+use tauri::{ipc::Response, State};
+
+use crate::{bounded_io, project_access::ProjectAccess};
 
 const MAX_PDF_BYTES: u64 = 256 * 1024 * 1024;
 
@@ -21,8 +23,10 @@ pub struct PdfReadError {
 pub fn read_project_pdf(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<Response, PdfReadError> {
-    let bytes = read_pdf(Path::new(&project_path), Path::new(&relative_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let bytes = read_pdf(&root, Path::new(&relative_path))?;
     Ok(Response::new(bytes))
 }
 
@@ -31,8 +35,10 @@ pub fn read_project_pdf(
 pub fn project_pdf_revision(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<String, PdfReadError> {
-    let path = resolve_pdf(Path::new(&project_path), Path::new(&relative_path))?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let path = resolve_pdf(&root, Path::new(&relative_path))?;
     let metadata = fs::metadata(path).map_err(map_io_error)?;
     let modified = metadata
         .modified()
@@ -44,11 +50,24 @@ pub fn project_pdf_revision(
 
 fn read_pdf(project_path: &Path, relative_path: &Path) -> Result<Vec<u8>, PdfReadError> {
     let path = resolve_pdf(project_path, relative_path)?;
-    fs::read(path).map_err(map_io_error)
+    bounded_io::read(&path, MAX_PDF_BYTES).map_err(|error| {
+        if error.kind() == io::ErrorKind::InvalidData {
+            too_large()
+        } else {
+            map_io_error(error)
+        }
+    })
 }
 
-fn resolve_pdf(project_path: &Path, relative_path: &Path) -> Result<PathBuf, PdfReadError> {
-    if relative_path.is_absolute()
+pub(crate) fn resolve_pdf(
+    project_path: &Path,
+    relative_path: &Path,
+) -> Result<PathBuf, PdfReadError> {
+    if relative_path.as_os_str().is_empty()
+        || relative_path.is_absolute()
+        || !relative_path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
         || !relative_path
             .extension()
             .and_then(|value| value.to_str())
@@ -59,6 +78,20 @@ fn resolve_pdf(project_path: &Path, relative_path: &Path) -> Result<PathBuf, Pdf
     let root = project_path.canonicalize().map_err(map_io_error)?;
     if !root.is_dir() {
         return Err(unavailable());
+    }
+    let mut candidate = root.clone();
+    for component in relative_path.components() {
+        let Component::Normal(component) = component else {
+            return Err(unsupported());
+        };
+        candidate.push(component);
+        if fs::symlink_metadata(&candidate)
+            .map_err(map_io_error)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(unsupported());
+        }
     }
     let path = root
         .join(relative_path)
@@ -71,10 +104,7 @@ fn resolve_pdf(project_path: &Path, relative_path: &Path) -> Result<PathBuf, Pdf
         });
     }
     if fs::metadata(&path).map_err(map_io_error)?.len() > MAX_PDF_BYTES {
-        return Err(PdfReadError {
-            code: "pdf-too-large",
-            message: "This PDF is too large to display safely.",
-        });
+        return Err(too_large());
     }
     Ok(path)
 }
@@ -97,6 +127,13 @@ fn unsupported() -> PdfReadError {
     PdfReadError {
         code: "unsupported-pdf",
         message: "Choose a PDF file inside this project.",
+    }
+}
+
+fn too_large() -> PdfReadError {
+    PdfReadError {
+        code: "pdf-too-large",
+        message: "This PDF is too large to display safely.",
     }
 }
 
@@ -165,6 +202,22 @@ mod tests {
         let file = fs::File::create(&path)?;
         file.set_len(super::MAX_PDF_BYTES + 1)?;
         assert!(read_pdf(&root, Path::new("large.pdf")).is_err());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_project_local_symlink_pdfs() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("tex-pdf-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root)?;
+        fs::write(root.join("target.pdf"), b"%PDF-target")?;
+        symlink(root.join("target.pdf"), root.join("alias.pdf"))?;
+
+        assert!(read_pdf(&root, Path::new("alias.pdf")).is_err());
         fs::remove_dir_all(root)?;
         Ok(())
     }

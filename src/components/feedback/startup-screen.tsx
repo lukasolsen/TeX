@@ -1,14 +1,15 @@
 import { LoaderCircle } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { AppBrand } from "@/components/brand/app-brand"
 import { Skeleton } from "@/components/ui/skeleton"
 
 /** Renders the stable startup shell while local workspace state is restored. */
-export function StartupScreen() {
+export function StartupScreen(): ReactElement {
   return (
     <main
       aria-label="Starting TeX"
-      className="relative flex min-h-svh items-center justify-center overflow-hidden bg-home-surface px-6"
+      className="relative flex h-full min-h-0 items-center justify-center overflow-hidden bg-home-surface px-6"
     >
       <div
         aria-hidden="true"

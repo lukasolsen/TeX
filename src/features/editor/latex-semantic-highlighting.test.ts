@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { latexSemanticTokens } from "@/features/editor/latex-semantic-highlighting"
+import { projectRelativePath } from "@/domain/identifiers"
 
 describe("LaTeX semantic highlighting", () => {
   it("distinguishes semantic argument types and project files", () => {
@@ -12,8 +13,11 @@ describe("LaTeX semantic highlighting", () => {
       "\\input{chapters/missing}",
     ].join("\n")
     const tokens = latexSemanticTokens(source, {
-      sourcePath: "main.tex",
-      projectFiles: new Set(["main.tex", "chapters/introduction.tex"]),
+      sourcePath: projectRelativePath("main.tex"),
+      projectFiles: new Set([
+        projectRelativePath("main.tex"),
+        projectRelativePath("chapters/introduction.tex"),
+      ]),
     })
     const classified = tokens.map((token) => ({
       text: source.slice(token.from, token.to),

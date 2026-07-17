@@ -5,6 +5,10 @@ import type {
   RootEvidence,
 } from "@/domain/project"
 import { latexCommands, latexFileReferences } from "@/domain/latex"
+import {
+  projectRelativePath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 
 const readableSourceExtensions = new Set([
   "tex",
@@ -15,40 +19,43 @@ const readableSourceExtensions = new Set([
   "md",
 ])
 
-export type ProjectTreeNode = ProjectEntry & { path: string }
+export type ProjectTreeNode = ProjectEntry &
+  Readonly<{ path: ProjectRelativePath }>
 
 export type TexDependencyKind = "source" | "bibliography" | "asset" | "package"
 
-export type TexDependency = {
+export type TexDependency = Readonly<{
   command: string
   kind: TexDependencyKind
-  path: string
-}
+  path: ProjectRelativePath
+}>
 
 export function projectTreeNodes(
   entry: ProjectEntry,
-  parentPath = ""
+  parentPath: ProjectRelativePath | null = null
 ): ProjectTreeNode[] {
   return entry.children.map((child) => ({
     ...child,
-    path: parentPath === "" ? child.name : `${parentPath}/${child.name}`,
+    path: projectRelativePath(
+      parentPath === null ? child.name : `${parentPath}/${child.name}`
+    ),
   }))
 }
 
 export function isReadableSource(path: string): boolean {
-  const extension = path.split(".").pop()?.toLocaleLowerCase()
+  const extension = path.split(".").pop()?.toLowerCase()
   return extension !== undefined && readableSourceExtensions.has(extension)
 }
 
 export function isPdf(path: string): boolean {
-  return path.toLocaleLowerCase().endsWith(".pdf")
+  return path.toLowerCase().endsWith(".pdf")
 }
 
 export function preferredPdf(
   project: ProjectSummary,
-  persistedPdf: string | null,
-  selectedRoot: string | null
-): string | null {
+  persistedPdf: ProjectRelativePath | null,
+  selectedRoot: ProjectRelativePath | null
+): ProjectRelativePath | null {
   if (
     persistedPdf !== null &&
     isPdf(persistedPdf) &&
@@ -57,14 +64,14 @@ export function preferredPdf(
     return persistedPdf
   }
   if (selectedRoot === null) return null
-  const output = selectedRoot.replace(/\.[^/.]+$/, ".pdf")
+  const output = projectRelativePath(selectedRoot.replace(/\.[^/.]+$/, ".pdf"))
   return treeContainsPath(project.tree, output) ? output : null
 }
 
 /** Extracts direct file references from common LaTeX commands without resolving TeX's full macro language. */
 export function texDependencies(
   source: string,
-  sourcePath: string
+  sourcePath: ProjectRelativePath
 ): TexDependency[] {
   const dependencies: TexDependency[] = []
   const seen = new Set<string>()
@@ -91,7 +98,7 @@ export function texDependencies(
           from: group.from,
           command,
           kind: "package",
-          path,
+          path: projectRelativePath(path),
         })
       }
     }
@@ -117,21 +124,21 @@ function dependencyKind(command: string): TexDependencyKind {
 
 export function preferredRoot(
   project: ProjectSummary,
-  persistedRoot: string | null
-): string | null {
+  persistedRoot: ProjectRelativePath | null
+): ProjectRelativePath | null {
   if (persistedRoot !== null && treeContainsPath(project.tree, persistedRoot)) {
     return persistedRoot
   }
   return project.rootCandidates.length === 1
-    ? project.rootCandidates[0].path
+    ? (project.rootCandidates[0]?.path ?? null)
     : null
 }
 
 export function preferredSourceFile(
   project: ProjectSummary,
-  persistedFile: string | null,
-  selectedRoot: string | null
-): string | null {
+  persistedFile: ProjectRelativePath | null,
+  selectedRoot: ProjectRelativePath | null
+): ProjectRelativePath | null {
   if (persistedFile !== null && treeContainsPath(project.tree, persistedFile)) {
     return persistedFile
   }
@@ -140,7 +147,7 @@ export function preferredSourceFile(
 
 export function treeContainsPath(
   tree: ProjectEntry,
-  targetPath: string
+  targetPath: ProjectRelativePath
 ): boolean {
   const segments = targetPath.split("/").filter(Boolean)
   let current = tree
@@ -154,7 +161,9 @@ export function treeContainsPath(
   return current.kind === "file"
 }
 
-export function rootEvidenceLabel(evidence: RootEvidence[]): string {
+export function rootEvidenceLabel(
+  evidence: ReadonlyArray<RootEvidence>
+): string {
   const labels = evidence.map((item) =>
     item === "documentClass"
       ? "document class"

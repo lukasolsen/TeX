@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import type { ReactElement } from "react"
 import { FileText, Hammer, LockKeyhole, MapPin } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -9,12 +10,18 @@ import {
 } from "@/components/ui/resizable"
 import type {
   EditorViewerState,
+  EditorDocumentChange,
   OpenProjectFeedback,
   PdfViewerState,
   ProjectSession,
   WorkspaceFocus,
   WorkspaceState,
 } from "@/domain/project"
+import {
+  projectRelativePath,
+  type CanonicalProjectPath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
@@ -32,6 +39,7 @@ import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
 import { selectedBuildRun, type BuildDiagnostic } from "@/domain/build"
 import { revealProjectOutput } from "@/services/build-service"
 import { projectErrorFromUnknown } from "@/services/project-service"
+import { runDetached } from "@/lib/promises"
 
 export function ProjectWorkspacePage({
   feedback,
@@ -63,30 +71,43 @@ export function ProjectWorkspacePage({
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
-  onOpenPdf: (path: string) => void
+  onOpenPdf: (path: ProjectRelativePath) => void
   onReturnHome: () => void
   onOpenSettings: (focus: WorkspaceFocus) => void
   onResizeSidebar: (width: number, persist: boolean) => void
-  onCloseFile: (path: string) => void
-  onCloseFiles: (paths: string[]) => void
+  onCloseFile: (path: ProjectRelativePath) => void
+  onCloseFiles: (paths: ReadonlyArray<ProjectRelativePath>) => void
   onCreateProjectEntry: (
-    parentPath: string | null,
+    parentPath: ProjectRelativePath | null,
     name: string,
     directory: boolean
-  ) => Promise<void>
-  onDeleteProjectEntry: (path: string) => Promise<void>
-  onEditDocument: (path: string, content: string) => void
-  onPinFile: (path: string) => void
-  onPreviewFile: (path: string) => void
-  onRenameProjectEntry: (path: string, name: string) => Promise<void>
+  ) => Promise<boolean>
+  onDeleteProjectEntry: (path: ProjectRelativePath) => Promise<void>
+  onEditDocument: (
+    projectPath: CanonicalProjectPath,
+    path: ProjectRelativePath,
+    change: EditorDocumentChange
+  ) => void
+  onPinFile: (path: ProjectRelativePath) => void
+  onPreviewFile: (path: ProjectRelativePath) => void
+  onRenameProjectEntry: (
+    path: ProjectRelativePath,
+    name: string
+  ) => Promise<boolean>
   onResolveExternalChange: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onProjectFilesChanged: () => void
   onSaveDocument: () => Promise<boolean>
   onSetEditorFontSize: (fontSize: number) => void
-  onSelectRoot: (path: string) => void
-  onUpdatePdfViewerState: (path: string, state: PdfViewerState) => void
-  onUpdateEditorViewerState: (path: string, state: EditorViewerState) => void
+  onSelectRoot: (path: ProjectRelativePath) => void
+  onUpdatePdfViewerState: (
+    path: ProjectRelativePath,
+    state: PdfViewerState
+  ) => void
+  onUpdateEditorViewerState: (
+    path: ProjectRelativePath,
+    state: EditorViewerState
+  ) => void
   onUpdateWorkspaceView: (
     update: Partial<
       Pick<
@@ -104,7 +125,7 @@ export function ProjectWorkspacePage({
   restoreFocus: WorkspaceFocus
   restoreFocusToken: number
   session: ProjectSession
-}) {
+}): ReactElement {
   const selectedFile = session.workspace.selectedFile
   const sidebarWidth = useRef(session.workspace.sidebarWidth)
   const pdfPaneWidth = useRef(session.workspace.pdfPaneWidth)
@@ -121,12 +142,12 @@ export function ProjectWorkspacePage({
     string | null
   >(null)
   const [sourceLocation, setSourceLocation] = useState<{
-    path: string
+    path: ProjectRelativePath
     line: number
     column: number
   } | null>(null)
   const [target, setTarget] = useState<
-    (EditorTarget & { path: string }) | null
+    (EditorTarget & { path: ProjectRelativePath }) | null
   >(null)
   const build = useProjectBuild({
     beforeBuild: onSaveDocument,
@@ -156,6 +177,7 @@ export function ProjectWorkspacePage({
     projectPath: session.project.path,
   })
   useProjectTreeWatch({
+    onError: setBuildOperationMessage,
     onFilesChanged: onProjectFilesChanged,
     projectPath: session.project.path,
   })
@@ -252,7 +274,10 @@ export function ProjectWorkspacePage({
         : session.workspace.selectedRoot
     if (rootFile === null) return
     try {
-      await revealProjectOutput(session.project.path, rootFile)
+      await revealProjectOutput(
+        session.project.path,
+        projectRelativePath(rootFile)
+      )
       setBuildOperationMessage("Opened the built PDF location")
     } catch (error: unknown) {
       setBuildOperationMessage(projectErrorFromUnknown(error).message)
@@ -319,7 +344,7 @@ export function ProjectWorkspacePage({
 
   return (
     <main
-      className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
+      className="grid h-full min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
       onFocusCapture={(event) => {
         const focus = event.target.closest<HTMLElement>(
           "[data-workspace-focus]"
@@ -333,7 +358,7 @@ export function ProjectWorkspacePage({
         buildEnabled={buildEnabled}
         buildStatus={latestBuild?.status ?? null}
         feedback={feedback}
-        onBuild={() => void build.build()}
+        onBuild={() => runDetached(build.build())}
         onOpenProject={onOpenProject}
         onOpenCommands={() => setCommandPaletteOpen(true)}
         onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
@@ -341,8 +366,8 @@ export function ProjectWorkspacePage({
         onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onReturnHome={onReturnHome}
-        onSave={onSaveDocument}
-        onStop={() => void build.stop()}
+        onSave={() => runDetached(onSaveDocument())}
+        onStop={() => runDetached(build.stop())}
         pdfOpen={pdfOpen}
         session={session}
       />
@@ -462,7 +487,9 @@ export function ProjectWorkspacePage({
                 ) : null}
                 <SourceViewer
                   fontSize={session.workspace.editorFontSize}
-                  onChange={onEditDocument}
+                  onChange={(path, change) =>
+                    onEditDocument(session.project.path, path, change)
+                  }
                   onCursorChange={(path, line, column) =>
                     setSourceLocation({ path, line, column })
                   }
@@ -475,7 +502,7 @@ export function ProjectWorkspacePage({
                   onOpenReference={onPinFile}
                   onResolveConflict={onResolveExternalChange}
                   onResolveRecovery={onResolveRecovery}
-                  onSave={onSaveDocument}
+                  onSave={() => runDetached(onSaveDocument())}
                   projectPath={session.project.path}
                   projectTree={session.project.tree}
                   retainedPaths={session.workspace.pinnedFiles}
@@ -565,21 +592,22 @@ export function ProjectWorkspacePage({
                 dispatch={build.dispatch}
                 engine={build.engine}
                 logContextSequence={logContextSequence}
-                onBuild={() => void build.build()}
+                onBuild={() => runDetached(build.build())}
                 onClean={() => setCleanOpen(true)}
                 onClose={() => onUpdateWorkspaceView({ buildPanelOpen: false })}
                 onNavigate={(path, line) => {
                   setTarget({ path, line, column: 1, token: Date.now() })
                   onPinFile(path)
                 }}
-                onRevealOutput={() => void revealOutput()}
+                onRevealOutput={() => runDetached(revealOutput())}
                 onSelectDiagnostic={(index) => selectDiagnostic(index, false)}
-                onStop={() => void build.stop()}
-                onStartWatch={() => void watch.start()}
-                onStopWatch={() => void watch.stop()}
+                onStop={() => runDetached(build.stop())}
+                onStartWatch={() => runDetached(watch.start())}
+                onStopWatch={() => runDetached(watch.stop())}
                 onSaveConfiguration={async (configuration) => {
                   const saved = await build.saveConfiguration(configuration)
-                  if (saved.rootFile !== null) onSelectRoot(saved.rootFile)
+                  if (saved.rootFile !== null)
+                    onSelectRoot(projectRelativePath(saved.rootFile))
                 }}
                 profiles={build.profiles}
                 setEngine={build.setEngine}
@@ -630,7 +658,9 @@ export function ProjectWorkspacePage({
         </Button>
         <Button
           className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
-          onClick={() => void (watch.active ? watch.stop() : watch.start())}
+          onClick={() =>
+            runDetached(watch.active ? watch.stop() : watch.start())
+          }
           size="xs"
           variant="ghost"
         >
@@ -661,13 +691,13 @@ export function ProjectWorkspacePage({
       <WorkspaceCommandPalette
         buildEnabled={buildEnabled}
         diagnosticsAvailable={diagnostics.length > 0}
-        onBuild={() => void build.build()}
+        onBuild={() => runDetached(build.build())}
         onBuildAndView={() => {
           onUpdateWorkspaceView({ pdfPaneOpen: true })
-          void build.build()
+          runDetached(build.build())
         }}
         onClean={() => setCleanOpen(true)}
-        onCopyDiagnostic={() => void copyDiagnostic()}
+        onCopyDiagnostic={() => runDetached(copyDiagnostic())}
         onFirstDiagnostic={() => selectDiagnostic(0, true)}
         onNextDiagnostic={() => moveDiagnostic(1)}
         onOpenChange={setCommandPaletteOpen}
@@ -676,12 +706,14 @@ export function ProjectWorkspacePage({
         onOpenProject={onOpenProject}
         onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
         onPreviousDiagnostic={() => moveDiagnostic(-1)}
-        onRevealOutput={() => void revealOutput()}
+        onRevealOutput={() => runDetached(revealOutput())}
         onShowLogContext={showLogContext}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
-        onSave={onSaveDocument}
+        onSave={() => runDetached(onSaveDocument())}
         onSearch={() => setSearchOpen(true)}
-        onToggleWatch={() => void (watch.active ? watch.stop() : watch.start())}
+        onToggleWatch={() =>
+          runDetached(watch.active ? watch.stop() : watch.start())
+        }
         onZoomIn={() =>
           onSetEditorFontSize(session.workspace.editorFontSize + 1)
         }

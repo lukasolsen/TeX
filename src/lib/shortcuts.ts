@@ -1,7 +1,17 @@
 export type ShortcutPlatform = "macos" | "other"
 
 export type ShortcutKey =
-  "primary" | "shift" | "alt" | "enter" | "backspace" | string
+  | "primary"
+  | "shift"
+  | "alt"
+  | "enter"
+  | "backspace"
+  | "b"
+  | "f"
+  | "n"
+  | "p"
+  | "s"
+  | "/"
 
 export function shortcutPlatform(
   platform = typeof navigator === "undefined" ? "" : navigator.platform,
@@ -13,7 +23,7 @@ export function shortcutPlatform(
 }
 
 export function shortcutLabel(
-  keys: ShortcutKey[],
+  keys: readonly ShortcutKey[],
   platform = shortcutPlatform()
 ): string {
   const labels = keys.map((key) => {

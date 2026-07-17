@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import type { WorkspaceState } from "@/domain/project"
+import { canonicalProjectPath } from "@/domain/identifiers"
 import { restoreWorkspaceGeometry } from "@/features/projects/workspace-restoration"
 
 const workspace: WorkspaceState = {
-  projectPath: "/project",
+  projectPath: canonicalProjectPath("/project"),
   pinnedFiles: [],
   selectedRoot: null,
   selectedFile: null,

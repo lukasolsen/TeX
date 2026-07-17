@@ -1,6 +1,15 @@
-use std::{path::Path, process::Command};
+use std::{path::Path, process::Command, time::Duration};
 
 use serde::Serialize;
+use tauri::State;
+
+use crate::{
+    build_system::resolve_executable, pdf_read::resolve_pdf, process_support::run_bounded,
+    project_access::ProjectAccess, source_read::resolve_source_path,
+};
+
+const SYNCTEX_TIMEOUT: Duration = Duration::from_secs(5);
+const MAX_SYNCTEX_OUTPUT_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,26 +41,40 @@ pub fn synctex_forward_search(
     source_path: String,
     line: u32,
     column: u32,
+    access: State<'_, ProjectAccess>,
 ) -> Result<ForwardSearchResult, SyncTexError> {
-    let root = project_root(&project_path)?;
-    let pdf = project_file(&root, &pdf_path, "pdf")?;
-    let source = project_file(&root, &source_path, "tex")?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let pdf = resolve_pdf(&root, Path::new(&pdf_path)).map_err(|_| stale())?;
+    let source = resolve_source_path(&root, Path::new(&source_path)).map_err(|_| stale())?;
     let input = format!("{}:{}:{}", line.max(1), column.max(1), source.display());
-    let output = Command::new("synctex")
-        .current_dir(&root)
-        .args(["view", "-i", &input, "-o"])
-        .arg(pdf)
-        .output()
-        .map_err(|_| unavailable())?;
+    let executable = resolve_executable("synctex").ok_or_else(unavailable)?;
+    let output = run_bounded(
+        Command::new(executable)
+            .current_dir(&root)
+            .args(["view", "-i", &input, "-o"])
+            .arg(pdf),
+        SYNCTEX_TIMEOUT,
+        MAX_SYNCTEX_OUTPUT_BYTES,
+    )
+    .map_err(|_| unavailable())?;
     if !output.status.success() {
         return Err(stale());
     }
     let text = String::from_utf8_lossy(&output.stdout);
-    Ok(ForwardSearchResult {
+    let result = ForwardSearchResult {
         page: parsed::<u32>(&text, "Page:")?,
         x: parsed::<f64>(&text, "x:")?,
         y: parsed::<f64>(&text, "y:")?,
-    })
+    };
+    if result.page == 0
+        || !result.x.is_finite()
+        || !result.y.is_finite()
+        || result.x < 0.0
+        || result.y < 0.0
+    {
+        return Err(stale());
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -61,25 +84,33 @@ pub fn synctex_inverse_search(
     page: u32,
     x: f64,
     y: f64,
+    access: State<'_, ProjectAccess>,
 ) -> Result<InverseSearchResult, SyncTexError> {
     if !x.is_finite() || !y.is_finite() || x < 0.0 || y < 0.0 {
         return Err(stale());
     }
-    let root = project_root(&project_path)?;
-    let pdf = project_file(&root, &pdf_path, "pdf")?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    let pdf = resolve_pdf(&root, Path::new(&pdf_path)).map_err(|_| stale())?;
     let output_spec = format!("{}:{x}:{y}:{}", page.max(1), pdf.display());
-    let output = Command::new("synctex")
-        .current_dir(&root)
-        .args(["edit", "-o", &output_spec])
-        .output()
-        .map_err(|_| unavailable())?;
+    let executable = resolve_executable("synctex").ok_or_else(unavailable)?;
+    let output = run_bounded(
+        Command::new(executable)
+            .current_dir(&root)
+            .args(["edit", "-o", &output_spec]),
+        SYNCTEX_TIMEOUT,
+        MAX_SYNCTEX_OUTPUT_BYTES,
+    )
+    .map_err(|_| unavailable())?;
     if !output.status.success() {
         return Err(stale());
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let input = value(&text, "Input:").ok_or_else(stale)?;
     let source = Path::new(input).canonicalize().map_err(|_| stale())?;
-    if !source.starts_with(&root) || !source.is_file() {
+    if !source.starts_with(&root)
+        || !source.is_file()
+        || source.extension().and_then(|value| value.to_str()) != Some("tex")
+    {
         return Err(stale());
     }
     let path = source.strip_prefix(&root).map_err(|_| stale())?;
@@ -90,37 +121,6 @@ pub fn synctex_inverse_search(
             .and_then(|value| value.parse::<i32>().ok())
             .map_or(1, |value| if value >= 0 { value as u32 + 1 } else { 1 }),
     })
-}
-
-fn project_root(path: &str) -> Result<std::path::PathBuf, SyncTexError> {
-    let root = Path::new(path).canonicalize().map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
-}
-
-fn project_file(
-    root: &Path,
-    relative: &str,
-    extension: &str,
-) -> Result<std::path::PathBuf, SyncTexError> {
-    let relative = Path::new(relative);
-    if relative.is_absolute()
-        || !relative
-            .extension()
-            .and_then(|value| value.to_str())
-            .is_some_and(|value| value.eq_ignore_ascii_case(extension))
-    {
-        return Err(stale());
-    }
-    let file = root.join(relative).canonicalize().map_err(|_| stale())?;
-    if file.starts_with(root) && file.is_file() {
-        Ok(file)
-    } else {
-        Err(stale())
-    }
 }
 
 fn value<'a>(output: &'a str, prefix: &str) -> Option<&'a str> {

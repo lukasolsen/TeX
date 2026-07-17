@@ -1,4 +1,6 @@
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useState } from "react"
+import type { ReactElement } from "react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import type { WorkspaceFocus } from "@/domain/project"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
@@ -6,6 +8,10 @@ import { useProjectSession } from "@/features/projects/use-project-session"
 import { StartupScreen } from "@/components/feedback/startup-screen"
 import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
+import { runDetached } from "@/lib/promises"
+import { WindowChrome } from "@/components/window-chrome/window-chrome"
+import { shouldRestoreStartupWorkspace } from "@/components/window-chrome/window-chrome-model"
+import { createNewWindow } from "@/services/project-service"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -13,12 +19,15 @@ const ProjectWorkspacePage = lazy(() =>
   }))
 )
 
-export default function App() {
+export default function App(): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>("source")
   const [focusRestoreToken, setFocusRestoreToken] = useState(0)
   const { preferences, saveError, setAccentColor, setColorTheme } =
     useAppPreferences()
+  const restoreStartupWorkspace = shouldRestoreStartupWorkspace(
+    getCurrentWindow().label
+  )
   const {
     chooseAndOpenProject,
     clearFeedback,
@@ -45,22 +54,45 @@ export default function App() {
     updatePdfViewerState,
     updateEditorViewerState,
     updateWorkspaceView,
-  } = useProjectSession()
+  } = useProjectSession({ restoreStartupWorkspace })
+  const openNewWindow = useCallback(() => {
+    runDetached(createNewWindow())
+  }, [])
 
-  if (state.status === "starting") return <StartupScreen />
-  if (settingsOpen) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "n"
+      ) {
+        event.preventDefault()
+        openNewWindow()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [openNewWindow])
+
+  let content: ReactElement
+  let onReturnHome: (() => void) | null = null
+
+  if (state.status === "starting") {
+    content = <StartupScreen />
+  } else if (settingsOpen) {
     const workspace =
       state.status === "workspace" ? state.session.workspace : null
-    return (
+    onReturnHome = () => {
+      setSettingsOpen(false)
+      if (workspace !== null) {
+        setFocusRestoreToken((token) => token + 1)
+      }
+    }
+    content = (
       <SettingsPage
         accentColor={preferences.accentColor}
         colorTheme={preferences.colorTheme}
-        onClose={() => {
-          setSettingsOpen(false)
-          if (workspace !== null) {
-            setFocusRestoreToken((token) => token + 1)
-          }
-        }}
+        onClose={onReturnHome}
         onSetColorTheme={setColorTheme}
         onSetAccentColor={setAccentColor}
         onSetEditorFontSize={setEditorFontSize}
@@ -69,32 +101,34 @@ export default function App() {
         workspace={workspace}
       />
     )
-  }
-  if (state.status === "workspace") {
-    return (
+  } else if (state.status === "workspace") {
+    onReturnHome = () => runDetached(returnHome())
+    content = (
       <Suspense fallback={<StartupScreen />}>
         <ProjectWorkspacePage
           feedback={state.openFeedback}
           key={state.session.project.path}
-          onOpenProject={chooseAndOpenProject}
+          onOpenProject={() => runDetached(chooseAndOpenProject())}
           onOpenPdf={openPdf}
           onOpenSettings={(focus) => {
             setWorkspaceFocus(focus)
             setSettingsOpen(true)
           }}
-          onReturnHome={returnHome}
+          onReturnHome={() => runDetached(returnHome())}
           onResizeSidebar={resizeSidebar}
-          onCloseFile={closeFile}
-          onCloseFiles={closeFiles}
+          onCloseFile={(path) => runDetached(closeFile(path))}
+          onCloseFiles={(paths) => runDetached(closeFiles(paths))}
           onCreateProjectEntry={createProjectEntry}
           onDeleteProjectEntry={deleteProjectEntry}
           onEditDocument={editDocument}
           onPinFile={pinFile}
           onPreviewFile={previewFile}
           onRenameProjectEntry={renameProjectEntry}
-          onResolveExternalChange={resolveExternalChange}
-          onResolveRecovery={resolveRecovery}
-          onProjectFilesChanged={refreshProjectFiles}
+          onResolveExternalChange={(keepMine) =>
+            runDetached(resolveExternalChange(keepMine))
+          }
+          onResolveRecovery={(restore) => runDetached(resolveRecovery(restore))}
+          onProjectFilesChanged={() => runDetached(refreshProjectFiles())}
           onSaveDocument={saveActiveDocument}
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}
@@ -107,17 +141,32 @@ export default function App() {
         />
       </Suspense>
     )
+  } else {
+    content = (
+      <ProjectHomePage
+        feedback={state.openFeedback}
+        onClearFeedback={clearFeedback}
+        onForgetProject={(path) => runDetached(forgetProject(path))}
+        onOpenProject={() => runDetached(chooseAndOpenProject())}
+        onOpenRecent={(path) => runDetached(openProjectAtPath(path))}
+        onOpenSettings={() => setSettingsOpen(true)}
+        startup={state.startup}
+      />
+    )
   }
 
+  const applicationReady = state.status !== "starting"
   return (
-    <ProjectHomePage
-      feedback={state.openFeedback}
-      onClearFeedback={clearFeedback}
-      onForgetProject={forgetProject}
-      onOpenProject={chooseAndOpenProject}
-      onOpenRecent={openProjectAtPath}
-      onOpenSettings={() => setSettingsOpen(true)}
-      startup={state.startup}
-    />
+    <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+      <WindowChrome
+        onNewWindow={openNewWindow}
+        onOpenProject={
+          applicationReady ? () => runDetached(chooseAndOpenProject()) : null
+        }
+        onOpenSettings={applicationReady ? () => setSettingsOpen(true) : null}
+        onReturnHome={onReturnHome}
+      />
+      <div className="min-h-0 flex-1">{content}</div>
+    </div>
   )
 }

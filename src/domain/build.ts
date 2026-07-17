@@ -1,4 +1,9 @@
 import type { ProjectError } from "@/domain/project"
+import type {
+  BuildId,
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 
 export type BuildEngine = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
 
@@ -17,122 +22,123 @@ export type WatchStatus =
   | "pausedUnsafe"
 
 export type WatchEvent =
-  | {
+  | Readonly<{
       kind: "status"
-      projectPath: string
+      projectPath: CanonicalProjectPath
       status: WatchStatus
       message: string | null
-    }
-  | {
+    }>
+  | Readonly<{
       kind: "changed"
-      projectPath: string
-      changes: Array<"create" | "modify" | "remove" | "rename">
-      paths: string[]
-    }
+      projectPath: CanonicalProjectPath
+      changes: ReadonlyArray<"create" | "modify" | "remove" | "rename">
+      paths: ReadonlyArray<ProjectRelativePath>
+      truncated: boolean
+    }>
 
-export type BuildRequest = {
-  projectPath: string
-  rootFile: string
+export type BuildRequest = Readonly<{
+  projectPath: CanonicalProjectPath
+  rootFile: ProjectRelativePath
   engine: BuildEngine
-  configuration: ProjectBuildConfiguration
-}
+}>
 
 export type BibliographyTool = "automatic" | "biber" | "bibtex" | "none"
 
-export type EnvironmentSetting = { name: string; value: string }
+export type EnvironmentSetting = Readonly<{ name: string; value: string }>
 
-export type ProjectBuildConfiguration = {
+export type ProjectBuildConfiguration = Readonly<{
   schemaVersion: 1
   rootFile: string | null
   outputDirectory: string | null
   bibliographyTool: BibliographyTool
-  generatedDirectories: string[]
-  environment: EnvironmentSetting[]
-  customCommand: { executable: string; arguments: string[] } | null
-  customCommandConsent: boolean
-  shellEscapeConsent: boolean
-}
+  generatedDirectories: ReadonlyArray<string>
+  environment: ReadonlyArray<EnvironmentSetting>
+  customCommand: Readonly<{
+    executable: string
+    arguments: ReadonlyArray<string>
+  }> | null
+}>
 
 export type ProjectBuildConfigurationState =
   | { status: "loading" }
   | { status: "ready"; configuration: ProjectBuildConfiguration }
   | { status: "error"; error: ProjectError }
 
-export type CleanPreview = {
-  files: string[]
+export type CleanPreview = Readonly<{
+  files: ReadonlyArray<ProjectRelativePath>
   totalBytes: number
-}
+  truncated: boolean
+}>
 
-export type BuildInvocation = {
+export type BuildInvocation = Readonly<{
   executable: string
-  arguments: string[]
-  workingDirectory: string
-  rootFile: string
+  arguments: ReadonlyArray<string>
+  workingDirectory: CanonicalProjectPath
+  rootFile: ProjectRelativePath
   engine: BuildEngine
-  environment: EnvironmentSetting[]
+  environment: ReadonlyArray<EnvironmentSetting>
   bibliographyTool: BibliographyTool
   custom: boolean
-  toolVersion: string | null
-}
+}>
 
-export type BuildProfile = {
+export type BuildProfile = Readonly<{
   engine: BuildEngine
   label: string
   description: string
   executable: string
   recommended: boolean
   available: boolean
-}
+}>
 
 export type BuildProfilesState =
   | { status: "loading" }
   | { status: "ready"; profiles: BuildProfile[] }
   | { status: "error"; error: ProjectError }
 
-export type BuildLogEntry = {
+export type BuildLogEntry = Readonly<{
   sequence: number
   timestamp: number
   stream: BuildLogStream
   text: string
-}
+}>
 
-export type BuildDiagnostic = {
+export type BuildDiagnostic = Readonly<{
   severity: DiagnosticSeverity
   message: string
-  file: string | null
+  file: ProjectRelativePath | null
   line: number | null
   mappingUncertain: boolean
   logSequence: number
-}
+}>
 
-export type BuildRun = {
-  id: string
-  projectPath: string
+export type BuildRun = Readonly<{
+  id: BuildId
+  projectPath: CanonicalProjectPath
   invocation: BuildInvocation
   status: BuildStatus
   startedAt: number
   finishedAt: number | null
   exitCode: number | null
-  entries: BuildLogEntry[]
-  diagnostics: BuildDiagnostic[]
-}
+  entries: ReadonlyArray<BuildLogEntry>
+  diagnostics: ReadonlyArray<BuildDiagnostic>
+}>
 
 export type BuildEvent =
-  | {
+  | Readonly<{
       kind: "log"
-      projectPath: string
-      runId: string
+      projectPath: CanonicalProjectPath
+      runId: BuildId
       entry: BuildLogEntry
       diagnostic: BuildDiagnostic | null
-    }
-  | {
+    }>
+  | Readonly<{
       kind: "finished"
-      projectPath: string
-      runId: string
+      projectPath: CanonicalProjectPath
+      runId: BuildId
       status: Exclude<BuildStatus, "running">
       finishedAt: number
       exitCode: number | null
-    }
+    }>
 
 export type BuildPreviewState =
   | { status: "unavailable"; reason: string }
@@ -143,7 +149,7 @@ export type BuildPreviewState =
 export type ProjectBuildState = {
   preview: BuildPreviewState
   runs: BuildRun[]
-  selectedRunId: string | null
+  selectedRunId: BuildId | null
   action:
     | { status: "idle" }
     | { status: "pending" }
@@ -156,13 +162,18 @@ export type ProjectBuildAction =
   | { type: "previewReady"; invocation: BuildInvocation }
   | { type: "previewError"; error: ProjectError }
   | { type: "rootUnavailable"; reason: string }
-  | { type: "historyLoaded"; runs: BuildRun[] }
+  | { type: "historyLoaded"; runs: ReadonlyArray<BuildRun> }
   | { type: "historyError"; error: ProjectError }
   | { type: "actionPending" }
   | { type: "actionError"; error: ProjectError }
   | { type: "runStarted"; run: BuildRun }
   | { type: "eventReceived"; event: BuildEvent }
-  | { type: "selectRun"; runId: string }
+  | { type: "selectRun"; runId: BuildId }
+
+const MAX_VISIBLE_RUNS = 10
+const MAX_VISIBLE_LOG_ENTRIES = 500
+const MAX_VISIBLE_LOG_BYTES = 512 * 1024
+const MAX_PENDING_BUILD_EVENTS = 512
 
 export const initialProjectBuildState: ProjectBuildState = {
   preview: {
@@ -216,7 +227,7 @@ export function projectBuildReducer(
         runs: [
           action.run,
           ...state.runs.filter((run) => run.id !== action.run.id),
-        ],
+        ].slice(0, MAX_VISIBLE_RUNS),
         selectedRunId: action.run.id,
         action: { status: "idle" },
       })
@@ -224,7 +235,9 @@ export function projectBuildReducer(
       if (!state.runs.some((run) => run.id === action.event.runId)) {
         return {
           ...state,
-          pendingEvents: [...state.pendingEvents, action.event],
+          pendingEvents: [...state.pendingEvents, action.event].slice(
+            -MAX_PENDING_BUILD_EVENTS
+          ),
         }
       }
       return {
@@ -250,14 +263,36 @@ function updateRun(run: BuildRun, event: BuildEvent): BuildRun {
   if (run.entries.some((entry) => entry.sequence === event.entry.sequence)) {
     return run
   }
+  const entries = retainLogEntries([...run.entries, event.entry])
+  const retainedSequences = new Set(entries.map((entry) => entry.sequence))
   return {
     ...run,
-    entries: [...run.entries, event.entry],
-    diagnostics:
+    entries,
+    diagnostics: (
       event.diagnostic === null
         ? run.diagnostics
-        : [...run.diagnostics, event.diagnostic],
+        : [...run.diagnostics, event.diagnostic]
+    ).filter((diagnostic) => retainedSequences.has(diagnostic.logSequence)),
   }
+}
+
+function retainLogEntries(entries: BuildLogEntry[]): BuildLogEntry[] {
+  let retainedBytes = 0
+  const retained: BuildLogEntry[] = []
+  for (
+    let index = entries.length - 1;
+    index >= 0 && retained.length < MAX_VISIBLE_LOG_ENTRIES;
+    index -= 1
+  ) {
+    const entry = entries[index]
+    if (entry === undefined) continue
+    const nextBytes = retainedBytes + entry.text.length
+    if (nextBytes > MAX_VISIBLE_LOG_BYTES && retained.length > 0) break
+    retained.push(entry)
+    retainedBytes = nextBytes
+  }
+  retained.reverse()
+  return retained
 }
 
 function applyPendingEvents(state: ProjectBuildState): ProjectBuildState {
@@ -276,7 +311,10 @@ function applyPendingEvents(state: ProjectBuildState): ProjectBuildState {
   }
 }
 
-function mergeRuns(fromBackend: BuildRun[], local: BuildRun[]): BuildRun[] {
+function mergeRuns(
+  fromBackend: ReadonlyArray<BuildRun>,
+  local: ReadonlyArray<BuildRun>
+): BuildRun[] {
   const backendIds = new Set(fromBackend.map((run) => run.id))
   const merged = fromBackend.map((run) => {
     const localRun = local.find((candidate) => candidate.id === run.id)
@@ -300,14 +338,19 @@ function mergeRuns(fromBackend: BuildRun[], local: BuildRun[]): BuildRun[] {
     }
     return { ...run, entries, diagnostics }
   })
-  return [...merged, ...local.filter((run) => !backendIds.has(run.id))]
+  return [...merged, ...local.filter((run) => !backendIds.has(run.id))].slice(
+    0,
+    MAX_VISIBLE_RUNS
+  )
 }
 
 export function selectedBuildRun(state: ProjectBuildState): BuildRun | null {
   return state.runs.find((run) => run.id === state.selectedRunId) ?? null
 }
 
-export function formatBuildInvocation(invocation: BuildInvocation): string {
+export function formatBuildInvocation(
+  invocation: Pick<BuildInvocation, "executable" | "arguments">
+): string {
   return [invocation.executable, ...invocation.arguments]
     .map((part) => (/^[\w./=+-]+$/.test(part) ? part : JSON.stringify(part)))
     .join(" ")

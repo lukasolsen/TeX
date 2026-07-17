@@ -10,6 +10,7 @@ import {
   Settings,
   SquareTerminal,
 } from "lucide-react"
+import type { ReactElement } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -50,7 +51,7 @@ export function WorkspaceToolbar({
   onStop: () => void
   pdfOpen: boolean
   session: ProjectSession
-}) {
+}): ReactElement {
   const isOpening =
     feedback.status === "choosing" || feedback.status === "opening"
   const documentState = session.documentState

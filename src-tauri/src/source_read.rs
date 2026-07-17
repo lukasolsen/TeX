@@ -1,13 +1,19 @@
-use std::{fs, io, path::Path};
+use std::{
+    fs, io,
+    path::{Component, Path},
+};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use tauri::State;
+
+use crate::{bounded_io, project_access::ProjectAccess};
 
 pub(crate) const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
 pub(crate) const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceRevision {
     pub byte_length: u64,
     pub content_hash: String,
@@ -34,8 +40,10 @@ pub struct SourceReadError {
 pub fn read_project_source(
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<SourceDocument, SourceReadError> {
-    read_source(Path::new(&project_path), Path::new(&relative_path))
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    read_source(&root, Path::new(&relative_path))
 }
 
 pub(crate) fn read_source(
@@ -52,20 +60,15 @@ pub(crate) fn read_source(
     }
     let source_path = resolve_source_path(&project_root, relative_path)?;
 
-    let byte_length = fs::metadata(&source_path).map_err(map_io_error)?.len();
-    if byte_length > MAX_SOURCE_BYTES {
-        return Err(SourceReadError {
-            code: "source-too-large",
-            message: "This source file is too large to display safely.",
-        });
-    }
-    let content = fs::read_to_string(&source_path).map_err(|error| {
+    let bytes = bounded_io::read(&source_path, MAX_SOURCE_BYTES).map_err(|error| {
         if error.kind() == io::ErrorKind::InvalidData {
-            unsupported()
+            source_too_large()
         } else {
             map_io_error(error)
         }
     })?;
+    let content = String::from_utf8(bytes).map_err(|_| unsupported())?;
+    let byte_length = content.len() as u64;
 
     let revision = revision_for_content(content.as_bytes());
     Ok(SourceDocument {
@@ -80,9 +83,10 @@ pub(crate) fn resolve_source_path(
     project_root: &Path,
     relative_path: &Path,
 ) -> Result<std::path::PathBuf, SourceReadError> {
-    if relative_path.is_absolute() || !is_readable_source(relative_path) {
+    if !valid_relative_path(relative_path) || !is_readable_source(relative_path) {
         return Err(unsupported());
     }
+    reject_symlink_components(project_root, relative_path)?;
     let source_path = project_root
         .join(relative_path)
         .canonicalize()
@@ -94,6 +98,35 @@ pub(crate) fn resolve_source_path(
         });
     }
     Ok(source_path)
+}
+
+pub(crate) fn valid_relative_path(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && !path.is_absolute()
+        && path
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+}
+
+fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), SourceReadError> {
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        let Component::Normal(component) = component else {
+            return Err(unsupported());
+        };
+        candidate.push(component);
+        if fs::symlink_metadata(&candidate)
+            .map_err(map_io_error)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(SourceReadError {
+                code: "symlink-source",
+                message: "TeX does not open source files through symbolic links.",
+            });
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn is_readable_source(path: &Path) -> bool {
@@ -129,6 +162,13 @@ fn unsupported() -> SourceReadError {
     SourceReadError {
         code: "unsupported-source",
         message: "TeX can display text-based LaTeX project files in this phase.",
+    }
+}
+
+fn source_too_large() -> SourceReadError {
+    SourceReadError {
+        code: "source-too-large",
+        message: "This source file is too large to display safely.",
     }
 }
 
@@ -177,6 +217,22 @@ mod tests {
         fs::remove_file(outside)?;
 
         assert!(result.is_err());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_project_local_symlink_sources() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!("tex-source-link-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root)?;
+        fs::write(root.join("target.tex"), "target")?;
+        symlink(root.join("target.tex"), root.join("alias.tex"))?;
+
+        assert!(read_source(&root, Path::new("alias.tex")).is_err());
+        fs::remove_dir_all(root)?;
         Ok(())
     }
 

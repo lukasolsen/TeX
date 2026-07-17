@@ -5,9 +5,11 @@ use std::{
 };
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::persistence;
+use crate::project_access::ProjectAccess;
 use crate::project_config::load_configuration_for_project;
 use crate::root_detection::{self, RootEvidence};
 
@@ -83,8 +85,32 @@ pub enum ProjectOpenErrorCode {
 
 /// Validates a user-selected directory and returns only bounded metadata.
 #[tauri::command]
-pub fn open_project(path: String, app: AppHandle) -> Result<ProjectSummary, ProjectOpenError> {
-    let mut project = open_project_path(Path::new(&path))?;
+pub async fn choose_project_folder(
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<Option<String>, ProjectOpenError> {
+    let selected = app
+        .dialog()
+        .file()
+        .set_title("Open LaTeX project")
+        .blocking_pick_folder();
+    let Some(selected) = selected else {
+        return Ok(None);
+    };
+    let path = selected.into_path().map_err(|_| unavailable())?;
+    let root = access.approve(&path).map_err(map_io_error)?;
+    Ok(Some(root.to_string_lossy().into_owned()))
+}
+
+/// Opens metadata only for a project root already approved by Rust.
+#[tauri::command]
+pub fn open_project(
+    path: String,
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<ProjectSummary, ProjectOpenError> {
+    let approved = access.resolve(&path).map_err(map_io_error)?;
+    let mut project = open_project_path(&approved)?;
     let project_path = Path::new(&project.path);
     if let Ok(configuration) = load_configuration_for_project(&app, project_path) {
         if let Some(configured_root) = configuration.root_file {
@@ -165,15 +191,9 @@ fn collect_tree(
     depth: usize,
     visited_entries: &mut usize,
 ) -> Result<ProjectEntry, ProjectOpenError> {
-    let mut entries = fs::read_dir(directory)
-        .map_err(map_io_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(map_io_error)?;
-    entries.sort_by_key(|entry| entry.file_name());
-
-    let mut directories = Vec::new();
-    let mut files = Vec::new();
-    for entry in entries {
+    let mut entries = Vec::new();
+    for entry in fs::read_dir(directory).map_err(map_io_error)? {
+        let entry = entry.map_err(map_io_error)?;
         let file_type = entry.file_type().map_err(map_io_error)?;
         if file_type.is_symlink()
             || ignored_name(entry.file_name().as_os_str())
@@ -181,7 +201,6 @@ fn collect_tree(
         {
             continue;
         }
-
         *visited_entries += 1;
         if *visited_entries > MAX_TREE_ENTRIES {
             return Err(ProjectOpenError {
@@ -189,7 +208,13 @@ fn collect_tree(
                 message: "This folder is too large to open safely. Choose the project folder itself instead.",
             });
         }
+        entries.push((entry, file_type));
+    }
+    entries.sort_by_key(|(entry, _)| entry.file_name());
 
+    let mut directories = Vec::new();
+    let mut files = Vec::new();
+    for (entry, file_type) in entries {
         let path = entry.path();
         if file_type.is_dir() {
             if depth < MAX_TREE_DEPTH {
@@ -301,6 +326,13 @@ fn map_io_error(error: io::Error) -> ProjectOpenError {
     };
 
     ProjectOpenError { code, message }
+}
+
+fn unavailable() -> ProjectOpenError {
+    ProjectOpenError {
+        code: ProjectOpenErrorCode::Unavailable,
+        message: "TeX could not open that folder. Choose it again and retry.",
+    }
 }
 
 #[cfg(test)]

@@ -9,7 +9,9 @@ use std::{
 
 use atomic_write_file::AtomicWriteFile;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, State};
+
+use crate::{bounded_io, project_access::ProjectAccess};
 
 const STATE_FILE_NAME: &str = "workspace-state.json";
 const STATE_VERSION: u8 = 2;
@@ -21,6 +23,8 @@ const DEFAULT_BUILD_PANEL_HEIGHT: u16 = 240;
 const MIN_PANE_SIZE: u16 = 160;
 const MAX_PANE_SIZE: u16 = 4096;
 const MAX_RECENT_PROJECTS: usize = 12;
+const MAX_STATE_BYTES: u64 = 4 * 1024 * 1024;
+const MAX_WORKSPACE_FILES: usize = 256;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,7 +35,7 @@ pub struct StartupState {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AppPreferences {
     pub color_theme: ColorTheme,
     #[serde(default = "default_accent_color")]
@@ -73,7 +77,7 @@ pub enum ProjectAvailability {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceState {
     pub project_path: String,
     #[serde(default)]
@@ -133,7 +137,7 @@ pub enum BuildProfile {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EditorViewerState {
     pub line: u32,
     pub column: u32,
@@ -142,7 +146,7 @@ pub struct EditorViewerState {
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PdfViewerState {
     pub page: u32,
     pub position: f64,
@@ -182,7 +186,7 @@ impl fmt::Display for PersistenceError {
 impl Error for PersistenceError {}
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PersistedState {
     version: u8,
     recent_projects: Vec<PersistedRecentProject>,
@@ -192,7 +196,7 @@ struct PersistedState {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PersistedRecentProject {
     name: String,
     path: String,
@@ -253,8 +257,13 @@ fn is_hex_color(value: &str) -> bool {
 
 /// Loads local application metadata and validates restorable paths before exposing them.
 #[tauri::command]
-pub fn load_startup_state(app: AppHandle) -> Result<StartupState, PersistenceError> {
-    load_startup_state_from_path(&state_path(&app)?)
+pub fn load_startup_state(
+    app: AppHandle,
+    access: State<'_, ProjectAccess>,
+) -> Result<StartupState, PersistenceError> {
+    let startup = load_startup_state_from_path(&state_path(&app)?)?;
+    approve_restorable_projects(&access, &startup);
+    Ok(startup)
 }
 
 /// Removes a project from local recents without touching its source directory.
@@ -262,6 +271,7 @@ pub fn load_startup_state(app: AppHandle) -> Result<StartupState, PersistenceErr
 pub fn forget_recent_project(
     app: AppHandle,
     project_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<StartupState, PersistenceError> {
     let path = state_path(&app)?;
     let mut state = read_state(&path)?;
@@ -276,6 +286,7 @@ pub fn forget_recent_project(
         state.last_workspace = None;
     }
     write_state(&path, &state)?;
+    access.revoke(&project_path);
     startup_state_from_persisted(state)
 }
 
@@ -284,13 +295,20 @@ pub fn forget_recent_project(
 pub fn save_workspace_state(
     app: AppHandle,
     workspace: WorkspaceState,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), PersistenceError> {
-    let canonical_root = Path::new(&workspace.project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if !canonical_root.is_dir() {
-        return Err(unavailable());
+    if workspace.pinned_files.len() > MAX_WORKSPACE_FILES
+        || workspace.pdf_viewer_states.len() > MAX_WORKSPACE_FILES
+        || workspace.editor_viewer_states.len() > MAX_WORKSPACE_FILES
+    {
+        return Err(PersistenceError {
+            code: "workspace-too-large",
+            message: "Workspace state exceeds the supported open-file limit.",
+        });
     }
+    let canonical_root = access
+        .resolve(&workspace.project_path)
+        .map_err(|_| unavailable())?;
 
     validate_optional_file(&canonical_root, workspace.selected_root.as_deref())?;
     validate_optional_file(&canonical_root, workspace.selected_file.as_deref())?;
@@ -325,6 +343,17 @@ pub fn save_workspace_state(
         ..workspace
     });
     write_state(&path, &state)
+}
+
+fn approve_restorable_projects(access: &ProjectAccess, startup: &StartupState) {
+    for project in &startup.recent_projects {
+        if matches!(project.availability, ProjectAvailability::Available) {
+            let _ = access.approve(Path::new(&project.path));
+        }
+    }
+    if let Some(workspace) = &startup.last_workspace {
+        let _ = access.approve(Path::new(&workspace.project_path));
+    }
 }
 
 pub fn record_project_opened(
@@ -389,6 +418,7 @@ fn load_startup_state_from_path(path: &Path) -> Result<StartupState, Persistence
 fn startup_state_from_persisted(
     mut state: PersistedState,
 ) -> Result<StartupState, PersistenceError> {
+    state.recent_projects.truncate(MAX_RECENT_PROJECTS);
     let mut restoration_notice = None;
     let had_last_workspace = state.last_workspace.is_some();
     let last_workspace = state.last_workspace.take().and_then(|mut workspace| {
@@ -433,6 +463,9 @@ fn startup_state_from_persisted(
         workspace.editor_viewer_states.retain(|path, viewer| {
             optional_file_exists_within(&root, Some(path)) && valid_editor_viewer_state(viewer)
         });
+        workspace.pinned_files.truncate(MAX_WORKSPACE_FILES);
+        retain_bounded(&mut workspace.pdf_viewer_states, MAX_WORKSPACE_FILES);
+        retain_bounded(&mut workspace.editor_viewer_states, MAX_WORKSPACE_FILES);
         if pdf_state_count != workspace.pdf_viewer_states.len()
             || pinned_file_count != workspace.pinned_files.len()
             || editor_state_count != workspace.editor_viewer_states.len()
@@ -491,7 +524,7 @@ fn read_state(path: &Path) -> Result<PersistedState, PersistenceError> {
 }
 
 fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
-    let source = match fs::read(path) {
+    let source = match bounded_io::read(path, MAX_STATE_BYTES) {
         Ok(source) => source,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             return Ok(ReadState {
@@ -501,6 +534,7 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
                 writable: true,
             })
         }
+        Err(error) if error.kind() == io::ErrorKind::InvalidData => return Ok(corrupted_state()),
         Err(_) => return Err(unavailable()),
     };
     let value: serde_json::Value = match serde_json::from_slice(&source) {
@@ -578,9 +612,26 @@ fn write_state(path: &Path, state: &PersistedState) -> Result<(), PersistenceErr
     let parent = path.parent().ok_or_else(unavailable)?;
     fs::create_dir_all(parent).map_err(|_| unavailable())?;
     let encoded = serde_json::to_vec_pretty(state).map_err(|_| unavailable())?;
+    if encoded.len() as u64 > MAX_STATE_BYTES {
+        return Err(PersistenceError {
+            code: "workspace-too-large",
+            message: "Workspace state exceeds the supported persistence limit.",
+        });
+    }
     let mut temporary = AtomicWriteFile::open(path).map_err(|_| unavailable())?;
     temporary.write_all(&encoded).map_err(|_| unavailable())?;
     temporary.commit().map_err(|_| unavailable())
+}
+
+fn retain_bounded<K, V>(values: &mut HashMap<K, V>, limit: usize)
+where
+    K: Eq + std::hash::Hash,
+{
+    let mut retained = 0_usize;
+    values.retain(|_, _| {
+        retained += 1;
+        retained <= limit
+    });
 }
 
 fn validate_optional_file(root: &Path, relative: Option<&str>) -> Result<(), PersistenceError> {

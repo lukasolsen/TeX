@@ -1,5 +1,5 @@
-import { useState } from "react"
-import type { ReactNode } from "react"
+import { useRef, useState } from "react"
+import type { ReactElement, ReactNode } from "react"
 
 import { AlertCircle, ShieldAlert } from "lucide-react"
 
@@ -28,6 +28,7 @@ import type {
 } from "@/domain/build"
 import { formatBuildInvocation } from "@/domain/build"
 import { projectErrorFromUnknown } from "@/services/project-service"
+import { runDetached } from "@/lib/promises"
 
 export function BuildConfigurationDialog({
   configuration,
@@ -39,10 +40,16 @@ export function BuildConfigurationDialog({
   onOpenChange: (open: boolean) => void
   onSave: (configuration: ProjectBuildConfiguration) => Promise<void>
   open: boolean
-}) {
+}): ReactElement {
   const [draft, setDraft] = useState(configuration)
+  const [environmentText, setEnvironmentText] = useState(() =>
+    configuration.environment
+      .map((setting) => `${setting.name}=${setting.value}`)
+      .join("\n")
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const savingRef = useRef(false)
   const custom = draft.customCommand
   const usesShellEscape =
     custom?.arguments.some(
@@ -52,33 +59,49 @@ export function BuildConfigurationDialog({
         argument.startsWith("--shell-escape=")
     ) ?? false
 
-  const save = async () => {
+  const save = async (): Promise<void> => {
+    if (savingRef.current) return
+    const environment = parseEnvironment(environmentText)
+    if (typeof environment === "string") {
+      setError(environment)
+      return
+    }
+    savingRef.current = true
     setSaving(true)
     setError(null)
+    let saved = false
     try {
-      await onSave(draft)
-      onOpenChange(false)
+      await onSave({ ...draft, environment })
+      saved = true
     } catch (reason: unknown) {
       setError(projectErrorFromUnknown(reason).message)
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
+    if (saved) onOpenChange(false)
   }
 
-  const setCustom = (executable: string, argumentsList: string[]) => {
+  const setCustom = (
+    executable: string,
+    argumentsList: ReadonlyArray<string>
+  ) => {
     setDraft((current) => ({
       ...current,
       customCommand:
         executable.trim() === "" && argumentsList.length === 0
           ? null
           : { executable, arguments: argumentsList },
-      customCommandConsent: false,
-      shellEscapeConsent: false,
     }))
   }
 
   return (
-    <Dialog onOpenChange={onOpenChange} open={open}>
+    <Dialog
+      onOpenChange={(nextOpen) => {
+        if (!savingRef.current) onOpenChange(nextOpen)
+      }}
+      open={open}
+    >
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Project build configuration</DialogTitle>
@@ -91,6 +114,7 @@ export function BuildConfigurationDialog({
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Root file">
             <Input
+              maxLength={1_024}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
@@ -103,6 +127,7 @@ export function BuildConfigurationDialog({
           </Field>
           <Field label="Output directory">
             <Input
+              maxLength={1_024}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
@@ -138,6 +163,7 @@ export function BuildConfigurationDialog({
           </Field>
           <Field label="Generated directories">
             <Input
+              maxLength={4_096}
               onChange={(event) =>
                 setDraft((current) => ({
                   ...current,
@@ -154,26 +180,10 @@ export function BuildConfigurationDialog({
           <Textarea
             aria-describedby="build-environment-help"
             className="min-h-20 font-mono text-xs"
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                environment: splitLines(event.target.value).flatMap((line) => {
-                  const separator = line.indexOf("=")
-                  return separator <= 0
-                    ? []
-                    : [
-                        {
-                          name: line.slice(0, separator),
-                          value: line.slice(separator + 1),
-                        },
-                      ]
-                }),
-              }))
-            }
+            maxLength={8_192}
+            onChange={(event) => setEnvironmentText(event.target.value)}
             placeholder="TEXINPUTS=styles:"
-            value={draft.environment
-              .map((setting) => `${setting.name}=${setting.value}`)
-              .join("\n")}
+            value={environmentText}
           />
           <p
             id="build-environment-help"
@@ -194,6 +204,7 @@ export function BuildConfigurationDialog({
             <Field label="Executable">
               <Input
                 className="font-mono text-xs"
+                maxLength={1_024}
                 onChange={(event) =>
                   setCustom(event.target.value, custom?.arguments ?? [])
                 }
@@ -204,6 +215,7 @@ export function BuildConfigurationDialog({
             <Field label="Arguments">
               <Textarea
                 className="min-h-24 font-mono text-xs"
+                maxLength={8_192}
                 onChange={(event) =>
                   setCustom(
                     custom?.executable ?? "",
@@ -221,25 +233,12 @@ export function BuildConfigurationDialog({
                 {formatBuildInvocation({
                   executable: custom.executable,
                   arguments: custom.arguments,
-                  workingDirectory: "project root",
-                  rootFile: draft.rootFile ?? "selected root",
-                  engine: "latexmkPdf",
-                  environment: draft.environment,
-                  bibliographyTool: draft.bibliographyTool,
-                  custom: true,
-                  toolVersion: null,
                 })}
               </p>
-              <Consent
-                checked={draft.customCommandConsent}
-                label="I reviewed this exact executable and argument list and allow TeX to run it for this project."
-                onChange={(checked) =>
-                  setDraft((current) => ({
-                    ...current,
-                    customCommandConsent: checked,
-                  }))
-                }
-              />
+              <p className="mt-3 text-xs text-muted-foreground">
+                Saving a new or changed command opens a native confirmation
+                showing the exact executable and arguments.
+              </p>
             </>
           ) : null}
           {usesShellEscape ? (
@@ -247,17 +246,8 @@ export function BuildConfigurationDialog({
               <ShieldAlert />
               <AlertTitle>Shell escape expands project trust</AlertTitle>
               <AlertDescription>
-                LaTeX may run programs requested by project source.
-                <Consent
-                  checked={draft.shellEscapeConsent}
-                  label="I separately allow shell escape for this project."
-                  onChange={(checked) =>
-                    setDraft((current) => ({
-                      ...current,
-                      shellEscapeConsent: checked,
-                    }))
-                  }
-                />
+                LaTeX may run programs requested by project source. Saving opens
+                a separate native shell-escape confirmation.
               </AlertDescription>
             </Alert>
           ) : null}
@@ -271,7 +261,7 @@ export function BuildConfigurationDialog({
           </Alert>
         ) : null}
         <DialogFooter showCloseButton>
-          <Button disabled={saving} onClick={() => void save()}>
+          <Button disabled={saving} onClick={() => runDetached(save())}>
             {saving ? "Validating…" : "Save build configuration"}
           </Button>
         </DialogFooter>
@@ -280,33 +270,17 @@ export function BuildConfigurationDialog({
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}): ReactElement {
   return (
     <label className="grid gap-1.5 text-sm font-medium">
       {label}
       {children}
-    </label>
-  )
-}
-
-function Consent({
-  checked,
-  label,
-  onChange,
-}: {
-  checked: boolean
-  label: string
-  onChange: (checked: boolean) => void
-}) {
-  return (
-    <label className="mt-3 flex items-start gap-2 text-xs font-normal">
-      <input
-        checked={checked}
-        className="mt-0.5 size-4"
-        onChange={(event) => onChange(event.target.checked)}
-        type="checkbox"
-      />
-      <span>{label}</span>
     </label>
   )
 }
@@ -321,6 +295,24 @@ function splitLines(value: string): string[] {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter((item) => item !== "")
+}
+
+function parseEnvironment(
+  value: string
+): ProjectBuildConfiguration["environment"] | string {
+  const environment: Array<{ name: string; value: string }> = []
+  for (const line of value.split("\n")) {
+    if (line.trim() === "") continue
+    const separator = line.indexOf("=")
+    if (separator <= 0) {
+      return "Every environment entry must use NAME=value."
+    }
+    environment.push({
+      name: line.slice(0, separator).trim(),
+      value: line.slice(separator + 1),
+    })
+  }
+  return environment
 }
 
 function isBibliographyTool(value: string | null): value is BibliographyTool {

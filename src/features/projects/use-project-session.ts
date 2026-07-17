@@ -3,12 +3,18 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import type {
   AppSessionState,
   AsyncDocumentState,
+  EditorDocumentChange,
   OpenProjectFeedback,
   ProjectSession,
   ProjectSummary,
   StartupState,
   WorkspaceState,
 } from "@/domain/project"
+import {
+  projectRelativePath,
+  type CanonicalProjectPath,
+  type ProjectRelativePath,
+} from "@/domain/identifiers"
 import {
   closeDocument,
   openDocument,
@@ -20,6 +26,11 @@ import {
   preferredSourceFile,
 } from "@/features/projects/project-model"
 import { restoreWorkspaceGeometry } from "@/features/projects/workspace-restoration"
+import {
+  classifyEditorChange,
+  saveStateAfterWrite,
+} from "@/features/editor/editor-change"
+import { runDetached } from "@/lib/promises"
 import {
   chooseProjectFolder,
   createProjectEntry as createProjectEntryRequest,
@@ -49,11 +60,11 @@ function readyDocument(
 }
 
 async function loadEditableDocument(
-  projectPath: string,
-  relativePath: string
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
 ): Promise<AsyncDocumentState> {
   const document = await readProjectSource(projectPath, relativePath)
-  const draft = await loadRecoveryDraft(projectPath, relativePath)
+  const draft = await loadRecoveryDraft({ projectPath, relativePath })
   if (draft === null || draft.content === document.content) {
     return readyDocument(document)
   }
@@ -79,6 +90,8 @@ const dialogError = {
 
 const recoveryFailureNotice =
   "TeX could not update the recovery copy. Keep TeX open until the source is saved."
+const workspacePersistenceFailureNotice =
+  "TeX could not persist the current workspace layout. Keep TeX open to retain this context."
 
 function workspaceForProject(
   project: ProjectSummary,
@@ -120,13 +133,20 @@ function combinedNotice(...notices: (string | null)[]): string | null {
   return available.length === 0 ? null : available.join(" ")
 }
 
-function renamedProjectPath(path: string, from: string, to: string): string {
+function renamedProjectPath(
+  path: ProjectRelativePath,
+  from: ProjectRelativePath,
+  to: ProjectRelativePath
+): ProjectRelativePath {
   return path === from || path.startsWith(`${from}/`)
-    ? `${to}${path.slice(from.length)}`
+    ? projectRelativePath(`${to}${path.slice(from.length)}`)
     : path
 }
 
-function isProjectPathWithin(path: string | null, parent: string): boolean {
+function isProjectPathWithin(
+  path: ProjectRelativePath | null,
+  parent: ProjectRelativePath
+): boolean {
   return path === parent || path?.startsWith(`${parent}/`) === true
 }
 
@@ -185,14 +205,98 @@ function withOpenFeedback(
   return { ...current, openFeedback }
 }
 
+export type ProjectSessionController = Readonly<{
+  state: AppSessionState
+  chooseAndOpenProject: () => Promise<void>
+  clearFeedback: () => void
+  closeFile: (path: ProjectRelativePath) => Promise<void>
+  closeFiles: (paths: ReadonlyArray<ProjectRelativePath>) => Promise<void>
+  createProjectEntry: (
+    parentPath: ProjectRelativePath | null,
+    name: string,
+    directory: boolean
+  ) => Promise<boolean>
+  deleteProjectEntry: (path: ProjectRelativePath) => Promise<void>
+  editDocument: (
+    projectPath: CanonicalProjectPath,
+    path: ProjectRelativePath,
+    change: EditorDocumentChange
+  ) => void
+  forgetProject: (path: CanonicalProjectPath) => Promise<void>
+  openProjectAtPath: (path: CanonicalProjectPath) => Promise<void>
+  openPdf: (path: ProjectRelativePath) => void
+  pinFile: (path: ProjectRelativePath) => void
+  previewFile: (path: ProjectRelativePath) => void
+  refreshActiveDocument: () => Promise<void>
+  refreshProjectFiles: () => Promise<void>
+  renameProjectEntry: (
+    path: ProjectRelativePath,
+    name: string
+  ) => Promise<boolean>
+  resizeSidebar: (width: number, persist: boolean) => void
+  resolveExternalChange: (keepMine: boolean) => Promise<void>
+  resolveRecovery: (restore: boolean) => Promise<void>
+  returnHome: () => Promise<void>
+  selectRoot: (path: ProjectRelativePath) => void
+  setEditorFontSize: (fontSize: number) => void
+  saveActiveDocument: () => Promise<boolean>
+  updatePdfViewerState: (
+    path: ProjectRelativePath,
+    state: WorkspaceState["pdfViewerStates"][string]
+  ) => void
+  updateEditorViewerState: (
+    path: ProjectRelativePath,
+    state: WorkspaceState["editorViewerStates"][string]
+  ) => void
+  updateWorkspaceView: (
+    update: Partial<
+      Pick<
+        WorkspaceState,
+        | "pdfPaneOpen"
+        | "pdfPaneWidth"
+        | "buildPanelOpen"
+        | "buildPanelHeight"
+        | "sidebarTab"
+        | "buildPanelTab"
+        | "buildProfile"
+      >
+    >
+  ) => void
+}>
+
 /** Owns startup restoration and the project editing session state machine. */
-export function useProjectSession() {
+export function useProjectSession({
+  restoreStartupWorkspace = true,
+}: {
+  restoreStartupWorkspace?: boolean
+} = {}): ProjectSessionController {
   const [state, setState] = useState<AppSessionState>({ status: "starting" })
   const stateRef = useRef<AppSessionState>(state)
   const documentRequest = useRef(0)
+  const projectRequest = useRef(0)
+  const projectRefreshRequest = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const recoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const composingDocument = useRef<ProjectRelativePath | null>(null)
+  const conflictResolutionInFlight = useRef(false)
+  const saveInFlight = useRef<Promise<boolean> | null>(null)
   const saveActionRef = useRef<() => Promise<boolean>>(async () => true)
+  const persistWorkspace = useRef((workspace: WorkspaceState): void => {
+    void saveWorkspaceState(workspace).catch(() => {
+      setState((current) =>
+        current.status !== "workspace" ||
+        current.session.project.path !== workspace.projectPath
+          ? current
+          : {
+              ...current,
+              session: {
+                ...current.session,
+                notice: workspacePersistenceFailureNotice,
+              },
+            }
+      )
+    })
+  }).current
 
   useEffect(() => {
     stateRef.current = state
@@ -209,11 +313,12 @@ export function useProjectSession() {
   useEffect(() => {
     let active = true
 
-    async function start() {
+    async function start(): Promise<void> {
+      const request = projectRequest.current
       try {
         const startup = await loadStartupState()
-        if (!active) return
-        if (startup.lastWorkspace === null) {
+        if (!active || request !== projectRequest.current) return
+        if (!restoreStartupWorkspace || startup.lastWorkspace === null) {
           setState({
             status: "home",
             startup,
@@ -231,15 +336,15 @@ export function useProjectSession() {
             startup.lastWorkspace,
             startup.restorationNotice
           )
-          if (!active) return
+          if (!active || request !== projectRequest.current) return
           setState({
             status: "workspace",
             session,
             openFeedback: { status: "idle" },
           })
-          await saveWorkspaceState(session.workspace)
+          persistWorkspace(session.workspace)
         } catch (error: unknown) {
-          if (!active) return
+          if (!active || request !== projectRequest.current) return
           setState({
             status: "home",
             startup: { ...startup, lastWorkspace: null },
@@ -266,35 +371,42 @@ export function useProjectSession() {
     return () => {
       active = false
     }
-  }, [])
+  }, [persistWorkspace, restoreStartupWorkspace])
 
-  const openProjectAtPath = useCallback(async (path: string) => {
-    setState((current) =>
-      withOpenFeedback(current, { status: "opening", path })
-    )
-    try {
-      const project = await openProjectFolder(path)
-      const session = await hydrateSession(project, null, null)
-      setState({
-        status: "workspace",
-        session,
-        openFeedback: { status: "idle" },
-      })
-      await saveWorkspaceState(session.workspace)
-    } catch (error: unknown) {
+  const openProjectAtPath = useCallback(
+    async (path: CanonicalProjectPath) => {
+      const request = ++projectRequest.current
+      documentRequest.current += 1
       setState((current) =>
-        withOpenFeedback(current, {
-          status: "error",
-          error: projectErrorFromUnknown(error),
-        })
+        withOpenFeedback(current, { status: "opening", path })
       )
-    }
-  }, [])
+      try {
+        const project = await openProjectFolder(path)
+        const session = await hydrateSession(project, null, null)
+        if (request !== projectRequest.current) return
+        setState({
+          status: "workspace",
+          session,
+          openFeedback: { status: "idle" },
+        })
+        persistWorkspace(session.workspace)
+      } catch (error: unknown) {
+        if (request !== projectRequest.current) return
+        setState((current) =>
+          withOpenFeedback(current, {
+            status: "error",
+            error: projectErrorFromUnknown(error),
+          })
+        )
+      }
+    },
+    [persistWorkspace]
+  )
 
   const chooseAndOpenProject = useCallback(async () => {
     if (!(await saveActionRef.current())) return
     setState((current) => withOpenFeedback(current, { status: "choosing" }))
-    let selectedPath: string | null
+    let selectedPath: CanonicalProjectPath | null
     try {
       selectedPath = await chooseProjectFolder()
     } catch {
@@ -314,7 +426,7 @@ export function useProjectSession() {
     setState((current) => withOpenFeedback(current, { status: "idle" }))
   }, [])
 
-  const forgetProject = useCallback(async (path: string) => {
+  const forgetProject = useCallback(async (path: CanonicalProjectPath) => {
     try {
       const startup = await forgetRecentProject(path)
       setState({
@@ -332,7 +444,7 @@ export function useProjectSession() {
     }
   }, [])
 
-  const saveActiveDocument = useCallback(async (): Promise<boolean> => {
+  const performDocumentSave = useCallback(async (): Promise<boolean> => {
     const current = stateRef.current
     if (
       current.status !== "workspace" ||
@@ -341,6 +453,8 @@ export function useProjectSession() {
       return true
     }
     const active = current.session.documentState
+    if (composingDocument.current === active.document.path) return false
+    if (conflictResolutionInFlight.current) return false
     if (active.saveState.status === "saved") return true
     if (
       active.saveState.status === "saving" ||
@@ -372,12 +486,12 @@ export function useProjectSession() {
     )
 
     try {
-      const document = await saveProjectSource(
+      const document = await saveProjectSource({
         projectPath,
-        path,
+        relativePath: path,
         content,
-        revision
-      )
+        expectedRevision: revision,
+      })
       setState((value) => {
         if (
           value.status !== "workspace" ||
@@ -386,7 +500,6 @@ export function useProjectSession() {
         ) {
           return value
         }
-        const unchanged = value.session.documentState.content === content
         return {
           ...value,
           session: {
@@ -398,7 +511,10 @@ export function useProjectSession() {
             documentState: {
               ...value.session.documentState,
               document,
-              saveState: unchanged ? { status: "saved" } : { status: "dirty" },
+              saveState: saveStateAfterWrite(
+                value.session.documentState.content,
+                content
+              ),
             },
           },
         }
@@ -470,15 +586,26 @@ export function useProjectSession() {
     }
   }, [])
 
+  const saveActiveDocument = useCallback((): Promise<boolean> => {
+    if (saveInFlight.current !== null) return saveInFlight.current
+    const operation = performDocumentSave().finally(() => {
+      if (saveInFlight.current === operation) saveInFlight.current = null
+    })
+    saveInFlight.current = operation
+    return operation
+  }, [performDocumentSave])
+
   useEffect(() => {
     saveActionRef.current = saveActiveDocument
   }, [saveActiveDocument])
 
   useEffect(() => {
-    const saveOnWindowLoss = () => {
-      void saveActionRef.current()
+    const saveOnWindowLoss = (): void => {
+      void saveActionRef.current().catch(() => {
+        // Save failures are represented by the document save state.
+      })
     }
-    const saveWhenHidden = () => {
+    const saveWhenHidden = (): void => {
       if (document.visibilityState === "hidden") saveOnWindowLoss()
     }
     window.addEventListener("blur", saveOnWindowLoss)
@@ -489,71 +616,90 @@ export function useProjectSession() {
     }
   }, [])
 
-  const editDocument = useCallback((path: string, content: string) => {
-    const current = stateRef.current
-    if (
-      current.status !== "workspace" ||
-      current.session.documentState.status !== "ready" ||
-      current.session.documentState.document.path !== path ||
-      current.session.documentState.content === content
-    ) {
-      return
-    }
-    const { project } = current.session
-    setState((value) =>
-      value.status !== "workspace" ||
-      value.session.documentState.status !== "ready" ||
-      value.session.documentState.document.path !== path
-        ? value
-        : {
-            ...value,
-            session: {
-              ...value.session,
-              documentState: {
-                ...value.session.documentState,
-                content,
-                saveState: { status: "dirty" },
-              },
-            },
-          }
-    )
-
-    if (recoveryTimer.current === null) {
-      recoveryTimer.current = setTimeout(() => {
-        recoveryTimer.current = null
-        const latest = stateRef.current
-        if (
-          latest.status !== "workspace" ||
-          latest.session.documentState.status !== "ready" ||
-          latest.session.documentState.document.path !== path
-        ) {
-          return
-        }
-        void saveRecoveryDraft(
-          project.path,
-          path,
-          latest.session.documentState.content,
-          latest.session.documentState.document.revision
-        ).catch(() => {
-          setState((value) =>
-            value.status !== "workspace"
-              ? value
-              : {
-                  ...value,
-                  session: {
-                    ...value.session,
-                    notice: recoveryFailureNotice,
+  const editDocument = useCallback(
+    (
+      projectPath: CanonicalProjectPath,
+      path: ProjectRelativePath,
+      change: EditorDocumentChange
+    ) => {
+      const current = stateRef.current
+      if (
+        current.status !== "workspace" ||
+        current.session.project.path !== projectPath ||
+        current.session.documentState.status !== "ready" ||
+        current.session.documentState.document.path !== path
+      ) {
+        return
+      }
+      const decision = classifyEditorChange(
+        current.session.documentState.content,
+        composingDocument.current,
+        path,
+        change
+      )
+      composingDocument.current = decision.composingDocument
+      if (!decision.accepted) return
+      const { project } = current.session
+      if (decision.contentChanged) {
+        setState((value) =>
+          value.status !== "workspace" ||
+          value.session.documentState.status !== "ready" ||
+          value.session.documentState.document.path !== path
+            ? value
+            : {
+                ...value,
+                session: {
+                  ...value.session,
+                  documentState: {
+                    ...value.session.documentState,
+                    content: change.content,
+                    saveState: { status: "dirty" },
                   },
-                }
-          )
-        })
-      }, 150)
-    }
-    if (saveTimer.current !== null) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      void saveActionRef.current()
-    }, 850)
-  }, [])
+                },
+              }
+        )
+      }
+
+      if (!decision.schedulePersistence) return
+
+      if (recoveryTimer.current === null) {
+        recoveryTimer.current = setTimeout(() => {
+          recoveryTimer.current = null
+          const latest = stateRef.current
+          if (
+            latest.status !== "workspace" ||
+            latest.session.documentState.status !== "ready" ||
+            latest.session.documentState.document.path !== path
+          ) {
+            return
+          }
+          void saveRecoveryDraft({
+            projectPath: project.path,
+            relativePath: path,
+            content: latest.session.documentState.content,
+            baseRevision: latest.session.documentState.document.revision,
+          }).catch(() => {
+            setState((value) =>
+              value.status !== "workspace"
+                ? value
+                : {
+                    ...value,
+                    session: {
+                      ...value.session,
+                      notice: recoveryFailureNotice,
+                    },
+                  }
+            )
+          })
+        }, 150)
+      }
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        runDetached(saveActionRef.current())
+      }, 850)
+    },
+    []
+  )
 
   const resolveRecovery = useCallback(async (restore: boolean) => {
     const current = stateRef.current
@@ -565,12 +711,18 @@ export function useProjectSession() {
       return
     }
     const { project, documentState } = current.session
+    const path = documentState.document.path
     if (!restore) {
-      await discardRecoveryDraft(project.path, documentState.document.path)
+      await discardRecoveryDraft({
+        projectPath: project.path,
+        relativePath: documentState.document.path,
+      })
     }
     setState((value) =>
       value.status !== "workspace" ||
-      value.session.documentState.status !== "ready"
+      value.session.project.path !== project.path ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
         ? value
         : {
             ...value,
@@ -587,7 +739,10 @@ export function useProjectSession() {
           }
     )
     if (restore) {
-      saveTimer.current = setTimeout(() => void saveActionRef.current(), 250)
+      saveTimer.current = setTimeout(
+        () => runDetached(saveActionRef.current()),
+        250
+      )
     }
   }, [])
 
@@ -601,11 +756,19 @@ export function useProjectSession() {
     }
     const { project, documentState } = current.session
     if (documentState.saveState.status !== "conflict") return
+    const path = documentState.document.path
+    const content = documentState.content
     const external = documentState.saveState.external
     if (!keepMine) {
-      await discardRecoveryDraft(project.path, documentState.document.path)
+      await discardRecoveryDraft({
+        projectPath: project.path,
+        relativePath: path,
+      })
       setState((value) =>
-        value.status !== "workspace"
+        value.status !== "workspace" ||
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -617,17 +780,38 @@ export function useProjectSession() {
       )
       return
     }
+    if (conflictResolutionInFlight.current) return
+    conflictResolutionInFlight.current = true
+    let writeSucceeded = false
+    setState((value) =>
+      value.status !== "workspace" ||
+      value.session.project.path !== project.path ||
+      value.session.documentState.status !== "ready" ||
+      value.session.documentState.document.path !== path
+        ? value
+        : {
+            ...value,
+            session: {
+              ...value.session,
+              documentState: {
+                ...value.session.documentState,
+                saveState: { status: "saving" },
+              },
+            },
+          }
+    )
     try {
-      const document = await saveProjectSource(
-        project.path,
-        documentState.document.path,
-        documentState.content,
-        external.revision,
-        true
-      )
+      const document = await saveProjectSource({
+        projectPath: project.path,
+        relativePath: path,
+        content,
+        expectedRevision: external.revision,
+      })
       setState((value) =>
         value.status !== "workspace" ||
-        value.session.documentState.status !== "ready"
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -636,16 +820,22 @@ export function useProjectSession() {
                 documentState: {
                   ...value.session.documentState,
                   document,
-                  saveState: { status: "saved" },
+                  saveState: saveStateAfterWrite(
+                    value.session.documentState.content,
+                    content
+                  ),
                 },
               },
             }
       )
+      writeSucceeded = true
     } catch (error: unknown) {
       const projectError = projectErrorFromUnknown(error)
       setState((value) =>
         value.status !== "workspace" ||
-        value.session.documentState.status !== "ready"
+        value.session.project.path !== project.path ||
+        value.session.documentState.status !== "ready" ||
+        value.session.documentState.document.path !== path
           ? value
           : {
               ...value,
@@ -658,6 +848,22 @@ export function useProjectSession() {
               },
             }
       )
+    } finally {
+      conflictResolutionInFlight.current = false
+      const latest = stateRef.current
+      if (
+        writeSucceeded &&
+        latest.status === "workspace" &&
+        latest.session.project.path === project.path &&
+        latest.session.documentState.status === "ready" &&
+        latest.session.documentState.document.path === path
+      ) {
+        if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+        saveTimer.current = setTimeout(
+          () => runDetached(saveActionRef.current()),
+          250
+        )
+      }
     }
   }, [])
 
@@ -685,6 +891,7 @@ export function useProjectSession() {
         ) {
           setState((value) =>
             value.status !== "workspace" ||
+            value.session.project.path !== current.session.project.path ||
             value.session.documentState.status !== "ready" ||
             value.session.documentState.document.path !== external.path ||
             value.session.documentState.saveState.status !== "saved"
@@ -718,7 +925,7 @@ export function useProjectSession() {
   }, [])
 
   const openFile = useCallback(
-    async (path: string, pin: boolean) => {
+    async (path: ProjectRelativePath, pin: boolean) => {
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
 
@@ -734,7 +941,7 @@ export function useProjectSession() {
                 session: { ...current.session, workspace },
               }
         )
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         return
       }
 
@@ -763,9 +970,7 @@ export function useProjectSession() {
         setState((current) => {
           if (current.status !== "workspace") return current
           const workspace = current.session.workspace
-          void saveWorkspaceState({
-            ...workspace,
-          })
+          persistWorkspace(workspace)
           return {
             ...current,
             session: {
@@ -792,25 +997,25 @@ export function useProjectSession() {
         })
       }
     },
-    [saveActiveDocument]
+    [persistWorkspace, saveActiveDocument]
   )
 
   const previewFile = useCallback(
-    (path: string) => {
-      void openFile(path, false)
+    (path: ProjectRelativePath) => {
+      runDetached(openFile(path, false))
     },
     [openFile]
   )
 
   const pinFile = useCallback(
-    (path: string) => {
-      void openFile(path, true)
+    (path: ProjectRelativePath) => {
+      runDetached(openFile(path, true))
     },
     [openFile]
   )
 
   const closeFile = useCallback(
-    async (path: string) => {
+    async (path: ProjectRelativePath) => {
       if (!(await saveActiveDocument())) return
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
@@ -836,7 +1041,7 @@ export function useProjectSession() {
           },
         }
       })
-      void saveWorkspaceState(workspace)
+      persistWorkspace(workspace)
 
       if (!closingActiveFile || nextFile === null) return
 
@@ -871,11 +1076,11 @@ export function useProjectSession() {
         })
       }
     },
-    [saveActiveDocument]
+    [persistWorkspace, saveActiveDocument]
   )
 
   const closeFiles = useCallback(
-    async (paths: string[]) => {
+    async (paths: ReadonlyArray<ProjectRelativePath>) => {
       if (!(await saveActiveDocument())) return
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
@@ -902,7 +1107,7 @@ export function useProjectSession() {
           },
         }
       })
-      void saveWorkspaceState(workspace)
+      persistWorkspace(workspace)
       if (!activeFileChanged || nextFile === null) return
 
       try {
@@ -938,42 +1143,46 @@ export function useProjectSession() {
         )
       }
     },
-    [saveActiveDocument]
+    [persistWorkspace, saveActiveDocument]
   )
 
   const selectRoot = useCallback(
-    (path: string) => {
+    (path: ProjectRelativePath) => {
       setState((current) => {
         if (current.status !== "workspace") return current
         const workspace = { ...current.session.workspace, selectedRoot: path }
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         return {
           ...current,
           session: { ...current.session, workspace },
         }
       })
-      void openFile(path, false)
+      runDetached(openFile(path, false))
     },
-    [openFile]
+    [openFile, persistWorkspace]
   )
 
   const createProjectEntry = useCallback(
-    async (parentPath: string | null, name: string, directory: boolean) => {
+    async (
+      parentPath: ProjectRelativePath | null,
+      name: string,
+      directory: boolean
+    ): Promise<boolean> => {
       const currentState = stateRef.current
-      if (currentState.status !== "workspace") return
+      if (currentState.status !== "workspace") return false
+      const projectPath = currentState.session.project.path
 
       try {
-        await createProjectEntryRequest(
-          currentState.session.project.path,
+        await createProjectEntryRequest({
+          projectPath,
           parentPath,
           name,
-          directory
-        )
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+          directory,
+        })
+        const project = await openProjectFolder(projectPath)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
@@ -984,42 +1193,50 @@ export function useProjectSession() {
                 },
               }
         )
+        return true
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
                 session: { ...current.session, notice: projectError.message },
               }
         )
+        return false
       }
     },
     []
   )
 
   const renameProjectEntry = useCallback(
-    async (path: string, name: string) => {
-      if (!(await saveActiveDocument())) return
+    async (path: ProjectRelativePath, name: string): Promise<boolean> => {
+      if (!(await saveActiveDocument())) return false
       const currentState = stateRef.current
-      if (currentState.status !== "workspace") return
+      if (currentState.status !== "workspace") return false
+      const projectPath = currentState.session.project.path
 
       const parent = path.includes("/")
         ? path.slice(0, path.lastIndexOf("/"))
         : ""
-      const renamedPath = parent === "" ? name : `${parent}/${name}`
+      const renamedPath = projectRelativePath(
+        parent === "" ? name : `${parent}/${name}`
+      )
       try {
-        await renameProjectEntryRequest(
-          currentState.session.project.path,
-          path,
-          name
-        )
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+        await renameProjectEntryRequest({
+          projectPath,
+          relativePath: path,
+          name,
+        })
+        const project = await openProjectFolder(projectPath)
         setState((current) => {
-          if (current.status !== "workspace") return current
+          if (
+            current.status !== "workspace" ||
+            current.session.project.path !== projectPath
+          )
+            return current
           const workspace = {
             ...current.session.workspace,
             pinnedFiles: current.session.workspace.pinnedFiles.map((file) =>
@@ -1052,7 +1269,11 @@ export function useProjectSession() {
             pdfViewerStates: Object.fromEntries(
               Object.entries(current.session.workspace.pdfViewerStates).map(
                 ([pdfPath, viewerState]) => [
-                  renamedProjectPath(pdfPath, path, renamedPath),
+                  renamedProjectPath(
+                    projectRelativePath(pdfPath),
+                    path,
+                    renamedPath
+                  ),
                   viewerState,
                 ]
               )
@@ -1060,7 +1281,11 @@ export function useProjectSession() {
             editorViewerStates: Object.fromEntries(
               Object.entries(current.session.workspace.editorViewerStates).map(
                 ([sourcePath, viewerState]) => [
-                  renamedProjectPath(sourcePath, path, renamedPath),
+                  renamedProjectPath(
+                    projectRelativePath(sourcePath),
+                    path,
+                    renamedPath
+                  ),
                   viewerState,
                 ]
               )
@@ -1090,7 +1315,7 @@ export function useProjectSession() {
                       renamedPath
                     ),
                   }
-          void saveWorkspaceState(workspace)
+          persistWorkspace(workspace)
           return {
             ...current,
             session: {
@@ -1102,32 +1327,37 @@ export function useProjectSession() {
             },
           }
         })
+        return true
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
                 session: { ...current.session, notice: projectError.message },
               }
         )
+        return false
       }
     },
-    [saveActiveDocument]
+    [persistWorkspace, saveActiveDocument]
   )
 
   const deleteProjectEntry = useCallback(
-    async (path: string) => {
+    async (path: ProjectRelativePath) => {
       if (!(await saveActiveDocument())) return
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
+      const projectPath = currentState.session.project.path
 
       try {
-        await deleteProjectEntryRequest(currentState.session.project.path, path)
-        const project = await openProjectFolder(
-          currentState.session.project.path
-        )
+        await deleteProjectEntryRequest({
+          projectPath,
+          relativePath: path,
+        })
+        const project = await openProjectFolder(projectPath)
         const request = ++documentRequest.current
         const previous = currentState.session.workspace
         const pinnedFiles = previous.pinnedFiles.filter(
@@ -1145,7 +1375,8 @@ export function useProjectSession() {
           selectedRoot,
           editorViewerStates: Object.fromEntries(
             Object.entries(previous.editorViewerStates).filter(
-              ([sourcePath]) => !isProjectPathWithin(sourcePath, path)
+              ([sourcePath]) =>
+                !isProjectPathWithin(projectRelativePath(sourcePath), path)
             )
           ),
           selectedFile: nextFile,
@@ -1154,13 +1385,18 @@ export function useProjectSession() {
             : previous.selectedPdf,
           pdfViewerStates: Object.fromEntries(
             Object.entries(previous.pdfViewerStates).filter(
-              ([pdfPath]) => !isProjectPathWithin(pdfPath, path)
+              ([pdfPath]) =>
+                !isProjectPathWithin(projectRelativePath(pdfPath), path)
             )
           ),
         }
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         setState((current) => {
-          if (current.status !== "workspace") return current
+          if (
+            current.status !== "workspace" ||
+            current.session.project.path !== projectPath
+          )
+            return current
           return {
             ...current,
             session: {
@@ -1183,13 +1419,11 @@ export function useProjectSession() {
         ) {
           return
         }
-        const documentState = await loadEditableDocument(
-          currentState.session.project.path,
-          nextFile
-        )
+        const documentState = await loadEditableDocument(projectPath, nextFile)
         if (request !== documentRequest.current) return
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
@@ -1202,7 +1436,8 @@ export function useProjectSession() {
       } catch (error: unknown) {
         const projectError = projectErrorFromUnknown(error)
         setState((current) =>
-          current.status !== "workspace"
+          current.status !== "workspace" ||
+          current.session.project.path !== projectPath
             ? current
             : {
                 ...current,
@@ -1211,50 +1446,62 @@ export function useProjectSession() {
         )
       }
     },
-    [saveActiveDocument]
+    [persistWorkspace, saveActiveDocument]
   )
 
-  const resizeSidebar = useCallback((width: number, persist: boolean) => {
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      const workspace = {
-        ...current.session.workspace,
-        sidebarWidth: Math.round(width),
-      }
-      if (persist) void saveWorkspaceState(workspace)
-      return {
-        ...current,
-        session: { ...current.session, workspace },
-      }
-    })
-  }, [])
+  const resizeSidebar = useCallback(
+    (width: number, persist: boolean) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = {
+          ...current.session.workspace,
+          sidebarWidth: Math.round(width),
+        }
+        if (persist) persistWorkspace(workspace)
+        return {
+          ...current,
+          session: { ...current.session, workspace },
+        }
+      })
+    },
+    [persistWorkspace]
+  )
 
-  const setEditorFontSize = useCallback((fontSize: number) => {
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      const workspace = {
-        ...current.session.workspace,
-        editorFontSize: Math.max(11, Math.min(24, fontSize)),
-      }
-      void saveWorkspaceState(workspace)
-      return {
-        ...current,
-        session: { ...current.session, workspace },
-      }
-    })
-  }, [])
+  const setEditorFontSize = useCallback(
+    (fontSize: number) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = {
+          ...current.session.workspace,
+          editorFontSize: Math.max(11, Math.min(24, fontSize)),
+        }
+        persistWorkspace(workspace)
+        return {
+          ...current,
+          session: { ...current.session, workspace },
+        }
+      })
+    },
+    [persistWorkspace]
+  )
 
-  const openPdf = useCallback((path: string) => {
-    setState((current) => {
-      if (current.status !== "workspace") return current
-      const workspace = { ...current.session.workspace, selectedPdf: path }
-      void saveWorkspaceState(workspace)
-      return { ...current, session: { ...current.session, workspace } }
-    })
-  }, [])
+  const openPdf = useCallback(
+    (path: ProjectRelativePath) => {
+      setState((current) => {
+        if (current.status !== "workspace") return current
+        const workspace = { ...current.session.workspace, selectedPdf: path }
+        persistWorkspace(workspace)
+        return { ...current, session: { ...current.session, workspace } }
+      })
+    },
+    [persistWorkspace]
+  )
 
   const updatePdfViewerState = useCallback(
-    (path: string, viewerState: WorkspaceState["pdfViewerStates"][string]) => {
+    (
+      path: ProjectRelativePath,
+      viewerState: WorkspaceState["pdfViewerStates"][string]
+    ) => {
       setState((current) => {
         if (current.status !== "workspace") return current
         const workspace = {
@@ -1264,16 +1511,16 @@ export function useProjectSession() {
             [path]: viewerState,
           },
         }
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         return { ...current, session: { ...current.session, workspace } }
       })
     },
-    []
+    [persistWorkspace]
   )
 
   const updateEditorViewerState = useCallback(
     (
-      path: string,
+      path: ProjectRelativePath,
       viewerState: WorkspaceState["editorViewerStates"][string]
     ) => {
       setState((current) => {
@@ -1285,11 +1532,11 @@ export function useProjectSession() {
             [path]: viewerState,
           },
         }
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         return { ...current, session: { ...current.session, workspace } }
       })
     },
-    []
+    [persistWorkspace]
   )
 
   const updateWorkspaceView = useCallback(
@@ -1310,11 +1557,11 @@ export function useProjectSession() {
       setState((current) => {
         if (current.status !== "workspace") return current
         const workspace = { ...current.session.workspace, ...update }
-        void saveWorkspaceState(workspace)
+        persistWorkspace(workspace)
         return { ...current, session: { ...current.session, workspace } }
       })
     },
-    []
+    [persistWorkspace]
   )
 
   const refreshActiveDocument = useCallback(async () => {
@@ -1334,6 +1581,7 @@ export function useProjectSession() {
       )
       setState((value) =>
         value.status !== "workspace" ||
+        value.session.project.path !== current.session.project.path ||
         value.session.documentState.status !== "ready" ||
         value.session.documentState.document.path !== path ||
         value.session.documentState.saveState.status !== "saved"
@@ -1351,12 +1599,15 @@ export function useProjectSession() {
   const refreshProjectFiles = useCallback(async () => {
     const current = stateRef.current
     if (current.status !== "workspace") return
+    const request = ++projectRefreshRequest.current
+    const projectPath = current.session.project.path
 
     try {
-      const project = await openProjectFolder(current.session.project.path)
+      const project = await openProjectFolder(projectPath)
+      if (request !== projectRefreshRequest.current) return
       setState((value) =>
         value.status !== "workspace" ||
-        value.session.project.path !== current.session.project.path
+        value.session.project.path !== projectPath
           ? value
           : {
               ...value,
@@ -1366,11 +1617,14 @@ export function useProjectSession() {
     } catch {
       // A transient external filesystem change must not disturb the current workspace.
     }
+    if (request !== projectRefreshRequest.current) return
     await refreshActiveDocument()
   }, [refreshActiveDocument])
 
   const returnHome = useCallback(async () => {
     if (!(await saveActionRef.current())) return
+    projectRequest.current += 1
+    documentRequest.current += 1
     try {
       const startup = await loadStartupState()
       setState({

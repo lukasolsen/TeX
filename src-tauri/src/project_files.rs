@@ -4,6 +4,10 @@ use std::{
 };
 
 use serde::Serialize;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+use crate::project_access::ProjectAccess;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,8 +23,9 @@ pub fn create_project_entry(
     parent_path: Option<String>,
     name: String,
     directory: bool,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let parent = resolve_directory(&root, parent_path.as_deref())?;
     create_entry(&root, &parent, &name, directory)
 }
@@ -31,14 +36,10 @@ fn create_entry(
     name: &str,
     directory: bool,
 ) -> Result<(), ProjectFileError> {
-    let relative = entry_path(name)?;
-    let target = parent.join(relative);
-    let target_parent = target.parent().ok_or_else(invalid)?;
-    fs::create_dir_all(target_parent).map_err(|_| unavailable())?;
-    let verified_parent = target_parent.canonicalize().map_err(|_| unavailable())?;
-    if !verified_parent.is_dir() || !verified_parent.starts_with(root) {
-        return Err(invalid());
-    }
+    let components = entry_path(name)?;
+    let (entry_name, parent_components) = components.split_last().ok_or_else(invalid)?;
+    let parent = create_parent_directories(root, parent, parent_components)?;
+    let target = parent.join(entry_name);
 
     if directory {
         fs::create_dir(&target)
@@ -52,49 +53,108 @@ fn create_entry(
     .map_err(|_| unavailable())
 }
 
+fn create_parent_directories(
+    root: &Path,
+    parent: &Path,
+    components: &[&str],
+) -> Result<PathBuf, ProjectFileError> {
+    let mut current = verified_directory(root, parent)?;
+
+    for component in components {
+        current.push(component);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) => {
+                if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                    return Err(invalid());
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                fs::create_dir(&current).map_err(|_| unavailable())?;
+            }
+            Err(_) => return Err(unavailable()),
+        }
+        current = verified_directory(root, &current)?;
+    }
+
+    Ok(current)
+}
+
+fn verified_directory(root: &Path, directory: &Path) -> Result<PathBuf, ProjectFileError> {
+    let verified = directory.canonicalize().map_err(|_| unavailable())?;
+    if verified != directory || !verified.is_dir() || !verified.starts_with(root) {
+        return Err(invalid());
+    }
+    Ok(verified)
+}
+
 /// Renames an existing project entry without allowing it to leave the project root.
 #[tauri::command]
 pub fn rename_project_entry(
     project_path: String,
     relative_path: String,
     name: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
-    let source = resolve_entry(&root, &relative_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
+    rename_entry(&root, &relative_path, &name)
+}
+
+fn rename_entry(root: &Path, relative_path: &str, name: &str) -> Result<(), ProjectFileError> {
+    let source = resolve_entry(root, relative_path)?;
     let parent = source.parent().ok_or_else(unavailable)?.to_path_buf();
-    let target = parent.join(entry_name(&name)?);
-    if target.exists() {
-        return Err(unavailable());
-    }
-    fs::rename(source, target).map_err(|_| unavailable())
+    let target = parent.join(entry_name(name)?);
+    renamore::rename_exclusive(source, target).map_err(|_| unavailable())
 }
 
 /// Deletes an explicitly selected project file or directory.
 #[tauri::command]
-pub fn delete_project_entry(
+pub async fn delete_project_entry(
+    app: AppHandle,
     project_path: String,
     relative_path: String,
+    access: State<'_, ProjectAccess>,
 ) -> Result<(), ProjectFileError> {
-    let root = project_root(&project_path)?;
+    let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let target = resolve_entry(&root, &relative_path)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable())?;
-    if metadata.is_dir() {
+    let entry_kind = if metadata.is_dir() { "folder" } else { "file" };
+    let (approval_sender, mut approval_receiver) = tauri::async_runtime::channel(1);
+    app
+        .dialog()
+        .message(format!(
+            "Permanently delete this {entry_kind} from the project?\n\n{relative_path}\n\nThis operation cannot be undone."
+        ))
+        .title(format!("Delete project {entry_kind}"))
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            format!("Delete {entry_kind}"),
+            "Cancel".to_owned(),
+        ))
+        .show(move |approved| {
+            let _ = approval_sender.blocking_send(approved);
+        });
+    let approved = approval_receiver
+        .recv()
+        .await
+        .is_some_and(|approved| approved);
+    if !approved {
+        return Err(ProjectFileError {
+            code: "project-delete-cancelled",
+            message: "The project entry was not deleted.",
+        });
+    }
+    tauri::async_runtime::spawn_blocking(move || delete_entry(target))
+        .await
+        .map_err(|_| unavailable())?
+}
+
+fn delete_entry(target: PathBuf) -> Result<(), ProjectFileError> {
+    if target.is_dir() {
         fs::remove_dir_all(target)
     } else {
         fs::remove_file(target)
     }
     .map_err(|_| unavailable())
-}
-
-fn project_root(project_path: &str) -> Result<PathBuf, ProjectFileError> {
-    let root = Path::new(project_path)
-        .canonicalize()
-        .map_err(|_| unavailable())?;
-    if root.is_dir() {
-        Ok(root)
-    } else {
-        Err(unavailable())
-    }
 }
 
 fn resolve_entry(root: &Path, relative: &str) -> Result<PathBuf, ProjectFileError> {
@@ -110,12 +170,31 @@ fn resolve_entry(root: &Path, relative: &str) -> Result<PathBuf, ProjectFileErro
     {
         return Err(invalid());
     }
+    reject_symlink_components(root, relative)?;
     let path = root.join(relative).canonicalize().map_err(|_| invalid())?;
     if path.starts_with(root) {
         Ok(path)
     } else {
         Err(invalid())
     }
+}
+
+fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), ProjectFileError> {
+    let mut candidate = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(component) = component else {
+            return Err(invalid());
+        };
+        candidate.push(component);
+        if fs::symlink_metadata(&candidate)
+            .map_err(|_| invalid())?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(invalid());
+        }
+    }
+    Ok(())
 }
 
 fn resolve_directory(root: &Path, relative: Option<&str>) -> Result<PathBuf, ProjectFileError> {
@@ -138,18 +217,25 @@ fn entry_name(name: &str) -> Result<&str, ProjectFileError> {
     }
 }
 
-fn entry_path(name: &str) -> Result<&Path, ProjectFileError> {
-    let path = Path::new(name);
-    if name.contains('\\')
-        || path.as_os_str().is_empty()
-        || path.is_absolute()
-        || path
-            .components()
-            .any(|component| !matches!(component, std::path::Component::Normal(_)))
-    {
+fn entry_path(name: &str) -> Result<Vec<&str>, ProjectFileError> {
+    if name.is_empty() || name.contains('\\') {
+        return Err(invalid());
+    }
+
+    let components = name.split('/').collect::<Vec<_>>();
+    if components.iter().any(|component| {
+        component.is_empty()
+            || *component == "."
+            || *component == ".."
+            || !matches!(
+                Path::new(component).components().next(),
+                Some(std::path::Component::Normal(_))
+            )
+            || Path::new(component).components().nth(1).is_some()
+    }) {
         Err(invalid())
     } else {
-        Ok(path)
+        Ok(components)
     }
 }
 
@@ -173,7 +259,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{create_entry, entry_name, entry_path, rename_project_entry, resolve_entry};
+    use super::{create_entry, delete_entry, entry_name, rename_entry, resolve_entry};
 
     fn temporary_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -183,25 +269,52 @@ mod tests {
     }
 
     #[test]
-    fn rejects_path_like_entry_names() {
+    fn rejects_path_like_rename_names() {
         assert!(entry_name("../outside.tex").is_err());
         assert!(entry_name("chapter/main.tex").is_err());
         assert!(entry_name("main.tex").is_ok());
     }
 
     #[test]
-    fn accepts_nested_entry_paths_without_traversal() {
-        assert!(entry_path("chapters/intro.tex").is_ok());
-        assert!(entry_path("../outside.tex").is_err());
-        assert!(entry_path("chapters/../outside.tex").is_err());
-        assert!(entry_path("/outside.tex").is_err());
+    fn creates_a_direct_child() -> Result<(), Box<dyn std::error::Error>> {
+        let directory = temporary_directory()?;
+        assert!(create_entry(&directory, &directory, "intro.tex", false).is_ok());
+        assert!(directory.join("intro.tex").is_file());
+        fs::remove_dir_all(directory)?;
+        Ok(())
     }
 
     #[test]
-    fn creates_missing_directories_for_nested_file() -> Result<(), Box<dyn std::error::Error>> {
+    fn creates_nested_file_and_missing_parent_directories() -> Result<(), Box<dyn std::error::Error>>
+    {
         let directory = temporary_directory()?;
-        assert!(create_entry(&directory, &directory, "chapters/intro.tex", false).is_ok());
-        assert!(directory.join("chapters/intro.tex").is_file());
+
+        assert!(create_entry(
+            &directory,
+            &directory,
+            "testing/large_tasks/hello.txt",
+            false
+        )
+        .is_ok());
+        assert!(directory.join("testing/large_tasks/hello.txt").is_file());
+        assert!(create_entry(&directory, &directory, "testing/a_major_file", false).is_ok());
+        assert!(directory.join("testing/a_major_file").is_file());
+        assert!(create_entry(&directory, &directory, "other/new_folder", true).is_ok());
+        assert!(directory.join("other/new_folder").is_dir());
+
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_creation_paths_that_escape_or_are_ambiguous(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let directory = temporary_directory()?;
+
+        assert!(create_entry(&directory, &directory, "../outside.tex", false).is_err());
+        assert!(create_entry(&directory, &directory, "chapter//main.tex", false).is_err());
+        assert!(create_entry(&directory, &directory, "chapter\\main.tex", false).is_err());
+
         fs::remove_dir_all(directory)?;
         Ok(())
     }
@@ -220,14 +333,46 @@ mod tests {
         fs::write(directory.join("first.tex"), "first")?;
         fs::write(directory.join("second.tex"), "second")?;
 
-        let result = rename_project_entry(
-            directory.to_string_lossy().into_owned(),
-            "first.tex".to_owned(),
-            "second.tex".to_owned(),
-        );
+        let result = rename_entry(&directory, "first.tex", "second.tex");
 
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(directory.join("second.tex"))?, "second");
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn deletes_a_directory_tree_without_leaving_entries() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = temporary_directory()?;
+        let generated = directory.join("tmp");
+        fs::create_dir_all(generated.join("support/templates"))?;
+        fs::write(generated.join("support/templates/main.tex"), "generated")?;
+        fs::write(generated.join("output.pdf"), "generated")?;
+
+        assert!(delete_entry(generated).is_ok());
+
+        assert!(!directory.join("tmp").exists());
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_a_symlink_entry_instead_of_deleting_its_target(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::symlink;
+
+        let directory = temporary_directory()?;
+        fs::create_dir(directory.join("target"))?;
+        fs::write(directory.join("target/keep.tex"), "keep")?;
+        symlink(directory.join("target"), directory.join("linked"))?;
+
+        assert!(resolve_entry(&directory, "linked").is_err());
+        assert_eq!(
+            fs::read_to_string(directory.join("target/keep.tex"))?,
+            "keep"
+        );
         fs::remove_dir_all(directory)?;
         Ok(())
     }

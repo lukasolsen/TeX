@@ -1,11 +1,14 @@
 #![forbid(unsafe_code)]
 
+mod bounded_io;
 mod build_operations;
 mod build_system;
 #[cfg(test)]
 mod latex_fixtures;
 mod pdf_read;
 mod persistence;
+mod process_support;
+mod project_access;
 mod project_config;
 mod project_files;
 mod project_open;
@@ -16,14 +19,20 @@ mod source_edit;
 mod source_read;
 mod synctex;
 mod watch_system;
+mod window_management;
 
 use tauri_plugin_log::{Target, TargetKind};
 
 /// Starts the desktop application and registers its validated local capabilities.
+#[allow(
+    clippy::expect_used,
+    reason = "application bootstrap has no caller or recoverable UI after the event loop fails"
+)]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
+        .manage(project_access::ProjectAccess::default())
         .manage(watch_system::WatchController::default())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -34,8 +43,11 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| Ok(window_management::create_main_window(app.handle())?))
         .invoke_handler(tauri::generate_handler![
             readiness::phase_zero_readiness,
+            window_management::create_new_window,
+            project_open::choose_project_folder,
             project_open::open_project,
             project_files::create_project_entry,
             project_files::rename_project_entry,
@@ -68,6 +80,7 @@ pub fn run() {
             watch_system::start_project_watch,
             watch_system::stop_project_watch,
             watch_system::get_project_watch_status,
+            watch_system::acknowledge_project_watch_build,
             watch_system::start_project_tree_watch,
             watch_system::stop_project_tree_watch,
             synctex::synctex_forward_search,
