@@ -131,8 +131,8 @@ export const commandsMath = {
   underbrace: command("underbrace", "Draws a brace below an expression; attach an annotation with a subscript.\n\n```latex\n\\underbrace{a+b}_{\\text{sum}}\n```"),
   underset: command("underset", "Places one math expression below another. It is provided by `amsmath`."),
   vec: command("vec", "Places a vector arrow over a short math atom. Use a bold-vector convention consistently across the document."),
-  widehat: command("widehat", "Places a wide hat over a multi-character expression. It is provided by `amsmath`."),
-  widetilde: command("widetilde", "Places a wide tilde over a multi-character expression. It is provided by `amsmath`."),
+  widehat: command("widehat", "Places a wide hat over a multi-character expression."),
+  widetilde: command("widetilde", "Places a wide tilde over a multi-character expression."),
   xleftarrow: command("xleftarrow", "Creates an extensible left arrow with an annotation. It is provided by `amsmath`.\n\n```latex\nA \\xleftarrow{f} B\n```"),
   xrightarrow: command("xrightarrow", "Creates an extensible right arrow with an annotation. It is provided by `amsmath`.\n\n```latex\nA \\xrightarrow{f} B\n```"),
 } as const satisfies Readonly<Record<string, LatexDocumentation>>

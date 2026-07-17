@@ -151,6 +151,15 @@ describe("LaTeX documentation catalog", () => {
     }
   })
 
+  it("identifies wide math accents as core LaTeX commands", () => {
+    expect(commandDocumentation("widehat")?.markdown).toBe(
+      "Places a wide hat over a multi-character expression."
+    )
+    expect(commandDocumentation("widetilde")?.markdown).toBe(
+      "Places a wide tilde over a multi-character expression."
+    )
+  })
+
   it("attributes nolinkurl to hyperref", () => {
     const documentation = commandDocumentation("nolinkurl")
 
