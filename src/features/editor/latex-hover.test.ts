@@ -45,6 +45,12 @@ describe("LaTeX documentation catalog", () => {
     })
   })
 
+  it("finds documentation for the canonical IEEEtran document class", () => {
+    expect(documentClassDocumentation("IEEEtran")).toMatchObject({
+      title: "IEEEtran",
+    })
+  })
+
   it("documents standard and common document classes", () => {
     for (const name of [
       "article",

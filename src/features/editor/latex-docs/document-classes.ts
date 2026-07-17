@@ -45,6 +45,10 @@ export const documentClasses = {
     "hitec",
     "For proceedings of the HI-TEC conference, using a dedicated two-column proceedings layout.\n\n```latex\n\\documentclass{hitec}\n```\n\nUse this specialized class only for a venue that supplies or requests it, and follow that venue's submission instructions. [hitec on CTAN](https://ctan.org/pkg/hitec)"
   ),
+  IEEEtran: entry(
+    "IEEEtran",
+    "For IEEE conference and journal papers, providing IEEE title blocks, author formatting, and publication layouts.\n\n```latex\n\\documentclass[conference]{IEEEtran}\n```\n\nClass names are case-sensitive in the source: use `IEEEtran`; select the required journal or conference option and follow IEEE's current author guidance. [IEEEtran on CTAN](https://ctan.org/pkg/ieeetran)"
+  ),
   ieeetran: entry(
     "ieeetran",
     "For IEEE conference and journal papers, providing IEEE title blocks, author formatting, and publication layouts.\n\n```latex\n\\documentclass[conference]{IEEEtran}\n```\n\nClass names are case-sensitive in the source: use `IEEEtran`; select the required journal or conference option and follow IEEE's current author guidance. [IEEEtran on CTAN](https://ctan.org/pkg/ieeetran)"
