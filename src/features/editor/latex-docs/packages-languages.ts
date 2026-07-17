@@ -26,13 +26,13 @@ export const packagesLanguages = {
     "cfr-lm",
     "Provides extended Latin Modern font support."
   ),
+  "cm-super": entry(
+    "cm-super",
+    "Provides Type 1 versions of Computer Modern fonts.\n\n`cm-super` is a font collection installed by a TeX distribution, not a LaTeX package to load. It supplies font files used by encodings such as T1.\n\n[cm-super on CTAN](https://ctan.org/pkg/cm-super)"
+  ),
   cmap: packageEntry(
     "cmap",
     "Improves character mapping for PDF copy, search, and accessibility."
-  ),
-  "cm-super": packageEntry(
-    "cm-super",
-    "Provides Type 1 versions of Computer Modern fonts."
   ),
   courier: packageEntry("courier", "Selects the Courier typewriter font."),
   dejavu: packageEntry("dejavu", "Provides DejaVu font-family support."),

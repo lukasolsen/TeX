@@ -48,9 +48,9 @@ export const packagesMath = {
     "diffcoeff",
     "Formats derivatives and differential coefficients consistently."
   ),
-  doublestroke: packageEntry(
+  doublestroke: entry(
     "doublestroke",
-    "Provides double-stroked mathematical symbols."
+    "Provides double-stroked mathematical symbols.\n\nThe `doublestroke` distribution provides `dsfont.sty`; load that package instead:\n\n```latex\n\\usepackage{dsfont}\n```\n\n[doublestroke on CTAN](https://ctan.org/pkg/doublestroke)"
   ),
   dsfont: packageEntry(
     "dsfont",

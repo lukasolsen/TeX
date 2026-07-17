@@ -94,6 +94,30 @@ describe("LaTeX documentation catalog", () => {
     })
   })
 
+  it("uses loadable package names in catalog examples", () => {
+    expect(packageDocumentation("biblatex-apa")?.markdown).toContain(
+      "\\usepackage[style=apa]{biblatex}"
+    )
+    expect(packageDocumentation("biblatex-apa")?.markdown).not.toContain(
+      "\\usepackage{biblatex-apa}"
+    )
+    expect(packageDocumentation("biblatex-ieee")?.markdown).toContain(
+      "\\usepackage[style=ieee]{biblatex}"
+    )
+    expect(packageDocumentation("biblatex-ieee")?.markdown).not.toContain(
+      "\\usepackage{biblatex-ieee}"
+    )
+    expect(packageDocumentation("cm-super")?.markdown).not.toContain(
+      "\\usepackage{cm-super}"
+    )
+    expect(packageDocumentation("doublestroke")?.markdown).toContain(
+      "\\usepackage{dsfont}"
+    )
+    expect(packageDocumentation("doublestroke")?.markdown).not.toContain(
+      "\\usepackage{doublestroke}"
+    )
+  })
+
   it("documents a broad set of everyday packages", () => {
     for (const name of [
       "enumitem",

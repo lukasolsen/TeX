@@ -130,11 +130,11 @@ export const packagesCore = {
     "mwe",
     "Supplies example images and test material for document demonstrations."
   ),
-  pdfpages: packageEntry("pdfpages", "Includes pages from external PDF files."),
   pdflscape: packageEntry(
     "pdflscape",
     "Adds landscape pages with PDF rotation metadata."
   ),
+  pdfpages: packageEntry("pdfpages", "Includes pages from external PDF files."),
   rotating: packageEntry(
     "rotating",
     "Rotates floats, figures, tables, and other content."

@@ -28,17 +28,17 @@ export const packagesBibliography = {
     "Provides a modern bibliography and citation interface, commonly with Biber.",
     "\n\nUse `\\addbibresource` and `\\printbibliography`; do not combine it with `natbib`."
   ),
-  "biblatex-apa": packageEntry(
+  "biblatex-apa": entry(
     "biblatex-apa",
-    "Supplies APA citation and bibliography styles for `biblatex`."
+    "Supplies APA citation and bibliography styles for `biblatex`.\n\nLoad the style through `biblatex`:\n\n```latex\n\\usepackage[style=apa]{biblatex}\n```\n\n[biblatex-apa on CTAN](https://ctan.org/pkg/biblatex-apa)"
   ),
   "biblatex-chicago": packageEntry(
     "biblatex-chicago",
     "Supplies Chicago-style citation and bibliography styles for `biblatex`."
   ),
-  "biblatex-ieee": packageEntry(
+  "biblatex-ieee": entry(
     "biblatex-ieee",
-    "Supplies IEEE bibliography styles for `biblatex`."
+    "Supplies IEEE bibliography styles for `biblatex`.\n\nLoad the style through `biblatex`:\n\n```latex\n\\usepackage[style=ieee]{biblatex}\n```\n\n[biblatex-ieee on CTAN](https://ctan.org/pkg/biblatex-ieee)"
   ),
   chapterbib: packageEntry(
     "chapterbib",
