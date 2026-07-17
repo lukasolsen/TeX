@@ -160,6 +160,11 @@ pub fn replace_project_sources(
             .join(&expected.path)
             .canonicalize()
             .map_err(|_| unavailable())?;
+        // Re-assert containment: canonicalize follows symlinks, so a component
+        // swapped between the read above and this write must not escape the root.
+        if !absolute_path.starts_with(&root) {
+            return Err(unavailable());
+        }
         pending.push(PendingReplacement {
             relative_path: expected.path,
             absolute_path,
@@ -245,6 +250,9 @@ pub fn undo_project_replace(
             .join(&backup.path)
             .canonicalize()
             .map_err(|_| unavailable())?;
+        if !absolute.starts_with(&root) {
+            return Err(unavailable());
+        }
         targets.push((absolute, backup, document.content));
     }
     if let Err(failure) = apply_write_set(
