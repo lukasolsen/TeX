@@ -1,10 +1,14 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it } from "vitest"
 
 import type { LatexCompletionItem } from "@/domain/latex-completion"
 import {
   isLatexCompletionContext,
+  latexCompletionKindIcon,
   latexCompletionKindLabel,
   latexCompletionOption,
+  latexCompletionRowBadge,
   latexCompletionSourceSummary,
   latexInsertionPreview,
 } from "@/features/editor/latex-completion"
@@ -86,6 +90,58 @@ describe("LaTeX completion presentation", () => {
     expect(
       latexInsertionPreview("\\begin{figure}\n  \\caption{${caption}}\n\\end{figure}")
     ).toContain("\\caption{caption}")
+  })
+
+  it("renders a per-kind icon labelled with the kind", () => {
+    for (const [kind, label] of [
+      ["command", "Command"],
+      ["environment", "Environment"],
+      ["snippet", "Template"],
+      ["label", "Label"],
+      ["citation", "Citation"],
+      ["file", "File"],
+    ] as const) {
+      const icon = latexCompletionKindIcon(kind)
+      expect(icon).not.toBeNull()
+      expect(icon?.tagName.toLowerCase()).toBe("svg")
+      expect(icon?.classList.contains(`tex-completion-icon-${kind}`)).toBe(true)
+      expect(icon?.getAttribute("aria-label")).toBe(label)
+    }
+  })
+
+  it("returns no icon for an unknown kind", () => {
+    expect(latexCompletionKindIcon("gremlin")).toBeNull()
+  })
+
+  it("shows an icon on each completion row instead of a text badge", () => {
+    const node = latexCompletionRowBadge.render({ label: "\\ref", type: "label" })
+    expect(node).not.toBeNull()
+    const el = node as Element
+    expect(el.tagName.toLowerCase()).toBe("svg")
+    expect(el.classList.contains("tex-completion-icon")).toBe(true)
+    // The kind is now an icon, not the old text-badge span.
+    expect(el.classList.contains("tex-completion-kind")).toBe(false)
+    expect(el.getAttribute("aria-label")).toBe("Label")
+    expect(latexCompletionRowBadge.render({ label: "x", type: "gremlin" })).toBeNull()
+  })
+
+  it("puts the kind icon in the info card meta row", () => {
+    const item: LatexCompletionItem = {
+      label: "sec:intro",
+      detail: "Cross-reference label.",
+      kind: "label",
+      provenance: "project",
+      requires: null,
+      from: 5,
+      to: 8,
+      insertText: "sec:intro",
+      source: "intro.tex",
+    }
+    const info = latexCompletionOption(item, 0).info
+    const node = typeof info === "function" ? info(item as never) : null
+    const card = node instanceof Node ? (node as HTMLElement) : null
+    expect(card?.querySelector(".tex-completion-icon-label")).not.toBeNull()
+    expect(card?.textContent).toContain("Defined in intro.tex")
   })
 
   it("maps a backend item to a boosted, typed option", () => {

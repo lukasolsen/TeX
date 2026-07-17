@@ -58,6 +58,72 @@ export function latexCompletionKindLabel(kind: string): string | null {
     : null
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg"
+
+/**
+ * A per-kind glyph in the VS Code style (lucide-consistent 24×24 strokes),
+ * colored through the `--completion-icon-*` theme tokens via `currentColor`.
+ */
+const ICON_SHAPES: Record<
+  LatexCompletionKind,
+  ReadonlyArray<readonly [string, Readonly<Record<string, string>>]>
+> = {
+  command: [["path", { d: "M9 5 15 19" }]],
+  environment: [
+    ["path", { d: "M9 4c-2 0-2 2-2 3.5S6 11 5 11c1 0 2 1 2 3.5S7 20 9 20" }],
+    ["path", { d: "M15 4c2 0 2 2 2 3.5S18 11 19 11c-1 0-2 1-2 3.5S17 20 15 20" }],
+  ],
+  snippet: [
+    ["path", { d: "M9 8 5 12l4 4" }],
+    ["path", { d: "M15 8l4 4-4 4" }],
+  ],
+  label: [
+    ["path", { d: "M3 7.5A1.5 1.5 0 0 1 4.5 6H12l8 6-8 6H4.5A1.5 1.5 0 0 1 3 16.5z" }],
+    ["circle", { cx: "7", cy: "12", r: "1.4", fill: "currentColor", stroke: "none" }],
+  ],
+  citation: [
+    ["path", { d: "M9 7C6.5 8 5 10 5 13v4h5v-6H7c0-2 1-3 3-3.6z" }],
+    ["path", { d: "M19 7c-2.5 1-4 3-4 6v4h5v-6h-3c0-2 1-3 3-3.6z" }],
+  ],
+  file: [
+    ["path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }],
+    ["path", { d: "M14 3v5h5" }],
+    ["path", { d: "M9 13h6" }],
+    ["path", { d: "M9 16h4" }],
+  ],
+}
+
+/**
+ * The VS Code-style icon for a completion kind, or `null` for an unrecognized
+ * value. The glyph is announced to assistive tech with the kind's plain name.
+ */
+export function latexCompletionKindIcon(kind: string): SVGSVGElement | null {
+  if (!Object.hasOwn(ICON_SHAPES, kind)) return null
+  const typed = kind as LatexCompletionKind
+  const label = latexCompletionKindLabel(typed) ?? typed
+  const svg = document.createElementNS(SVG_NS, "svg")
+  svg.setAttribute("class", `tex-completion-icon tex-completion-icon-${typed}`)
+  svg.setAttribute("viewBox", "0 0 24 24")
+  svg.setAttribute("fill", "none")
+  svg.setAttribute("stroke", "currentColor")
+  svg.setAttribute("stroke-width", "2")
+  svg.setAttribute("stroke-linecap", "round")
+  svg.setAttribute("stroke-linejoin", "round")
+  svg.setAttribute("role", "img")
+  svg.setAttribute("aria-label", label)
+  const title = document.createElementNS(SVG_NS, "title")
+  title.textContent = label
+  svg.append(title)
+  for (const [tag, attrs] of ICON_SHAPES[typed]) {
+    const shape = document.createElementNS(SVG_NS, tag)
+    for (const [name, value] of Object.entries(attrs)) {
+      shape.setAttribute(name, value)
+    }
+    svg.append(shape)
+  }
+  return svg
+}
+
 /** A sentence explaining where a suggestion comes from, avoiding LaTeX jargon. */
 export function latexCompletionSourceSummary(
   item: Pick<LatexCompletionItem, "provenance" | "requires"> & {
@@ -93,13 +159,12 @@ function renderInfo(item: LatexCompletionItem): Node {
 
   const meta = document.createElement("div")
   meta.className = "tex-completion-meta"
-  const kind = document.createElement("span")
-  kind.className = `tex-completion-kind tex-completion-kind-${item.kind}`
-  kind.textContent = latexCompletionKindLabel(item.kind) ?? ""
+  const icon = latexCompletionKindIcon(item.kind)
   const provenance = document.createElement("span")
   provenance.className = "tex-completion-provenance"
   provenance.textContent = latexCompletionSourceSummary(item)
-  meta.append(kind, provenance)
+  if (icon) meta.append(icon, provenance)
+  else meta.append(provenance)
 
   const description = document.createElement("p")
   description.className = "tex-completion-description"
@@ -143,17 +208,12 @@ export function latexCompletionOption(
 }
 
 /**
- * Adds a plain-language kind badge to each completion row so newcomers can tell a
- * command from an environment or a template without decoding an icon.
+ * Leads each completion row with a per-kind icon in the VS Code style, so the
+ * kind reads at a glance; the glyph is labelled for assistive tech.
  */
 export const latexCompletionRowBadge = {
   render(completion: Completion): Node | null {
-    const label = latexCompletionKindLabel(completion.type ?? "")
-    if (label === null) return null
-    const badge = document.createElement("span")
-    badge.className = `tex-completion-kind tex-completion-kind-${completion.type}`
-    badge.textContent = label
-    return badge
+    return latexCompletionKindIcon(completion.type ?? "")
   },
   position: 10,
 }
