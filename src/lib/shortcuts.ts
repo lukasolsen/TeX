@@ -1,7 +1,12 @@
 export type ShortcutPlatform = "macos" | "other"
 
 export type ShortcutKey =
-  "primary" | "shift" | "alt" | "enter" | "backspace" | string
+  | "primary"
+  | "shift"
+  | "alt"
+  | "enter"
+  | "backspace"
+  | string
 
 export function shortcutPlatform(
   platform = typeof navigator === "undefined" ? "" : navigator.platform,

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react"
+import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import type { ReactElement } from "react"
 import type { WorkspaceFocus } from "@/domain/project"
 
@@ -9,6 +9,7 @@ import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
 import { runDetached } from "@/lib/promises"
 import { WindowChrome } from "@/components/window-chrome/window-chrome"
+import { createNewWindow } from "@/services/project-service"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -49,6 +50,24 @@ export default function App(): ReactElement {
     updateEditorViewerState,
     updateWorkspaceView,
   } = useProjectSession()
+  const openNewWindow = useCallback(() => {
+    runDetached(createNewWindow())
+  }, [])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        (event.ctrlKey || event.metaKey) &&
+        event.shiftKey &&
+        event.key.toLowerCase() === "n"
+      ) {
+        event.preventDefault()
+        openNewWindow()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [openNewWindow])
 
   let content: ReactElement
   let onReturnHome: (() => void) | null = null
@@ -133,6 +152,7 @@ export default function App(): ReactElement {
   return (
     <div className="flex h-svh min-h-0 flex-col overflow-hidden">
       <WindowChrome
+        onNewWindow={openNewWindow}
         onOpenProject={
           applicationReady ? chooseAndOpenProject : null
         }

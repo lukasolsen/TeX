@@ -20,6 +20,11 @@ const unexpectedProjectError: ProjectError = {
     "TeX could not complete that project action. Your project files were not changed.",
 }
 
+/** Opens an independent project-home window without changing the current workspace. */
+export async function createNewWindow(): Promise<void> {
+  return invoke("create_new_window")
+}
+
 export async function chooseProjectFolder(): Promise<string | null> {
   return open({
     directory: true,

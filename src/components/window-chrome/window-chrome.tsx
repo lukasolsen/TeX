@@ -6,11 +6,13 @@ import { useEffect, useState } from "react"
 import type { MouseEvent, ReactElement, ReactNode } from "react"
 
 import { runDetached } from "@/lib/promises"
+import { shortcutLabel } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
 
 import { windowChromeMode, windowMenuLabels } from "./window-chrome-model"
 
 type WindowChromeProps = Readonly<{
+  onNewWindow: () => void
   onOpenProject: (() => void) | null
   onOpenSettings: (() => void) | null
   onReturnHome: (() => void) | null
@@ -18,6 +20,7 @@ type WindowChromeProps = Readonly<{
 
 /** Compact desktop window chrome with platform-appropriate controls. */
 export function WindowChrome({
+  onNewWindow,
   onOpenProject,
   onOpenSettings,
   onReturnHome,
@@ -77,6 +80,7 @@ export function WindowChrome({
             <WindowMenu key={label} label={label}>
               <WindowMenuContent
                 label={label}
+                onNewWindow={onNewWindow}
                 onOpenProject={onOpenProject}
                 onOpenSettings={onOpenSettings}
                 onReturnHome={onReturnHome}
@@ -144,6 +148,7 @@ function WindowMenu({
 
 function WindowMenuContent({
   label,
+  onNewWindow,
   onOpenProject,
   onOpenSettings,
   onReturnHome,
@@ -151,6 +156,9 @@ function WindowMenuContent({
   if (label === "File") {
     return (
       <>
+        <WindowMenuItem onClick={onNewWindow} shortcut={shortcutLabel(["primary", "shift", "n"])}>
+          New Window
+        </WindowMenuItem>
         {onOpenProject !== null ? (
           <WindowMenuItem onClick={onOpenProject}>Open project</WindowMenuItem>
         ) : null}
@@ -209,16 +217,23 @@ function MenuInfo({ message }: { message: string }): ReactElement {
 function WindowMenuItem({
   children,
   onClick,
+  shortcut,
 }: {
   children: string
   onClick: () => void
+  shortcut?: string
 }): ReactElement {
   return (
     <Menu.Item
-      className="flex cursor-default items-center rounded-sm px-2 py-1.5 outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+      className="flex cursor-default items-center gap-6 rounded-sm px-2 py-1.5 outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
       onClick={onClick}
     >
       {children}
+      {shortcut !== undefined ? (
+        <span className="ml-auto text-xs text-muted-foreground data-highlighted:text-inherit">
+          {shortcut}
+        </span>
+      ) : null}
     </Menu.Item>
   )
 }
