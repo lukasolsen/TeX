@@ -22,6 +22,13 @@ pub struct SourceEditError {
     pub message: &'static str,
 }
 
+/// Upper bound for a serialized recovery draft. The draft content is itself
+/// capped at `MAX_SOURCE_BYTES`, but JSON escaping can expand each byte up to
+/// sixfold (control characters become `\uXXXX`), so the envelope is sized to that
+/// worst case plus metadata. Save and load share this bound so a draft that was
+/// written can always be read back.
+const MAX_DRAFT_BYTES: u64 = MAX_SOURCE_BYTES * 6 + 64 * 1024;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RecoveryDraft {
@@ -91,6 +98,9 @@ pub fn save_recovery_draft(
         saved_at: now_millis(),
     };
     let encoded = serde_json::to_vec(&draft).map_err(|_| unavailable())?;
+    if encoded.len() as u64 > MAX_DRAFT_BYTES {
+        return Err(too_large());
+    }
     let path = recovery_path(&app, &draft.project_path, &draft.relative_path)?;
     atomic_write(&path, &encoded)
 }
@@ -106,7 +116,7 @@ pub fn load_recovery_draft(
     resolve_source_path(&root, Path::new(&relative_path)).map_err(|_| unavailable())?;
     let canonical_project_path = root.to_string_lossy().into_owned();
     let path = recovery_path(&app, &canonical_project_path, &relative_path)?;
-    let encoded = match bounded_io::read(&path, MAX_SOURCE_BYTES.saturating_add(16 * 1024)) {
+    let encoded = match bounded_io::read(&path, MAX_DRAFT_BYTES) {
         Ok(encoded) => encoded,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => return Err(unavailable()),
