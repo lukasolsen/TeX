@@ -139,7 +139,7 @@ export function SettingsPage({
     : sections.filter((section) => section.id === activeSection)
 
   return (
-    <main className="h-svh overflow-y-auto bg-home-surface">
+    <main className="h-full overflow-y-auto bg-home-surface">
       <header className="sticky top-0 z-10 border-b bg-workspace-chrome/95 backdrop-blur supports-[backdrop-filter]:bg-workspace-chrome/85">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-5 sm:px-8">
           <Button

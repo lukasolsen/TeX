@@ -44,8 +44,8 @@ export function ProjectHomePage({
     feedback.status === "choosing" || feedback.status === "opening"
 
   return (
-    <main className="grid min-h-svh bg-home-surface md:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <aside className="hidden min-h-svh flex-col border-r bg-home-nav text-home-nav-foreground md:flex">
+    <main className="grid h-full min-h-0 bg-home-surface md:grid-cols-[14.5rem_minmax(0,1fr)]">
+      <aside className="hidden min-h-0 flex-col border-r bg-home-nav text-home-nav-foreground md:flex">
         <div className="flex h-20 items-center px-6">
           <AppBrand />
         </div>
@@ -93,7 +93,7 @@ export function ProjectHomePage({
         </div>
       </aside>
 
-      <div className="min-h-svh min-w-0 overflow-y-auto bg-background">
+      <div className="min-h-0 min-w-0 overflow-y-auto bg-background">
         <div className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14 lg:px-14">
           <header className="flex items-start gap-4">
             <div className="pt-0.5 md:hidden">
