@@ -66,7 +66,7 @@ fn is_escaped(source: &str, position: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{completion_context, environment_labels, query, CompletionContext};
+    use super::{completion_context, query, query_labels, CompletionContext};
 
     #[test]
     fn detects_a_command_prefix_after_an_unescaped_backslash() {
@@ -114,9 +114,9 @@ mod tests {
 
     #[test]
     fn offers_align_only_when_amsmath_is_declared() {
-        assert!(environment_labels("\\begin{ali", 10).is_empty());
+        assert!(query_labels("\\begin{ali", 10).is_empty());
         assert_eq!(
-            environment_labels("\\usepackage{amsmath}\n\\begin{ali", 31),
+            query_labels("\\usepackage{amsmath}\n\\begin{ali", 31),
             vec!["align"]
         );
     }
@@ -125,6 +125,41 @@ mod tests {
     fn proposes_the_nearest_open_environment_when_ending() {
         let source = "\\begin{figure}\n  \\end{fi";
         assert_eq!(query(source, source.len()).items[0].label, "figure");
+    }
+
+    #[test]
+    fn offers_core_structure_snippets_in_a_command_context() {
+        assert!(query_labels("\\enum", 5).contains(&"enumerate environment".to_owned()));
+        assert!(query_labels("\\desc", 5).contains(&"description environment".to_owned()));
+        assert!(query_labels("\\tab", 4).contains(&"table environment".to_owned()));
+    }
+
+    #[test]
+    fn gates_package_snippets_behind_their_prerequisite() {
+        assert!(!query_labels("\\theo", 5).contains(&"theorem environment".to_owned()));
+        let source = "\\usepackage{amsthm}\n\\theo";
+        assert!(query_labels(source, source.len()).contains(&"theorem environment".to_owned()));
+
+        assert!(!query_labels("\\fram", 5).contains(&"frame environment".to_owned()));
+        let beamer = "\\usepackage{beamer}\n\\fram";
+        assert!(query_labels(beamer, beamer.len()).contains(&"frame environment".to_owned()));
+    }
+
+    #[test]
+    fn offers_booktabs_rules_only_when_declared() {
+        assert!(!query_labels("\\topr", 5).contains(&"\\toprule".to_owned()));
+        let source = "\\usepackage{booktabs}\n\\topr";
+        assert!(query_labels(source, source.len()).contains(&"\\toprule".to_owned()));
+    }
+
+    #[test]
+    fn deduplicates_a_redefined_core_command() {
+        let source = "\\renewcommand{\\section}{}\n\\section";
+        let matches = query_labels(source, source.len())
+            .into_iter()
+            .filter(|label| label == "\\section")
+            .count();
+        assert_eq!(matches, 1);
     }
 }
 use std::collections::HashSet;
@@ -161,7 +196,7 @@ struct CompletionItem {
     insert_text: String,
 }
 
-#[derive(Clone, Copy, Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 enum CompletionKind {
     Command,
@@ -196,6 +231,11 @@ const COMMANDS: &[Capability] = &[
         name: "begin",
         detail: "Start an environment.",
         package: None,
+    },
+    Capability {
+        name: "bottomrule",
+        detail: "Bottom rule from booktabs.",
+        package: Some("booktabs"),
     },
     Capability {
         name: "caption",
@@ -238,6 +278,11 @@ const COMMANDS: &[Capability] = &[
         package: None,
     },
     Capability {
+        name: "midrule",
+        detail: "Middle rule from booktabs.",
+        package: Some("booktabs"),
+    },
+    Capability {
         name: "ref",
         detail: "Reference a label.",
         package: None,
@@ -251,6 +296,11 @@ const COMMANDS: &[Capability] = &[
         name: "subsection",
         detail: "Start a subsection.",
         package: None,
+    },
+    Capability {
+        name: "toprule",
+        detail: "Top rule from booktabs.",
+        package: Some("booktabs"),
     },
     Capability {
         name: "usepackage",
@@ -307,6 +357,77 @@ const ENVIRONMENTS: &[Capability] = &[
     },
 ];
 
+/// Ranking tiers, lower first: a matching open environment for an end tag, then a
+/// local definition, then a declared package/class capability, then a core capability.
+const TIER_OPEN_ENVIRONMENT: u8 = 0;
+const TIER_LOCAL: u8 = 1;
+const TIER_PACKAGE: u8 = 2;
+const TIER_CORE: u8 = 3;
+
+struct Snippet {
+    name: &'static str,
+    detail: &'static str,
+    package: Option<&'static str>,
+    insert_text: &'static str,
+}
+
+const SNIPPETS: &[Snippet] = &[
+    Snippet {
+        name: "itemize",
+        detail: "Insert a bulleted list with an item placeholder.",
+        package: None,
+        insert_text: "\\begin{itemize}\n  \\item ${item}\n\\end{itemize}",
+    },
+    Snippet {
+        name: "enumerate",
+        detail: "Insert a numbered list with an item placeholder.",
+        package: None,
+        insert_text: "\\begin{enumerate}\n  \\item ${item}\n\\end{enumerate}",
+    },
+    Snippet {
+        name: "description",
+        detail: "Insert a labelled list with term and description placeholders.",
+        package: None,
+        insert_text: "\\begin{description}\n  \\item[${term}] ${description}\n\\end{description}",
+    },
+    Snippet {
+        name: "figure",
+        detail: "Insert a figure with image, caption, and label placeholders.",
+        package: None,
+        insert_text: "\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics{${file}}\n  \\caption{${caption}}\n  \\label{fig:${label}}\n\\end{figure}",
+    },
+    Snippet {
+        name: "table",
+        detail: "Insert a table with tabular, caption, and label placeholders.",
+        package: None,
+        insert_text: "\\begin{table}[htbp]\n  \\centering\n  \\begin{tabular}{${columns}}\n    ${content}\n  \\end{tabular}\n  \\caption{${caption}}\n  \\label{tab:${label}}\n\\end{table}",
+    },
+    Snippet {
+        name: "equation",
+        detail: "Insert a numbered display equation.",
+        package: None,
+        insert_text: "\\begin{equation}\n  ${equation}\n\\end{equation}",
+    },
+    Snippet {
+        name: "align",
+        detail: "Insert aligned equations from amsmath.",
+        package: Some("amsmath"),
+        insert_text: "\\begin{align}\n  ${equation} \\\\\n\\end{align}",
+    },
+    Snippet {
+        name: "theorem",
+        detail: "Insert a theorem environment from amsthm.",
+        package: Some("amsthm"),
+        insert_text: "\\begin{theorem}\n  ${statement}\n\\end{theorem}",
+    },
+    Snippet {
+        name: "frame",
+        detail: "Insert a Beamer slide frame.",
+        package: Some("beamer"),
+        insert_text: "\\begin{frame}{${title}}\n  ${content}\n\\end{frame}",
+    },
+];
+
 #[tauri::command]
 pub fn latex_completions(
     request: CompletionRequest,
@@ -356,7 +477,7 @@ fn query(source: &str, position: usize) -> CompletionResponse {
 }
 
 #[cfg(test)]
-fn environment_labels(source: &str, position: usize) -> Vec<String> {
+fn query_labels(source: &str, position: usize) -> Vec<String> {
     query(source, position)
         .items
         .into_iter()
@@ -371,79 +492,88 @@ fn command_items(
     packages: &HashSet<String>,
     local: &HashSet<String>,
 ) -> Vec<CompletionItem> {
-    let mut items = Vec::new();
+    let mut ranked = Vec::new();
     for name in local {
         if name.starts_with(prefix) {
-            items.push(item(
-                format!("\\{name}"),
-                "Project macro.",
-                CompletionKind::Command,
-                CompletionProvenance::Local,
-                from,
-                to,
-                format!("\\{name}"),
+            ranked.push((
+                TIER_LOCAL,
+                item(
+                    format!("\\{name}"),
+                    "Project macro.",
+                    CompletionKind::Command,
+                    CompletionProvenance::Local,
+                    from,
+                    to,
+                    format!("\\{name}"),
+                ),
             ));
         }
     }
     for capability in COMMANDS {
         if capability.name.starts_with(prefix) && is_available(*capability, packages) {
-            items.push(item(
-                format!("\\{}", capability.name),
-                capability.detail,
-                CompletionKind::Command,
-                if capability.package.is_some() {
-                    CompletionProvenance::Package
-                } else {
-                    CompletionProvenance::Core
-                },
-                from,
-                to,
-                format!("\\{}", capability.name),
+            let (tier, provenance) = capability_provenance(capability.package);
+            ranked.push((
+                tier,
+                item(
+                    format!("\\{}", capability.name),
+                    capability.detail,
+                    CompletionKind::Command,
+                    provenance,
+                    from,
+                    to,
+                    format!("\\{}", capability.name),
+                ),
             ));
         }
     }
-    for (name, detail, insert_text) in snippets(packages) {
-        if name.starts_with(prefix) {
-            items.push(item(
-                format!("{name} environment"),
-                detail,
-                CompletionKind::Snippet,
-                CompletionProvenance::Core,
-                from,
-                to,
-                insert_text.to_owned(),
+    for snippet in SNIPPETS {
+        if snippet.name.starts_with(prefix) && is_snippet_available(snippet, packages) {
+            let (tier, provenance) = capability_provenance(snippet.package);
+            ranked.push((
+                tier,
+                item(
+                    format!("{} environment", snippet.name),
+                    snippet.detail,
+                    CompletionKind::Snippet,
+                    provenance,
+                    from,
+                    to,
+                    snippet.insert_text.to_owned(),
+                ),
             ));
         }
     }
-    items
+    finalize(ranked)
 }
 
-fn snippets(packages: &HashSet<String>) -> Vec<(&'static str, &'static str, &'static str)> {
-    let mut items = vec![
-        (
-            "itemize",
-            "Insert a bulleted list with an item placeholder.",
-            "\\begin{itemize}\n  \\item ${item}\n\\end{itemize}",
-        ),
-        (
-            "figure",
-            "Insert a figure with image, caption, and label placeholders.",
-            "\\begin{figure}[htbp]\n  \\centering\n  \\includegraphics{${file}}\n  \\caption{${caption}}\n  \\label{fig:${label}}\n\\end{figure}",
-        ),
-        (
-            "equation",
-            "Insert a numbered display equation.",
-            "\\begin{equation}\n  ${equation}\n\\end{equation}",
-        ),
-    ];
-    if packages.contains("amsmath") {
-        items.push((
-            "align",
-            "Insert aligned equations from amsmath.",
-            "\\begin{align}\n  ${equation} \\\\\n\\end{align}",
-        ));
+/// Maps a capability's package prerequisite to its ranking tier and provenance.
+fn capability_provenance(package: Option<&'static str>) -> (u8, CompletionProvenance) {
+    match package {
+        Some(_) => (TIER_PACKAGE, CompletionProvenance::Package),
+        None => (TIER_CORE, CompletionProvenance::Core),
     }
-    items
+}
+
+fn is_snippet_available(snippet: &Snippet, packages: &HashSet<String>) -> bool {
+    snippet
+        .package
+        .is_none_or(|package| packages.contains(package))
+}
+
+/// Orders candidates by ranking tier, then label, so an exact prefix match (the
+/// shortest label sharing the prefix) leads, and drops duplicate `(kind, label)` pairs.
+fn finalize(mut ranked: Vec<(u8, CompletionItem)>) -> Vec<CompletionItem> {
+    ranked.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then_with(|| left.1.label.cmp(&right.1.label))
+    });
+    let mut seen = HashSet::new();
+    ranked
+        .into_iter()
+        .map(|(_, item)| item)
+        .filter(|item| seen.insert((item.kind, item.label.clone())))
+        .collect()
 }
 
 fn environment_items(
@@ -454,28 +584,34 @@ fn environment_items(
     local: &HashSet<String>,
     preferred: Option<&str>,
 ) -> Vec<CompletionItem> {
-    let mut items = Vec::new();
+    let mut ranked = Vec::new();
     if let Some(name) = preferred.filter(|name| name.starts_with(prefix)) {
-        items.push(item(
-            name.to_owned(),
-            "Closest open environment.",
-            CompletionKind::Environment,
-            CompletionProvenance::Local,
-            from,
-            to,
-            name.to_owned(),
-        ));
-    }
-    for name in local {
-        if name.starts_with(prefix) && Some(name.as_str()) != preferred {
-            items.push(item(
+        ranked.push((
+            TIER_OPEN_ENVIRONMENT,
+            item(
                 name.to_owned(),
-                "Project environment.",
+                "Closest open environment.",
                 CompletionKind::Environment,
                 CompletionProvenance::Local,
                 from,
                 to,
                 name.to_owned(),
+            ),
+        ));
+    }
+    for name in local {
+        if name.starts_with(prefix) && Some(name.as_str()) != preferred {
+            ranked.push((
+                TIER_LOCAL,
+                item(
+                    name.to_owned(),
+                    "Project environment.",
+                    CompletionKind::Environment,
+                    CompletionProvenance::Local,
+                    from,
+                    to,
+                    name.to_owned(),
+                ),
             ));
         }
     }
@@ -484,22 +620,22 @@ fn environment_items(
             && is_available(*capability, packages)
             && Some(capability.name) != preferred
         {
-            items.push(item(
-                capability.name.to_owned(),
-                capability.detail,
-                CompletionKind::Environment,
-                if capability.package.is_some() {
-                    CompletionProvenance::Package
-                } else {
-                    CompletionProvenance::Core
-                },
-                from,
-                to,
-                capability.name.to_owned(),
+            let (tier, provenance) = capability_provenance(capability.package);
+            ranked.push((
+                tier,
+                item(
+                    capability.name.to_owned(),
+                    capability.detail,
+                    CompletionKind::Environment,
+                    provenance,
+                    from,
+                    to,
+                    capability.name.to_owned(),
+                ),
             ));
         }
     }
-    items
+    finalize(ranked)
 }
 
 fn item(
