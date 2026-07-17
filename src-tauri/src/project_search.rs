@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fs,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -464,12 +465,19 @@ fn prune_transaction_history(app: &AppHandle) {
     }
 }
 
+static TRANSACTION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 fn transaction_id(project_path: &str) -> String {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |duration| duration.as_nanos());
+    // Mix in a monotonic counter so two replaces on the same project within the
+    // same clock tick cannot produce the same id (which would overwrite the
+    // earlier backup).
+    let nonce = TRANSACTION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let mut digest = Sha256::new();
     digest.update(timestamp.to_le_bytes());
+    digest.update(nonce.to_le_bytes());
     digest.update(project_path.as_bytes());
     format!("{:x}", digest.finalize())
 }
