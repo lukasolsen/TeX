@@ -116,6 +116,13 @@ describe("LaTeX documentation catalog", () => {
     }
   })
 
+  it("attributes nolinkurl to hyperref", () => {
+    const documentation = commandDocumentation("nolinkurl")
+
+    expect(documentation?.markdown).toContain("It is provided by `hyperref`.")
+    expect(documentation?.markdown).not.toContain("`url`")
+  })
+
   it("returns undefined for unknown documentation names", () => {
     expect(commandDocumentation("unknowncommand")).toBeUndefined()
     expect(documentClassDocumentation("unknownclass")).toBeUndefined()

@@ -38,7 +38,7 @@ export const commandsStructure = {
   newline: command("newline", "Forces a line break at the current point. Prefer paragraph breaks for ordinary prose separation."),
   newtheorem: command("newtheorem", "Defines a numbered theorem-like environment. It is commonly supplied by the document class or `amsthm`.\n\n```latex\n\\newtheorem{theorem}{Theorem}[section]\n```"),
   nolinebreak: command("nolinebreak", "Discourages a line break at the current point. An optional value from 0 to 4 controls the strength of the request."),
-  nolinkurl: command("nolinkurl", "Typesets a URL in a breakable monospaced form without creating a hyperlink. It is provided by `hyperref` or `url`."),
+  nolinkurl: command("nolinkurl", "Typesets a URL in a breakable monospaced form without creating a hyperlink. It is provided by `hyperref`."),
   nopagebreak: command("nopagebreak", "Discourages a page break at the current point. An optional value from 0 to 4 controls the strength of the request."),
   pageref: command("pageref", "Prints the page number associated with a matching label.\n\n```latex\nSee page~\\pageref{sec:results}.\n```\n\nCompile again after moving labelled material."),
   pagebreak: command("pagebreak", "Requests a page break at the current point. An optional value from 0 to 4 expresses how strongly LaTeX should break there."),
