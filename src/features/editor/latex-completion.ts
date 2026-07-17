@@ -43,14 +43,14 @@ export function isLatexCompletionContext(source: string, position: number): bool
 
 /** Plain-language name for a completion kind, or `null` for an unrecognized value. */
 export function latexCompletionKindLabel(kind: string): string | null {
-  return kind === "command" || kind === "environment" || kind === "snippet"
-    ? KIND_LABELS[kind]
-    : null
+  return kind in KIND_LABELS ? KIND_LABELS[kind as LatexCompletionKind] : null
 }
 
 /** A sentence explaining where a suggestion comes from, avoiding LaTeX jargon. */
 export function latexCompletionSourceSummary(
-  item: Pick<LatexCompletionItem, "provenance" | "requires">
+  item: Pick<LatexCompletionItem, "provenance" | "requires"> & {
+    readonly source?: string | null
+  }
 ): string {
   switch (item.provenance) {
     case "local":
@@ -62,7 +62,7 @@ export function latexCompletionSourceSummary(
     case "core":
       return "Built into LaTeX"
     case "project":
-      return "From this project's symbols"
+      return item.source ? `Defined in ${item.source}` : "A file in this project"
   }
 }
 

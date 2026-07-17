@@ -47,6 +47,29 @@ describe("LaTeX completion presentation", () => {
     ).toBe("Provided by a loaded package")
   })
 
+  it("names the project-symbol kinds", () => {
+    expect(latexCompletionKindLabel("label")).toBe("Label")
+    expect(latexCompletionKindLabel("citation")).toBe("Citation")
+    expect(latexCompletionKindLabel("file")).toBe("File")
+  })
+
+  it("attributes a project symbol to its defining file", () => {
+    expect(
+      latexCompletionSourceSummary({
+        provenance: "project",
+        requires: null,
+        source: "intro.tex",
+      })
+    ).toBe("Defined in intro.tex")
+    expect(
+      latexCompletionSourceSummary({
+        provenance: "project",
+        requires: null,
+        source: null,
+      })
+    ).toBe("A file in this project")
+  })
+
   it("previews multi-line insertions with readable placeholders", () => {
     expect(latexInsertionPreview("\\section")).toBeNull()
     expect(
