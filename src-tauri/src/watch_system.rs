@@ -23,6 +23,10 @@ use crate::{
 const WATCH_EVENT: &str = "tex://watch-event";
 const PROJECT_FILES_EVENT: &str = "tex://project-files-event";
 const DEBOUNCE: Duration = Duration::from_millis(350);
+/// Ceiling on the trailing debounce: even under a continuous stream of changes
+/// (e.g. a long build churning files) a batch is flushed at least this often
+/// rather than being starved until the activity finally quiesces.
+const MAX_DEBOUNCE: Duration = Duration::from_secs(2);
 const WATCH_CHANNEL_CAPACITY: usize = 1_024;
 const MAX_PENDING_PATHS: usize = 1_024;
 const MAX_ACTIVE_WATCHES: usize = 16;
@@ -387,6 +391,7 @@ fn run_tree_watch(
     }
 
     let mut last_event = None;
+    let mut first_event = None;
     loop {
         if stop_receiver.try_recv().is_ok() {
             remove_tree_watch(&controller, &root);
@@ -395,9 +400,13 @@ fn run_tree_watch(
         match event_receiver.recv_timeout(Duration::from_millis(50)) {
             Ok(Ok(event))
                 if classify_event(&event.kind).is_some()
-                    && event.paths.iter().any(|path| path.starts_with(&root)) =>
+                    && event.paths.iter().any(|path| {
+                        path.strip_prefix(&root)
+                            .is_ok_and(|relative| !is_ignored(relative, &[]))
+                    }) =>
             {
                 last_event = Some(Instant::now());
+                first_event.get_or_insert_with(Instant::now);
             }
             Ok(Ok(_)) | Err(mpsc::RecvTimeoutError::Timeout) => {}
             Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -407,9 +416,13 @@ fn run_tree_watch(
         }
         if channel_overflowed.swap(false, Ordering::AcqRel) {
             last_event = Some(Instant::now());
+            first_event.get_or_insert_with(Instant::now);
         }
-        if last_event.is_some_and(|event| event.elapsed() >= DEBOUNCE) {
+        let settled = last_event.is_some_and(|event| event.elapsed() >= DEBOUNCE);
+        let ceiling = first_event.is_some_and(|event: Instant| event.elapsed() >= MAX_DEBOUNCE);
+        if settled || ceiling {
             last_event = None;
+            first_event = None;
             let _ = app.emit(
                 PROJECT_FILES_EVENT,
                 ProjectFilesEvent {
@@ -426,6 +439,7 @@ struct PendingChanges {
     paths: BTreeSet<String>,
     build_relevant: bool,
     last_event: Option<Instant>,
+    first_event: Option<Instant>,
     truncated: bool,
 }
 
@@ -441,9 +455,13 @@ impl PendingChanges {
             if is_ignored(relative, excluded_directories) {
                 continue;
             }
+            // Skip events for symlink entries themselves so watching never
+            // follows a link out of the project. (The previous guard combined
+            // exists() with symlink_metadata().is_err(), which is never true.)
             if matches!(kind, ProjectChangeKind::Create | ProjectChangeKind::Modify)
-                && path.exists()
-                && path.symlink_metadata().is_err()
+                && path
+                    .symlink_metadata()
+                    .is_ok_and(|metadata| metadata.file_type().is_symlink())
             {
                 continue;
             }
@@ -456,20 +474,28 @@ impl PendingChanges {
             }
             self.kinds.insert(kind);
             self.last_event = Some(Instant::now());
+            self.first_event.get_or_insert_with(Instant::now);
         }
     }
 
     fn is_ready(&self) -> bool {
-        (!self.paths.is_empty() || self.truncated)
-            && self
-                .last_event
-                .is_some_and(|last_event| last_event.elapsed() >= DEBOUNCE)
+        if self.paths.is_empty() && !self.truncated {
+            return false;
+        }
+        let trailing_settled = self
+            .last_event
+            .is_some_and(|last_event| last_event.elapsed() >= DEBOUNCE);
+        let ceiling_reached = self
+            .first_event
+            .is_some_and(|first_event| first_event.elapsed() >= MAX_DEBOUNCE);
+        trailing_settled || ceiling_reached
     }
 
     fn take_event(&mut self, root: &Path) -> WatchEvent {
         let changes = std::mem::take(&mut self.kinds).into_iter().collect();
         let paths = std::mem::take(&mut self.paths).into_iter().collect();
         self.last_event = None;
+        self.first_event = None;
         self.build_relevant = false;
         let truncated = std::mem::take(&mut self.truncated);
         WatchEvent::Changed {
@@ -485,6 +511,7 @@ impl PendingChanges {
         self.build_relevant = true;
         self.truncated = true;
         self.last_event = Some(Instant::now());
+        self.first_event.get_or_insert_with(Instant::now);
     }
 }
 
