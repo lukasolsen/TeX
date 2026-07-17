@@ -9,6 +9,7 @@ import {
   Search,
   Save,
   Settings,
+  SquareTerminal,
   TextSearch,
   ZoomIn,
   ZoomOut,
@@ -75,6 +76,7 @@ export function WorkspaceCommandPalette({
   onRevealOutput,
   onShowLogContext,
   onTogglePdf,
+  onToggleTerminal,
   onSave,
   onSearch,
   onToggleWatch,
@@ -102,6 +104,7 @@ export function WorkspaceCommandPalette({
   onRevealOutput: () => void
   onShowLogContext: () => void
   onTogglePdf: () => void
+  onToggleTerminal: () => void
   onSave: () => void
   onSearch: () => void
   onToggleWatch: () => void
@@ -223,6 +226,10 @@ export function WorkspaceCommandPalette({
             <CommandShortcut>
               {shortcutLabel(["primary", "shift", "b"])}
             </CommandShortcut>
+          </CommandItem>
+          <CommandItem onSelect={() => run(onToggleTerminal)}>
+            <SquareTerminal /> Toggle terminal
+            <CommandShortcut>{shortcutLabel(["primary", "j"])}</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => run(onTogglePdf)}>
             {pdfOpen ? <PanelRightClose /> : <PanelRightOpen />}

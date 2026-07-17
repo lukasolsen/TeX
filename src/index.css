@@ -37,6 +37,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-source: var(--source);
+  --color-terminal: var(--terminal);
   --color-source-foreground: var(--source-foreground);
   --color-status: var(--status);
   --color-status-foreground: var(--status-foreground);
@@ -98,6 +99,7 @@
   --sidebar-accent: oklch(0.97 0 0);
   --source: oklch(0.99 0.002 250);
   --source-foreground: oklch(0.22 0.01 250);
+  --terminal: #fbfbfd;
   --status: oklch(0.925 0.004 250);
   --status-foreground: oklch(0.28 0.01 250);
   --editor-command: oklch(0.48 0.16 274);
@@ -170,6 +172,7 @@
   --sidebar-accent: oklch(0.269 0 0);
   --source: oklch(0.175 0.005 250);
   --source-foreground: oklch(0.92 0.008 250);
+  --terminal: #17171a;
   --status: oklch(0.205 0.006 250);
   --status-foreground: oklch(0.91 0.008 250);
   --editor-command: oklch(0.79 0.14 285);
@@ -406,6 +409,7 @@ button,
     --sidebar-ring: Highlight;
     --source: Canvas;
     --source-foreground: CanvasText;
+    --terminal: Canvas;
     --status: Canvas;
     --status-foreground: CanvasText;
     --editor-command: CanvasText;

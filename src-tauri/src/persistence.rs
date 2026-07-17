@@ -100,6 +100,8 @@ pub struct WorkspaceState {
     #[serde(default)]
     pub build_panel_tab: BuildPanelTab,
     #[serde(default)]
+    pub bottom_panel_tab: BottomPanelTab,
+    #[serde(default)]
     pub build_profile: BuildProfile,
     #[serde(default)]
     pub selected_pdf: Option<String>,
@@ -124,6 +126,14 @@ pub enum BuildPanelTab {
     #[default]
     Output,
     Problems,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BottomPanelTab {
+    #[default]
+    Build,
+    Terminal,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -389,6 +399,7 @@ pub fn record_project_opened(
         build_panel_height: default_build_panel_height(),
         sidebar_tab: ProjectSidebarTab::default(),
         build_panel_tab: BuildPanelTab::default(),
+        bottom_panel_tab: BottomPanelTab::default(),
         build_profile: BuildProfile::default(),
         selected_pdf: None,
         pdf_viewer_states: HashMap::new(),
@@ -739,7 +750,8 @@ mod tests {
     };
 
     use super::{
-        load_startup_state_from_path, read_state, write_state, AppPreferences, BuildPanelTab,
+        load_startup_state_from_path, read_state, write_state, AppPreferences, BottomPanelTab,
+        BuildPanelTab,
         BuildProfile, EditorViewerState, PdfLayoutMode, PdfSidebarMode, PdfViewerState,
         PersistedRecentProject, PersistedState, ProjectAvailability, ProjectSidebarTab,
         WorkspaceState, STATE_VERSION,
@@ -776,6 +788,7 @@ mod tests {
                     build_panel_height: 240,
                     sidebar_tab: super::ProjectSidebarTab::Files,
                     build_panel_tab: super::BuildPanelTab::Output,
+                    bottom_panel_tab: super::BottomPanelTab::default(),
                     build_profile: super::BuildProfile::LatexmkPdf,
                     selected_pdf: None,
                     pdf_viewer_states: HashMap::new(),
@@ -905,6 +918,7 @@ mod tests {
             build_panel_height: 280,
             sidebar_tab: ProjectSidebarTab::References,
             build_panel_tab: BuildPanelTab::Problems,
+            bottom_panel_tab: BottomPanelTab::Terminal,
             build_profile: BuildProfile::LuaLatex,
             selected_pdf: Some("main.pdf".to_owned()),
             pdf_viewer_states: HashMap::from([(

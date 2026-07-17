@@ -115,6 +115,7 @@ function workspaceForProject(
     buildPanelHeight: restored?.buildPanelHeight ?? 240,
     sidebarTab: restored?.sidebarTab ?? "files",
     buildPanelTab: restored?.buildPanelTab ?? "output",
+    bottomPanelTab: restored?.bottomPanelTab ?? "build",
     buildProfile: restored?.buildProfile ?? "latexmkPdf",
     selectedPdf: preferredPdf(
       project,
@@ -258,6 +259,7 @@ export type ProjectSessionController = Readonly<{
         | "buildPanelHeight"
         | "sidebarTab"
         | "buildPanelTab"
+        | "bottomPanelTab"
         | "buildProfile"
       >
     >
@@ -1550,6 +1552,7 @@ export function useProjectSession({
           | "buildPanelHeight"
           | "sidebarTab"
           | "buildPanelTab"
+          | "bottomPanelTab"
           | "buildProfile"
         >
       >

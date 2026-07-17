@@ -260,6 +260,7 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
     buildPanelHeight: integer(input.buildPanelHeight, "build panel height", 160, 4_096),
     sidebarTab: enumValue(input.sidebarTab, "sidebar tab", ["files", "outline", "references"]),
     buildPanelTab: enumValue(input.buildPanelTab, "build panel tab", ["output", "problems"]),
+    bottomPanelTab: input.bottomPanelTab === "terminal" ? "terminal" : "build",
     buildProfile: enumValue(input.buildProfile, "build profile", [
       "latexmkPdf",
       "pdfLatex",

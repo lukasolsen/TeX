@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ReactElement } from "react"
 import { FileText, Hammer, LockKeyhole, MapPin } from "lucide-react"
 
@@ -30,6 +30,7 @@ import { WorkspaceCommandPalette } from "@/features/commands/workspace-command-p
 import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
+import { BottomPanel } from "@/features/workspace/bottom-panel"
 import { useProjectBuild } from "@/features/build/use-project-build"
 import { useProjectWatch } from "@/features/build/use-project-watch"
 import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
@@ -117,6 +118,7 @@ export function ProjectWorkspacePage({
         | "buildPanelHeight"
         | "sidebarTab"
         | "buildPanelTab"
+        | "bottomPanelTab"
         | "buildProfile"
       >
     >
@@ -156,6 +158,21 @@ export function ProjectWorkspacePage({
     rootFile: session.workspace.selectedRoot,
   })
   const buildOpen = session.workspace.buildPanelOpen
+  const bottomPanelTab = session.workspace.bottomPanelTab
+  const [terminalStarted, setTerminalStarted] = useState(
+    () => session.workspace.bottomPanelTab === "terminal"
+  )
+  const showTerminal = useCallback(() => {
+    setTerminalStarted(true)
+    onUpdateWorkspaceView({ buildPanelOpen: true, bottomPanelTab: "terminal" })
+  }, [onUpdateWorkspaceView])
+  const toggleTerminal = useCallback(() => {
+    if (buildOpen && bottomPanelTab === "terminal") {
+      onUpdateWorkspaceView({ buildPanelOpen: false })
+    } else {
+      showTerminal()
+    }
+  }, [buildOpen, bottomPanelTab, onUpdateWorkspaceView, showTerminal])
   const pdfOpen = session.workspace.pdfPaneOpen
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
@@ -349,6 +366,13 @@ export function ProjectWorkspacePage({
       ) {
         event.preventDefault()
         setSearchOpen(true)
+      } else if (
+        modifier &&
+        !event.shiftKey &&
+        event.key.toLowerCase() === "j"
+      ) {
+        event.preventDefault()
+        toggleTerminal()
       } else if (modifier && (event.key === "+" || event.key === "=")) {
         event.preventDefault()
         onSetEditorFontSize(session.workspace.editorFontSize + 1)
@@ -363,6 +387,7 @@ export function ProjectWorkspacePage({
     onSetEditorFontSize,
     onUpdateWorkspaceView,
     session.workspace.editorFontSize,
+    toggleTerminal,
   ])
 
   useEffect(() => {
@@ -614,37 +639,55 @@ export function ProjectWorkspacePage({
                 buildPanelHeight.current = size.inPixels
               }}
             >
-              <BuildPanel
-                activeDiagnosticIndex={activeDiagnosticIndex}
-                configurationState={build.configurationState}
-                dispatch={build.dispatch}
-                engine={build.engine}
-                logContextSequence={logContextSequence}
-                onBuild={() => runDetached(build.build())}
-                onClean={() => setCleanOpen(true)}
-                onClose={() => onUpdateWorkspaceView({ buildPanelOpen: false })}
-                onNavigate={(path, line) => {
-                  setTarget({ path, line, column: 1, token: Date.now() })
-                  onPinFile(path)
-                }}
-                onRevealOutput={() => runDetached(revealOutput())}
-                onSelectDiagnostic={(index) => selectDiagnostic(index, false)}
-                onStop={() => runDetached(build.stop())}
-                onStartWatch={() => runDetached(watch.start())}
-                onStopWatch={() => runDetached(watch.stop())}
-                onSaveConfiguration={async (configuration) => {
-                  const saved = await build.saveConfiguration(configuration)
-                  if (saved.rootFile !== null)
-                    onSelectRoot(projectRelativePath(saved.rootFile))
-                }}
-                profiles={build.profiles}
-                setEngine={build.setEngine}
-                state={build.state}
-                tab={session.workspace.buildPanelTab}
-                onTabChange={(buildPanelTab) =>
-                  onUpdateWorkspaceView({ buildPanelTab })
+              <BottomPanel
+                onClose={() =>
+                  onUpdateWorkspaceView({ buildPanelOpen: false })
                 }
-                watch={watch.state}
+                onTabChange={(nextTab) => {
+                  if (nextTab === "terminal") setTerminalStarted(true)
+                  onUpdateWorkspaceView({ bottomPanelTab: nextTab })
+                }}
+                projectPath={session.project.path}
+                tab={bottomPanelTab}
+                terminalStarted={terminalStarted}
+                buildPanel={
+                  <BuildPanel
+                    activeDiagnosticIndex={activeDiagnosticIndex}
+                    configurationState={build.configurationState}
+                    dispatch={build.dispatch}
+                    engine={build.engine}
+                    logContextSequence={logContextSequence}
+                    onBuild={() => runDetached(build.build())}
+                    onClean={() => setCleanOpen(true)}
+                    onClose={() =>
+                      onUpdateWorkspaceView({ buildPanelOpen: false })
+                    }
+                    onNavigate={(path, line) => {
+                      setTarget({ path, line, column: 1, token: Date.now() })
+                      onPinFile(path)
+                    }}
+                    onRevealOutput={() => runDetached(revealOutput())}
+                    onSelectDiagnostic={(index) =>
+                      selectDiagnostic(index, false)
+                    }
+                    onStop={() => runDetached(build.stop())}
+                    onStartWatch={() => runDetached(watch.start())}
+                    onStopWatch={() => runDetached(watch.stop())}
+                    onSaveConfiguration={async (configuration) => {
+                      const saved = await build.saveConfiguration(configuration)
+                      if (saved.rootFile !== null)
+                        onSelectRoot(projectRelativePath(saved.rootFile))
+                    }}
+                    profiles={build.profiles}
+                    setEngine={build.setEngine}
+                    state={build.state}
+                    tab={session.workspace.buildPanelTab}
+                    onTabChange={(buildPanelTab) =>
+                      onUpdateWorkspaceView({ buildPanelTab })
+                    }
+                    watch={watch.state}
+                  />
+                }
               />
             </ResizablePanel>
           </>
@@ -737,6 +780,7 @@ export function ProjectWorkspacePage({
         onRevealOutput={() => runDetached(revealOutput())}
         onShowLogContext={showLogContext}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
+        onToggleTerminal={toggleTerminal}
         onSave={() => runDetached(onSaveDocument())}
         onSearch={() => setSearchOpen(true)}
         onToggleWatch={() =>

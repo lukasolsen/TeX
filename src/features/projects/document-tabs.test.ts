@@ -21,6 +21,7 @@ const workspace: WorkspaceState = {
   buildPanelHeight: 240,
   sidebarTab: "files",
   buildPanelTab: "output",
+  bottomPanelTab: "build",
   buildProfile: "latexmkPdf",
   selectedPdf: null,
   pdfViewerStates: {},

@@ -8,6 +8,7 @@ export type ShortcutKey =
   | "backspace"
   | "b"
   | "f"
+  | "j"
   | "n"
   | "p"
   | "s"

@@ -21,6 +21,7 @@ pub mod root_detection;
 mod source_edit;
 mod source_read;
 mod synctex;
+mod terminal_system;
 mod watch_system;
 mod window_management;
 
@@ -36,6 +37,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
         .manage(project_access::ProjectAccess::default())
+        .manage(terminal_system::TerminalController::default())
         .manage(watch_system::WatchController::default())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -89,6 +91,10 @@ pub fn run() {
             watch_system::stop_project_tree_watch,
             synctex::synctex_forward_search,
             synctex::synctex_inverse_search,
+            terminal_system::open_terminal,
+            terminal_system::write_terminal,
+            terminal_system::resize_terminal,
+            terminal_system::close_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run the TeX desktop application");
