@@ -151,6 +151,31 @@ describe("LaTeX documentation catalog", () => {
     }
   })
 
+  it("documents bibliography and citation commands", () => {
+    for (const name of [
+      "cite",
+      "citep",
+      "citepauthor",
+      "citeyear",
+      "citet",
+      "nocite",
+      "bibliography",
+      "bibliographystyle",
+      "addbibresource",
+      "printbibliography",
+      "parencite",
+      "textcite",
+      "autocite",
+      "footcite",
+      "fullcite",
+      "citetitle",
+      "supercite",
+      "ExecuteBibliographyOptions",
+    ] as const) {
+      expect(commandDocumentation(name)).toBeDefined()
+    }
+  })
+
   it("documents float and graphics commands", () => {
     for (const name of [
       "includegraphics",
