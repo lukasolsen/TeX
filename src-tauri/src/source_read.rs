@@ -103,9 +103,13 @@ pub(crate) fn resolve_source_path(
 pub(crate) fn valid_relative_path(path: &Path) -> bool {
     !path.as_os_str().is_empty()
         && !path.is_absolute()
-        && path
-            .components()
-            .all(|component| matches!(component, Component::Normal(_)))
+        && path.components().all(|component| match component {
+            // Reject any component whose name begins with `-` so a validated path
+            // can never be reinterpreted as a command-line option token when it is
+            // later handed to an external tool (e.g. a LaTeX engine's positional).
+            Component::Normal(name) => name.as_encoded_bytes().first() != Some(&b'-'),
+            _ => false,
+        })
 }
 
 fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), SourceReadError> {

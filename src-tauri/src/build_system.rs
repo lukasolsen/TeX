@@ -433,7 +433,10 @@ fn validate_build_with_resolver(
             };
             arguments.push(argument);
         }
-        arguments.push(root_file.clone());
+        // Prefix the validated relative root with `./` so a filename beginning
+        // with `-` cannot be reinterpreted by the engine (notably latexmk) as an
+        // option token. `root_file` is guaranteed relative by `resolve_source_path`.
+        arguments.push(format!("./{root_file}"));
         (executable.to_string_lossy().into_owned(), arguments, false)
     };
 
