@@ -64,6 +64,7 @@ describe("LaTeX completion presentation", () => {
       from: 0,
       to: 4,
       insertText: "\\section",
+      source: null,
     }
     const option = latexCompletionOption(item, 0)
     expect(option.label).toBe("\\section")

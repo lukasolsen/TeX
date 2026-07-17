@@ -12,8 +12,18 @@ import {
   stringValue,
 } from "@/services/ipc-contract"
 
-export type LatexCompletionKind = "command" | "environment" | "snippet"
-export type LatexCompletionProvenance = "core" | "package" | "local"
+export type LatexCompletionKind =
+  | "command"
+  | "environment"
+  | "snippet"
+  | "label"
+  | "citation"
+  | "file"
+export type LatexCompletionProvenance =
+  | "core"
+  | "package"
+  | "local"
+  | "project"
 
 export type LatexCompletionRequest = Readonly<{
   projectPath: CanonicalProjectPath
@@ -31,6 +41,7 @@ export type LatexCompletionItem = Readonly<{
   from: number
   to: number
   insertText: string
+  source: string | null
 }>
 
 export type LatexCompletionResponse = Readonly<{
@@ -53,16 +64,21 @@ export function parseLatexCompletionResponse(
           "command",
           "environment",
           "snippet",
+          "label",
+          "citation",
+          "file",
         ]),
         provenance: enumValue(item.provenance, "LaTeX completion provenance", [
           "core",
           "package",
           "local",
+          "project",
         ]),
         requires: nullableString(item.requires, "LaTeX completion requirement", 128),
         from,
         to,
         insertText: nonEmptyString(item.insertText, "LaTeX completion insertion", 16_384),
+        source: nullableString(item.source ?? null, "LaTeX completion source", 1_024),
       }
     }),
   }

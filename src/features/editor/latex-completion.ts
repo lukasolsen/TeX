@@ -19,6 +19,9 @@ const KIND_LABELS: Record<LatexCompletionKind, string> = {
   command: "Command",
   environment: "Environment",
   snippet: "Template",
+  label: "Label",
+  citation: "Citation",
+  file: "File",
 }
 
 function isEscaped(source: string, position: number): boolean {
@@ -58,6 +61,8 @@ export function latexCompletionSourceSummary(
         : "Provided by a loaded package"
     case "core":
       return "Built into LaTeX"
+    case "project":
+      return "From this project's symbols"
   }
 }
 
