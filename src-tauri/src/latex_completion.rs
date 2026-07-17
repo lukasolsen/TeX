@@ -352,7 +352,11 @@ mod tests {
             content: "\\ref{sec".into(),
             position: 8,
         };
-        let response = resolve_completions(&canonical, &request);
+        let response = resolve_completions(
+            &canonical,
+            &request,
+            &crate::latex_project_scan::ScanCache::default(),
+        );
 
         assert_eq!(response.items[0].label, "sec:intro");
         assert_eq!(response.items[0].source.as_deref(), Some("intro.tex"));
@@ -370,7 +374,7 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::latex_project_scan::{scan_project, ProjectSources};
+use crate::latex_project_scan::{scan_project_cached, ProjectSources, ScanCache};
 use crate::latex_symbols::{
     bib_keys_in, bibitem_keys_in, classify_command, file_extensions, format_file_label, labels_in,
     match_symbols, ArgumentTarget, ResolvedSymbol, SymbolKind,
@@ -651,6 +655,7 @@ const SNIPPETS: &[Snippet] = &[
 pub fn latex_completions(
     request: CompletionRequest,
     access: State<'_, ProjectAccess>,
+    scan_cache: State<'_, ScanCache>,
 ) -> Result<CompletionResponse, CompletionError> {
     let root = access
         .resolve(&request.project_path)
@@ -662,7 +667,7 @@ pub fn latex_completions(
     if request.content.len() > source_read::MAX_SOURCE_BYTES as usize {
         return Err(unavailable());
     }
-    Ok(resolve_completions(&root, &request))
+    Ok(resolve_completions(&root, &request, &scan_cache))
 }
 
 fn query(source: &str, position: usize) -> CompletionResponse {
@@ -696,20 +701,33 @@ fn query(source: &str, position: usize) -> CompletionResponse {
     CompletionResponse { items }
 }
 
-fn resolve_completions(root: &Path, request: &CompletionRequest) -> CompletionResponse {
+fn resolve_completions(
+    root: &Path,
+    request: &CompletionRequest,
+    scan_cache: &ScanCache,
+) -> CompletionResponse {
     match completion_context(&request.content, request.position) {
         CompletionContext::Argument {
             from,
             command,
             prefix,
         } => CompletionResponse {
-            items: symbol_items(root, request, &command, from, request.position, &prefix),
+            items: symbol_items(
+                scan_cache,
+                root,
+                request,
+                &command,
+                from,
+                request.position,
+                &prefix,
+            ),
         },
         _ => query(&request.content, request.position),
     }
 }
 
 fn symbol_items(
+    scan_cache: &ScanCache,
     root: &Path,
     request: &CompletionRequest,
     command: &str,
@@ -720,7 +738,8 @@ fn symbol_items(
     let Some(target) = classify_command(command) else {
         return Vec::new();
     };
-    let sources = scan_project(root, Path::new(&request.relative_path), &request.content);
+    let sources =
+        scan_project_cached(scan_cache, root, Path::new(&request.relative_path), &request.content);
     let resolved = match target {
         ArgumentTarget::Label => text_symbols(&sources, SymbolKind::Label, labels_in),
         ArgumentTarget::Citation => citation_symbols(&sources),

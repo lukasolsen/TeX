@@ -37,6 +37,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
         .manage(project_access::ProjectAccess::default())
+        .manage(latex_project_scan::ScanCache::default())
         .manage(terminal_system::TerminalController::default())
         .manage(watch_system::WatchController::default())
         .plugin(
