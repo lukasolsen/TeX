@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { windowChromeMode } from "./window-chrome-model"
+import { windowChromeMode, windowMenuLabels } from "./window-chrome-model"
 
 describe("window chrome mode", () => {
   it("keeps the native macOS traffic lights", () => {
@@ -12,5 +12,17 @@ describe("window chrome mode", () => {
     expect(windowChromeMode("Linux x86_64", "Mozilla/5.0")).toBe(
       "custom-controls"
     )
+  })
+
+  it("uses the conventional IDE menu architecture", () => {
+    expect(windowMenuLabels()).toEqual([
+      "File",
+      "Edit",
+      "View",
+      "Search",
+      "Build",
+      "Window",
+      "Help",
+    ])
   })
 })
