@@ -503,23 +503,23 @@ fn executable_available(executable: &str) -> bool {
 }
 
 pub(crate) fn resolve_executable(executable: &str) -> Option<PathBuf> {
-    env::var_os("PATH").and_then(|path| {
-        env::split_paths(&path).find_map(|directory| {
-            executable_candidates(&directory, executable)
-                .into_iter()
-                .find(|candidate| is_executable_file(candidate))
-                .and_then(|candidate| candidate.canonicalize().ok())
-        })
+    env::var_os("PATH").and_then(|path| resolve_executable_in(executable, env::split_paths(&path)))
+}
+
+fn resolve_executable_in(
+    executable: &str,
+    mut directories: impl Iterator<Item = PathBuf>,
+) -> Option<PathBuf> {
+    directories.find_map(|directory| {
+        executable_candidates(&directory, executable)
+            .into_iter()
+            .find(|candidate| is_executable_file(candidate))
     })
 }
 
 #[cfg(test)]
 fn executable_available_in(executable: &str, directories: impl Iterator<Item = PathBuf>) -> bool {
-    directories.into_iter().any(|directory| {
-        executable_candidates(&directory, executable)
-            .into_iter()
-            .any(|candidate| is_executable_file(&candidate))
-    })
+    resolve_executable_in(executable, directories).is_some()
 }
 
 #[cfg(not(windows))]
@@ -945,8 +945,8 @@ mod tests {
 
     use super::{
         executable_available_in, file_line_message, parse_diagnostic, read_bounded_line,
-        validate_build, validate_build_with_resolver, BuildEngine, BuildEvent, BuildLogEntry,
-        BuildLogStream, BuildRequest, BuildStatus, DiagnosticSeverity,
+        resolve_executable_in, validate_build, validate_build_with_resolver, BuildEngine,
+        BuildEvent, BuildLogEntry, BuildLogStream, BuildRequest, BuildStatus, DiagnosticSeverity,
     };
     use crate::project_config::{CustomCommand, ProjectBuildConfiguration};
 
@@ -1196,6 +1196,29 @@ mod tests {
             "unavailable-tex",
             [directory.clone()].into_iter()
         ));
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn preserves_a_latex_engine_symlink_path() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::{symlink, PermissionsExt};
+
+        let directory = std::env::temp_dir().join(format!(
+            "tex-build-engine-link-{}",
+            super::NEXT_RUN_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        fs::create_dir(&directory)?;
+        let target = directory.join("xetex");
+        let latex_engine = directory.join("xelatex");
+        fs::write(&target, "#!/bin/sh\n")?;
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o700))?;
+        symlink(&target, &latex_engine)?;
+
+        let resolved = resolve_executable_in("xelatex", [directory.clone()].into_iter());
+
+        assert_eq!(resolved.as_deref(), Some(latex_engine.as_path()));
         fs::remove_dir_all(directory)?;
         Ok(())
     }

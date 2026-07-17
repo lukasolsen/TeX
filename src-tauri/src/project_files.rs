@@ -76,7 +76,7 @@ fn rename_entry(root: &Path, relative_path: &str, name: &str) -> Result<(), Proj
 
 /// Deletes an explicitly selected project file or directory.
 #[tauri::command]
-pub fn delete_project_entry(
+pub async fn delete_project_entry(
     app: AppHandle,
     project_path: String,
     relative_path: String,
@@ -86,7 +86,8 @@ pub fn delete_project_entry(
     let target = resolve_entry(&root, &relative_path)?;
     let metadata = fs::metadata(&target).map_err(|_| unavailable())?;
     let entry_kind = if metadata.is_dir() { "folder" } else { "file" };
-    let approved = app
+    let (approval_sender, mut approval_receiver) = tauri::async_runtime::channel(1);
+    app
         .dialog()
         .message(format!(
             "Permanently delete this {entry_kind} from the project?\n\n{relative_path}\n\nThis operation cannot be undone."
@@ -97,14 +98,26 @@ pub fn delete_project_entry(
             format!("Delete {entry_kind}"),
             "Cancel".to_owned(),
         ))
-        .blocking_show();
+        .show(move |approved| {
+            let _ = approval_sender.blocking_send(approved);
+        });
+    let approved = approval_receiver
+        .recv()
+        .await
+        .is_some_and(|approved| approved);
     if !approved {
         return Err(ProjectFileError {
             code: "project-delete-cancelled",
             message: "The project entry was not deleted.",
         });
     }
-    if metadata.is_dir() {
+    tauri::async_runtime::spawn_blocking(move || delete_entry(target))
+        .await
+        .map_err(|_| unavailable())?
+}
+
+fn delete_entry(target: PathBuf) -> Result<(), ProjectFileError> {
+    if target.is_dir() {
         fs::remove_dir_all(target)
     } else {
         fs::remove_file(target)
@@ -192,7 +205,7 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{create_entry, entry_name, rename_entry, resolve_entry};
+    use super::{create_entry, delete_entry, entry_name, rename_entry, resolve_entry};
 
     fn temporary_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -242,6 +255,22 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(fs::read_to_string(directory.join("second.tex"))?, "second");
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
+    fn deletes_a_directory_tree_without_leaving_entries() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let directory = temporary_directory()?;
+        let generated = directory.join("tmp");
+        fs::create_dir_all(generated.join("support/templates"))?;
+        fs::write(generated.join("support/templates/main.tex"), "generated")?;
+        fs::write(generated.join("output.pdf"), "generated")?;
+
+        assert!(delete_entry(generated).is_ok());
+
+        assert!(!directory.join("tmp").exists());
         fs::remove_dir_all(directory)?;
         Ok(())
     }
