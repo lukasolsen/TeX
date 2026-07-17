@@ -102,7 +102,7 @@ export async function requestLatexCompletions(
   request: LatexCompletionRequest
 ): Promise<LatexCompletionResponse> {
   return parseLatexCompletionResponse(
-    await invoke<unknown>("latex_completions", request)
+    await invoke<unknown>("latex_completions", { request })
   )
 }
 
