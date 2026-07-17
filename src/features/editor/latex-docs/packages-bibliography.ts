@@ -1,20 +1,82 @@
-import { entry, type LatexDocumentation } from "@/features/editor/latex-docs/entry"
+import {
+  entry,
+  type LatexDocumentation,
+} from "@/features/editor/latex-docs/entry"
+
+const packageEntry = (name: string, purpose: string, note = "") =>
+  entry(
+    name,
+    `${purpose}\n\n\`\`\`latex\n\\usepackage{${name}}\n\`\`\`${note}\n\n[${name} on CTAN](https://ctan.org/pkg/${name})`
+  )
 
 export const packagesBibliography = {
-  biblatex: entry(
+  apacite: packageEntry(
+    "apacite",
+    "Formats citations and bibliographies according to APA conventions."
+  ),
+  backref: packageEntry(
+    "backref",
+    "Adds back-reference lists from bibliography entries to citing pages.",
+    "\n\nLoad it through `hyperref` options or with compatible bibliography tooling."
+  ),
+  bibentry: packageEntry(
+    "bibentry",
+    "Prints complete bibliography entries inline in document text."
+  ),
+  biblatex: packageEntry(
     "biblatex",
-    "Provides a modern bibliography and citation interface, usually with Biber as backend.\n\n```latex\n\\usepackage[backend=biber]{biblatex}\n```\n\nUse `\\addbibresource` and `\\printbibliography`, not BibTeX’s `\\bibliography`. [biblatex on CTAN](https://ctan.org/pkg/biblatex)"
+    "Provides a modern bibliography and citation interface, commonly with Biber.",
+    "\n\nUse `\\addbibresource` and `\\printbibliography`; do not combine it with `natbib`."
   ),
-  cleveref: entry(
+  "biblatex-apa": packageEntry(
+    "biblatex-apa",
+    "Supplies APA citation and bibliography styles for `biblatex`."
+  ),
+  "biblatex-chicago": packageEntry(
+    "biblatex-chicago",
+    "Supplies Chicago-style citation and bibliography styles for `biblatex`."
+  ),
+  "biblatex-ieee": packageEntry(
+    "biblatex-ieee",
+    "Supplies IEEE bibliography styles for `biblatex`."
+  ),
+  chapterbib: packageEntry(
+    "chapterbib",
+    "Creates separate bibliographies for included chapters."
+  ),
+  cleveref: packageEntry(
     "cleveref",
-    "Formats cross-references with their type, such as “Figure 1”, and handles multiple references.\n\n```latex\n\\usepackage{cleveref}\n```\n\nLoad it late because it integrates with labels and hyperlinks. [cleveref on CTAN](https://ctan.org/pkg/cleveref)"
+    "Formats cross-references with their type and handles multiple references.",
+    "\n\nLoad it late because it integrates with labels and hyperlinks."
   ),
-  csquotes: entry(
+  csquotes: packageEntry(
     "csquotes",
-    "Supplies context-sensitive quotation commands, especially useful with `biblatex`.\n\n```latex\n\\usepackage{csquotes}\n```\n\nConfigure language support first so quotation styles match the document language. [csquotes on CTAN](https://ctan.org/pkg/csquotes)"
+    "Provides language-aware quotation commands, especially for `biblatex`."
   ),
-  natbib: entry(
+  doi: packageEntry("doi", "Formats Digital Object Identifiers as hyperlinks."),
+  harvard: packageEntry(
+    "harvard",
+    "Provides author-year citation commands for BibTeX workflows."
+  ),
+  inlinebib: packageEntry(
+    "inlinebib",
+    "Inserts bibliographic entries directly into document text."
+  ),
+  jurabib: packageEntry(
+    "jurabib",
+    "Provides BibTeX citation support for legal and humanities writing."
+  ),
+  multibib: packageEntry(
+    "multibib",
+    "Creates multiple bibliographies and citation command sets."
+  ),
+  natbib: packageEntry(
     "natbib",
-    "Extends BibTeX citation commands with author-year and numeric citation styles.\n\n```latex\n\\usepackage[round]{natbib}\n```\n\nUse it with a BibTeX workflow, not together with `biblatex`. [natbib on CTAN](https://ctan.org/pkg/natbib)"
+    "Extends BibTeX citations with author-year and numeric styles.",
+    "\n\nUse it with a BibTeX workflow, not together with `biblatex`."
+  ),
+  splitbib: packageEntry(
+    "splitbib",
+    "Groups bibliography entries into categories in the printed bibliography."
   ),
 } as const satisfies Readonly<Record<string, LatexDocumentation>>

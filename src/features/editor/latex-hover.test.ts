@@ -94,6 +94,36 @@ describe("LaTeX documentation catalog", () => {
     })
   })
 
+  it("documents a broad set of everyday packages", () => {
+    for (const name of [
+      "enumitem",
+      "mathtools",
+      "unicode-math",
+      "biblatex-apa",
+      "longtable",
+      "fancyhdr",
+      "tcolorbox",
+      "polyglossia",
+      "newtxtext",
+      "mhchem",
+      "pgfplots",
+      "minted",
+      "algorithm2e",
+      "glossaries",
+      "varioref",
+      "tikz-cd",
+      "pdfpages",
+      "todonotes",
+      "wrapfig",
+      "fontawesome5",
+    ] as const) {
+      expect(packageDocumentation(name)).toBeDefined()
+    }
+    expect(
+      Object.keys(latexDocumentation.packages).length
+    ).toBeGreaterThanOrEqual(120)
+  })
+
   it("documents structure and text commands used in everyday files", () => {
     for (const name of [
       "part",
@@ -230,7 +260,9 @@ describe("LaTeX documentation catalog", () => {
       "useoutertheme",
       "usetheme",
     ] as const) {
-      expect(commandDocumentation(name)?.markdown).toMatch(/```latex\n[\s\S]+?\n```/)
+      expect(commandDocumentation(name)?.markdown).toMatch(
+        /```latex\n[\s\S]+?\n```/
+      )
     }
   })
 
