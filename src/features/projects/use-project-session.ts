@@ -186,7 +186,11 @@ function withOpenFeedback(
 }
 
 /** Owns startup restoration and the project editing session state machine. */
-export function useProjectSession() {
+export function useProjectSession({
+  restoreStartupWorkspace = true,
+}: {
+  restoreStartupWorkspace?: boolean
+} = {}) {
   const [state, setState] = useState<AppSessionState>({ status: "starting" })
   const stateRef = useRef<AppSessionState>(state)
   const documentRequest = useRef(0)
@@ -213,7 +217,7 @@ export function useProjectSession() {
       try {
         const startup = await loadStartupState()
         if (!active) return
-        if (startup.lastWorkspace === null) {
+        if (!restoreStartupWorkspace || startup.lastWorkspace === null) {
           setState({
             status: "home",
             startup,
@@ -266,7 +270,7 @@ export function useProjectSession() {
     return () => {
       active = false
     }
-  }, [])
+  }, [restoreStartupWorkspace])
 
   const openProjectAtPath = useCallback(async (path: string) => {
     setState((current) =>

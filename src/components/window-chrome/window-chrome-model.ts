@@ -15,6 +15,11 @@ export function windowMenuLabels(): readonly string[] {
   return menuLabels
 }
 
+/** Secondary windows intentionally begin at project home instead of restoring another window's workspace. */
+export function shouldRestoreStartupWorkspace(windowLabel: string): boolean {
+  return !windowLabel.startsWith("tex-window-")
+}
+
 /** Selects the control treatment while leaving visual styling shared. */
 export function windowChromeMode(
   platform = typeof navigator === "undefined" ? "" : navigator.platform,
