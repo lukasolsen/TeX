@@ -114,6 +114,35 @@ describe("LaTeX documentation catalog", () => {
     expect(Object.isFrozen(latexDocumentation)).toBe(true)
     expect(Object.isFrozen(commandDocumentation("section"))).toBe(true)
   })
+
+  it("rejects duplicate keys when merging catalog records", async () => {
+    const { mergeRecords } = await import("@/features/editor/latex-docs/merge")
+    expect(() =>
+      mergeRecords(
+        { section: { title: "a", markdown: "a" } },
+        { section: { title: "b", markdown: "b" } }
+      )
+    ).toThrow(/duplicate/i)
+  })
+
+  it("merges disjoint catalog records", async () => {
+    const { mergeRecords } = await import("@/features/editor/latex-docs/merge")
+    expect(
+      mergeRecords(
+        { section: { title: "\\section", markdown: "s" } },
+        { chapter: { title: "\\chapter", markdown: "c" } }
+      )
+    ).toEqual({
+      section: { title: "\\section", markdown: "s" },
+      chapter: { title: "\\chapter", markdown: "c" },
+    })
+  })
+
+  it("keeps catalog maps frozen after modular merge", () => {
+    expect(Object.isFrozen(latexDocumentation.commands)).toBe(true)
+    expect(Object.isFrozen(latexDocumentation.packages)).toBe(true)
+    expect(Object.isFrozen(latexDocumentation.documentClasses)).toBe(true)
+  })
 })
 
 describe("Markdown hover documentation", () => {
