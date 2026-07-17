@@ -179,17 +179,28 @@ function sourceEditorTheme(fontSize: number) {
       borderRadius: "0.75rem",
       backgroundColor: "var(--popover)",
       color: "var(--popover-foreground)",
-      boxShadow:
-        "0 18px 40px color-mix(in oklch, var(--foreground) 18%, transparent)",
-      maxWidth: "34rem",
+      maxWidth: "min(34rem, calc(100vw - 2rem))",
+      maxHeight: "calc(100vh - 2rem)",
       overflow: "hidden",
     },
-    ".tex-hover-card": { padding: "0.75rem 0.875rem" },
-    ".tex-hover-card strong": {
+    ".tex-hover-card": {
+      boxSizing: "border-box",
+      maxHeight: "calc(100vh - 2rem)",
+      overflowY: "auto",
+      padding: "0.75rem 0.875rem",
+    },
+    ".tex-hover-card h2": {
+      margin: "0",
       display: "block",
       fontFamily: "var(--font-sans)",
       fontSize: "0.8125rem",
     },
+    ".tex-hover-card h3, .tex-hover-card h4, .tex-hover-card h5, .tex-hover-card h6":
+      {
+        margin: "0.8rem 0 0",
+        fontFamily: "var(--font-sans)",
+        fontSize: "0.75rem",
+      },
     ".tex-hover-card p": {
       margin: "0.3rem 0 0",
       fontFamily: "var(--font-sans)",
@@ -197,15 +208,22 @@ function sourceEditorTheme(fontSize: number) {
       lineHeight: "1.35",
       color: "var(--muted-foreground)",
     },
-    ".tex-hover-card-label": {
-      display: "block",
-      marginTop: "0.7rem",
+    ".tex-hover-card ul, .tex-hover-card ol": {
+      margin: "0.45rem 0 0",
+      paddingLeft: "1.25rem",
       fontFamily: "var(--font-sans)",
-      fontSize: "0.625rem",
-      fontWeight: "700",
-      letterSpacing: "0.06em",
-      textTransform: "uppercase",
+      fontSize: "0.75rem",
+      lineHeight: "1.35",
       color: "var(--muted-foreground)",
+    },
+    ".tex-hover-card a": {
+      color: "var(--primary)",
+      textDecoration: "underline",
+      textUnderlineOffset: "0.14em",
+    },
+    ".tex-hover-card a:focus-visible": {
+      outline: "2px solid var(--ring)",
+      outlineOffset: "2px",
     },
     ".tex-hover-card pre": {
       maxHeight: "18rem",
@@ -219,9 +237,9 @@ function sourceEditorTheme(fontSize: number) {
       lineHeight: "1.5",
       color: "var(--editor-preview-foreground)",
     },
-    ".tex-hover-card-caution": {
-      marginTop: "0.2rem",
-      color: "var(--source-foreground)",
+    ".tex-hover-card code": {
+      fontFamily: "var(--font-mono)",
+      fontSize: "0.92em",
     },
   })
 }

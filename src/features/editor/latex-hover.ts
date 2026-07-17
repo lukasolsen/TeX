@@ -4,7 +4,6 @@ import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
-
 import {
   latexCommands,
   latexFileReferencesFromCommands,
@@ -12,172 +11,20 @@ import {
   type LatexFileReference,
 } from "@/domain/latex"
 import {
+  commandDocumentation,
+  documentClassDocumentation,
+  packageDocumentation,
+  type LatexDocumentation,
+} from "@/features/editor/latex-documentation"
+import {
   projectErrorFromUnknown,
   readProjectSource,
 } from "@/services/project-service"
 
-type KeywordInfo = {
-  title: string
-  summary: string
-  example: string
-  caution: string
-}
-
-const keywordInfo: Record<string, KeywordInfo> = {
-  documentclass: {
-    title: "\\documentclass",
-    summary:
-      "Chooses the document class, which controls the overall structure and default typography.",
-    example: "\\documentclass[12pt,a4paper]{article}",
-    caution:
-      "Use one document class, before \\begin{document}. Do not load a class with \\usepackage.",
-  },
-  usepackage: {
-    title: "\\usepackage",
-    summary:
-      "Loads a package and makes its commands and environments available to the document.",
-    example: "\\usepackage{graphicx}",
-    caution:
-      "Load packages in the preamble. Do not repeat a package unless its documentation says it is safe.",
-  },
-  begin: {
-    title: "\\begin",
-    summary: "Starts a named environment, such as a list, figure, or equation.",
-    example: "\\begin{itemize}\n  \\item First point\n\\end{itemize}",
-    caution:
-      "Every \\begin{name} needs a matching \\end{name}; nesting must close in reverse order.",
-  },
-  end: {
-    title: "\\end",
-    summary: "Closes the most recently opened matching environment.",
-    example: "\\begin{equation}\n  E = mc^2\n\\end{equation}",
-    caution:
-      "The environment name must match exactly. Closing a different environment causes a compile error.",
-  },
-  chapter: {
-    title: "\\chapter",
-    summary:
-      "Creates a numbered chapter heading in classes that support chapters, such as book or report.",
-    example: "\\chapter{Method}",
-    caution: "The article class has no chapters; use \\section there instead.",
-  },
-  section: {
-    title: "\\section",
-    summary:
-      "Creates a numbered section heading and adds it to the table of contents when enabled.",
-    example: "\\section{Introduction}",
-    caution:
-      "Keep heading levels in order. Do not jump from \\section straight to \\subsubsection without a reason.",
-  },
-  subsection: {
-    title: "\\subsection",
-    summary: "Creates a numbered subsection beneath the current section.",
-    example: "\\subsection{Data collection}",
-    caution:
-      "Use it for real structure, not for visual spacing. Prefer paragraphs for short divisions.",
-  },
-  title: {
-    title: "\\title",
-    summary: "Sets the title text that \\maketitle renders later.",
-    example: "\\title{A clear research title}",
-    caution:
-      "Put it in the preamble and call \\maketitle only after \\begin{document}.",
-  },
-  author: {
-    title: "\\author",
-    summary: "Sets the author information used by \\maketitle.",
-    example: "\\author{Ada Lovelace}",
-    caution:
-      "This does not print by itself; the document must use \\maketitle.",
-  },
-  date: {
-    title: "\\date",
-    summary: "Sets the date used by \\maketitle.",
-    example: "\\date{\\today}",
-    caution: "Use \\date{} to intentionally omit the date.",
-  },
-  maketitle: {
-    title: "\\maketitle",
-    summary:
-      "Renders the title block from the title, author, and date metadata.",
-    example: "\\begin{document}\n\\maketitle",
-    caution:
-      "Call it once near the start of the document, not in the preamble.",
-  },
-  label: {
-    title: "\\label",
-    summary: "Creates a stable name that other commands can reference.",
-    example: "\\section{Results}\\label{sec:results}",
-    caution:
-      "Place it after the heading or caption it labels. Labels must be unique; use prefixes such as sec:, fig:, and eq:.",
-  },
-  ref: {
-    title: "\\ref",
-    summary: "Inserts the number associated with a matching \\label.",
-    example: "See Section~\\ref{sec:results}.",
-    caution:
-      "Compile twice after adding or moving labels so LaTeX can resolve the reference.",
-  },
-  cite: {
-    title: "\\cite",
-    summary: "Inserts a citation for a bibliography entry.",
-    example: "As shown by \\cite{knuth1984}. ",
-    caution:
-      "The citation key must exist in a configured bibliography file; the exact output style depends on your bibliography package.",
-  },
-  item: {
-    title: "\\item",
-    summary: "Adds one entry to a list environment.",
-    example: "\\begin{enumerate}\n  \\item First step\n\\end{enumerate}",
-    caution:
-      "Use it only inside a list-like environment such as itemize, enumerate, or description.",
-  },
-  input: {
-    title: "\\input",
-    summary:
-      "Inserts another source file at this exact location, keeping large documents split into focused files.",
-    example: "\\input{chapters/introduction}",
-    caution:
-      "The path is relative to this file. Do not include a second document preamble in an input file.",
-  },
-  include: {
-    title: "\\include",
-    summary:
-      "Includes another source file on a new page and supports \\includeonly workflows.",
-    example: "\\include{chapters/method}",
-    caution:
-      "Use \\input for small inline parts. Do not put \\include inside another included file.",
-  },
-  subfile: {
-    title: "\\subfile",
-    summary:
-      "Includes a child document when the project uses the subfiles package.",
-    example: "\\subfile{chapters/introduction}",
-    caution:
-      "This requires \\usepackage{subfiles}; the child file needs its own compatible preamble.",
-  },
-  bibliography: {
-    title: "\\bibliography",
-    summary: "Selects BibTeX bibliography files for the document.",
-    example: "\\bibliography{references}",
-    caution:
-      "Use this with a BibTeX workflow. Do not mix it with biblatex's \\addbibresource.",
-  },
-  addbibresource: {
-    title: "\\addbibresource",
-    summary: "Registers a bibliography file when using biblatex.",
-    example: "\\addbibresource{references.bib}",
-    caution:
-      "Use this in the preamble with biblatex, then print it with \\printbibliography—not \\bibliography.",
-  },
-  includegraphics: {
-    title: "\\includegraphics",
-    summary:
-      "Places an image asset; the graphicx package provides this command.",
-    example: "\\includegraphics[width=0.8\\linewidth]{figures/result.pdf}",
-    caution:
-      "Load graphicx first and keep image paths relative to the source file. A missing asset stops the build.",
-  },
+type HoverDocumentation = {
+  from: number
+  to: number
+  documentation: LatexDocumentation
 }
 
 export function referencedFileAt(
@@ -191,29 +38,31 @@ export function referencedFileAt(
 export function keywordAt(
   source: string,
   position: number
-): { from: number; to: number; info: KeywordInfo } | null {
+): HoverDocumentation | null {
   return keywordFromCommands(latexCommands(source), position)
 }
 
 function keywordFromCommands(
   commands: readonly LatexCommand[],
   position: number
-): { from: number; to: number; info: KeywordInfo } | null {
+): HoverDocumentation | null {
   const command = commands.find(
     ({ from, to, name }) =>
-      position >= from && position <= to && keywordInfo[name] !== undefined
+      position >= from &&
+      position <= to &&
+      commandDocumentation(name) !== undefined
   )
   if (command === undefined) return null
-  const info = keywordInfo[command.name]
-  return info === undefined
+  const documentation = commandDocumentation(command.name)
+  return documentation === undefined
     ? null
-    : { from: command.from, to: command.to, info }
+    : { from: command.from, to: command.to, documentation }
 }
 
 function classOrPackageAt(
   commands: readonly LatexCommand[],
   position: number
-): { from: number; to: number; title: string; description: string } | null {
+): HoverDocumentation | null {
   for (const command of commands) {
     if (command.name !== "documentclass" && command.name !== "usepackage") {
       continue
@@ -227,16 +76,21 @@ function classOrPackageAt(
       const from = group.from + offset + leadingWhitespace
       const to = from + name.length
       offset += rawValue.length + 1
-      if (name !== "" && position >= from && position < to) {
-        const isClass = command.name === "documentclass"
-        return {
-          from,
-          to,
+      if (name === "" || position < from || position >= to) continue
+      const documentation =
+        command.name === "documentclass"
+          ? documentClassDocumentation(name)
+          : packageDocumentation(name)
+      if (documentation !== undefined) return { from, to, documentation }
+      const kind =
+        command.name === "documentclass" ? "Document class" : "LaTeX package"
+      return {
+        from,
+        to,
+        documentation: {
           title: name,
-          description: isClass
-            ? "Document class name. It is resolved by your configured TeX distribution when the project builds."
-            : "LaTeX package name. It is resolved by your configured TeX distribution when the project builds.",
-        }
+          markdown: `${kind} name. It is resolved by your configured TeX distribution when the project builds.`,
+        },
       }
     }
   }
@@ -255,37 +109,147 @@ function referenceAt(
   )
 }
 
-function card(
+function appendInlineMarkdown(parent: HTMLElement, text: string): void {
+  const pattern =
+    /(\[([^\]]+)\]\((https:[^\s)]+)\)|\*\*([^*]+)\*\*|\*([^*]+)\*|`([^`]+)`)/g
+  let cursor = 0
+  for (const match of text.matchAll(pattern)) {
+    const index = match.index ?? 0
+    parent.append(document.createTextNode(text.slice(cursor, index)))
+    if (match[2] !== undefined && match[3] !== undefined) {
+      const url = httpsUrl(match[3])
+      if (url === null) {
+        parent.append(document.createTextNode(match[0]))
+      } else {
+        const link = document.createElement("a")
+        link.href = url.href
+        link.target = "_blank"
+        link.rel = "noopener noreferrer"
+        link.textContent = match[2]
+        parent.append(link)
+      }
+    } else if (match[4] !== undefined) {
+      const strong = document.createElement("strong")
+      strong.textContent = match[4]
+      parent.append(strong)
+    } else if (match[5] !== undefined) {
+      const emphasis = document.createElement("em")
+      emphasis.textContent = match[5]
+      parent.append(emphasis)
+    } else if (match[6] !== undefined) {
+      const code = document.createElement("code")
+      code.textContent = match[6]
+      parent.append(code)
+    }
+    cursor = index + match[0].length
+  }
+  parent.append(document.createTextNode(text.slice(cursor)))
+}
+
+function httpsUrl(value: string): URL | null {
+  try {
+    const url = new URL(value)
+    return url.protocol === "https:" ? url : null
+  } catch {
+    return null
+  }
+}
+
+function fencedCode(content: string, language: string): string {
+  const longestFence = [...content.matchAll(/^`+/gm)].reduce(
+    (longest, match) => Math.max(longest, match[0].length),
+    2
+  )
+  const fence = "`".repeat(longestFence + 1)
+  return `${fence}${language}\n${content}\n${fence}`
+}
+
+function appendParagraph(article: HTMLElement, lines: string[]): void {
+  const paragraph = document.createElement("p")
+  appendInlineMarkdown(paragraph, lines.join(" "))
+  article.append(paragraph)
+}
+
+/** Renders the deliberately limited bundled Markdown subset without HTML parsing. */
+export function renderMarkdownDocumentation(
   title: string,
-  summary: string,
-  example?: string,
-  caution?: string
+  markdown: string
 ): HTMLElement {
-  const dom = document.createElement("article")
-  dom.className = "tex-hover-card"
-  const heading = document.createElement("strong")
+  const article = document.createElement("article")
+  article.className = "tex-hover-card"
+  const heading = document.createElement("h2")
   heading.textContent = title
-  const description = document.createElement("p")
-  description.textContent = summary
-  dom.append(heading, description)
-  if (example !== undefined) {
-    const exampleLabel = document.createElement("span")
-    exampleLabel.className = "tex-hover-card-label"
-    exampleLabel.textContent = "Example"
-    const preview = document.createElement("pre")
-    preview.textContent = example
-    dom.append(exampleLabel, preview)
+  heading.style.fontSize = "1.2em"
+  heading.style.fontWeight = "bold"
+  heading.style.marginBottom = "0.5em"
+  article.append(heading)
+
+  const lines = markdown.split("\n")
+  for (let index = 0; index < lines.length;) {
+    const line = lines[index] ?? ""
+    if (line.trim() === "") {
+      index += 1
+      continue
+    }
+    const fenceMatch = /^(`{3,})/.exec(line)
+    if (fenceMatch !== null) {
+      const fence = fenceMatch[1] ?? "```"
+      const codeLines: string[] = []
+      index += 1
+      while (index < lines.length && !(lines[index] ?? "").startsWith(fence)) {
+        codeLines.push(lines[index] ?? "")
+        index += 1
+      }
+      if (index < lines.length) index += 1
+      const pre = document.createElement("pre")
+      const code = document.createElement("code")
+      code.textContent = codeLines.join("\n")
+      pre.append(code)
+      article.append(pre)
+      continue
+    }
+    const headingMatch = /^(#{1,6})\s+(.+)$/.exec(line)
+    if (headingMatch !== null) {
+      const markers = headingMatch[1] ?? "#"
+      const content = headingMatch[2] ?? ""
+      const subheading = document.createElement(
+        `h${Math.min(6, markers.length + 2)}`
+      )
+      appendInlineMarkdown(subheading, content)
+      article.append(subheading)
+      index += 1
+      continue
+    }
+    const listMatch = /^([-*]|\d+\.)\s+(.+)$/.exec(line)
+    if (listMatch !== null) {
+      const ordered = /\d+\./.test(listMatch[1] ?? "")
+      const list = document.createElement(ordered ? "ol" : "ul")
+      while (index < lines.length) {
+        const itemLine = lines[index] ?? ""
+        const itemMatch = /^(?:[-*]|\d+\.)\s+(.+)$/.exec(itemLine)
+        if (itemMatch === null || /\d+\./.test(itemLine) !== ordered) break
+        const item = document.createElement("li")
+        appendInlineMarkdown(item, itemMatch[1] ?? "")
+        list.append(item)
+        index += 1
+      }
+      article.append(list)
+      continue
+    }
+    const paragraphLines = [line]
+    index += 1
+    while (
+      index < lines.length &&
+      (lines[index] ?? "").trim() !== "" &&
+      !/^`{3,}/.test(lines[index] ?? "") &&
+      !/^(#{1,6})\s+|^([-*]|\d+\.)\s+/.test(lines[index] ?? "")
+    ) {
+      paragraphLines.push(lines[index] ?? "")
+      index += 1
+    }
+    appendParagraph(article, paragraphLines)
   }
-  if (caution !== undefined) {
-    const cautionLabel = document.createElement("span")
-    cautionLabel.className = "tex-hover-card-label"
-    cautionLabel.textContent = "Watch for"
-    const cautionText = document.createElement("p")
-    cautionText.className = "tex-hover-card-caution"
-    cautionText.textContent = caution
-    dom.append(cautionLabel, cautionText)
-  }
-  return dom
+  return article
 }
 
 /** Provides editor-local documentation and project-file previews without modifying source text. */
@@ -309,7 +273,7 @@ export function latexHoverTooltip(
           pos: reference.from,
           end: reference.to,
           create: () => ({
-            dom: card(
+            dom: renderMarkdownDocumentation(
               reference.path,
               `Referenced by \\${reference.command}. This asset is not a text source that TeX can preview.`
             ),
@@ -323,11 +287,9 @@ export function latexHoverTooltip(
           pos: reference.from,
           end: reference.to,
           create: () => ({
-            dom: card(
+            dom: renderMarkdownDocumentation(
               document.path,
-              `${document.byteLength.toLocaleString()} bytes · referenced by \\${reference.command} · Ctrl/⌘-click to open`,
-              excerpt,
-              "This is a preview only. Edit the referenced file from the project tree or by opening it in the editor."
+              `${document.byteLength.toLocaleString()} bytes · referenced by \\${reference.command} · Ctrl/⌘-click to open\n\n${fencedCode(excerpt, "latex")}\n\nThis is a preview only. Edit the referenced file from the project tree or by opening it in the editor.`
             ),
           }),
         }
@@ -336,7 +298,10 @@ export function latexHoverTooltip(
           pos: reference.from,
           end: reference.to,
           create: () => ({
-            dom: card(reference.path, projectErrorFromUnknown(error).message),
+            dom: renderMarkdownDocumentation(
+              reference.path,
+              projectErrorFromUnknown(error).message
+            ),
           }),
         }
       }
@@ -348,7 +313,10 @@ export function latexHoverTooltip(
         pos: classOrPackage.from,
         end: classOrPackage.to,
         create: () => ({
-          dom: card(classOrPackage.title, classOrPackage.description),
+          dom: renderMarkdownDocumentation(
+            classOrPackage.documentation.title,
+            classOrPackage.documentation.markdown
+          ),
         }),
       }
     }
@@ -359,11 +327,9 @@ export function latexHoverTooltip(
       pos: keyword.from,
       end: keyword.to,
       create: () => ({
-        dom: card(
-          keyword.info.title,
-          keyword.info.summary,
-          keyword.info.example,
-          keyword.info.caution
+        dom: renderMarkdownDocumentation(
+          keyword.documentation.title,
+          keyword.documentation.markdown
         ),
       }),
     }
