@@ -142,7 +142,10 @@ fn is_escaped(source: &str, position: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{completion_context, query, query_labels, CompletionContext};
+    use super::{
+        completion_context, resolve_completions, query, query_labels, CompletionContext,
+        CompletionProvenance, CompletionRequest,
+    };
 
     #[test]
     fn detects_a_command_prefix_after_an_unescaped_backslash() {
@@ -310,6 +313,35 @@ mod tests {
             .count();
         assert_eq!(matches, 1);
     }
+
+    #[test]
+    fn completes_a_project_label_inside_a_ref_argument() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tex-completion-ref-{unique}"));
+        fs::create_dir(&root).expect("create temp root");
+        fs::write(root.join("intro.tex"), "\\label{sec:intro}\n").expect("write source");
+        let canonical = root.canonicalize().expect("canonical root");
+
+        let request = CompletionRequest {
+            project_path: canonical.to_string_lossy().into_owned(),
+            relative_path: "main.tex".into(),
+            content: "\\ref{sec".into(),
+            position: 8,
+        };
+        let response = resolve_completions(&canonical, &request);
+
+        assert_eq!(response.items[0].label, "sec:intro");
+        assert_eq!(response.items[0].source.as_deref(), Some("intro.tex"));
+        assert!(matches!(response.items[0].provenance, CompletionProvenance::Project));
+
+        fs::remove_dir_all(root).ok();
+    }
 }
 use std::collections::HashSet;
 
@@ -317,6 +349,12 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::{project_access::ProjectAccess, source_read};
+use crate::latex_project_scan::{scan_project, ProjectSources};
+use crate::latex_symbols::{
+    bib_keys_in, bibitem_keys_in, classify_command, file_extensions, format_file_label, labels_in,
+    match_symbols, ArgumentTarget, ResolvedSymbol, SymbolKind,
+};
+use std::path::Path;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -346,6 +384,9 @@ struct CompletionItem {
     from: usize,
     to: usize,
     insert_text: String,
+    /// The project-relative file that defines a project symbol, so the editor can
+    /// name its origin; `None` for catalog items and for file suggestions.
+    source: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize)]
@@ -354,6 +395,9 @@ enum CompletionKind {
     Command,
     Environment,
     Snippet,
+    Label,
+    Citation,
+    File,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -362,6 +406,7 @@ enum CompletionProvenance {
     Core,
     Package,
     Local,
+    Project,
 }
 
 #[derive(Debug, Serialize)]
@@ -585,7 +630,7 @@ pub fn latex_completions(
     request: CompletionRequest,
     access: State<'_, ProjectAccess>,
 ) -> Result<CompletionResponse, CompletionError> {
-    access
+    let root = access
         .resolve(&request.project_path)
         .map_err(|_| unavailable())?;
     let relative = std::path::Path::new(&request.relative_path);
@@ -595,7 +640,7 @@ pub fn latex_completions(
     if request.content.len() > source_read::MAX_SOURCE_BYTES as usize {
         return Err(unavailable());
     }
-    Ok(query(&request.content, request.position))
+    Ok(resolve_completions(&root, &request))
 }
 
 fn query(source: &str, position: usize) -> CompletionResponse {
@@ -627,6 +672,123 @@ fn query(source: &str, position: usize) -> CompletionResponse {
         CompletionContext::Argument { .. } => Vec::new(),
     };
     CompletionResponse { items }
+}
+
+fn resolve_completions(root: &Path, request: &CompletionRequest) -> CompletionResponse {
+    match completion_context(&request.content, request.position) {
+        CompletionContext::Argument { from, command, prefix } => CompletionResponse {
+            items: symbol_items(root, request, &command, from, request.position, &prefix),
+        },
+        _ => query(&request.content, request.position),
+    }
+}
+
+fn symbol_items(
+    root: &Path,
+    request: &CompletionRequest,
+    command: &str,
+    from: usize,
+    to: usize,
+    prefix: &str,
+) -> Vec<CompletionItem> {
+    let Some(target) = classify_command(command) else {
+        return Vec::new();
+    };
+    let sources = scan_project(root, Path::new(&request.relative_path), &request.content);
+    let resolved = match target {
+        ArgumentTarget::Label => text_symbols(&sources, SymbolKind::Label, labels_in),
+        ArgumentTarget::Citation => citation_symbols(&sources),
+        ArgumentTarget::SourceFile | ArgumentTarget::BibFile | ArgumentTarget::ImageFile => {
+            file_symbols(&sources, target)
+        }
+    };
+    match_symbols(resolved, prefix)
+        .into_iter()
+        .map(|symbol| symbol_item(symbol, from, to))
+        .collect()
+}
+
+fn text_symbols(
+    sources: &ProjectSources,
+    kind: SymbolKind,
+    extract: fn(&str) -> Vec<String>,
+) -> Vec<ResolvedSymbol> {
+    sources
+        .texts
+        .iter()
+        .flat_map(|(path, content)| {
+            let source = path.to_string_lossy().replace('\\', "/");
+            extract(content)
+                .into_iter()
+                .map(move |label| ResolvedSymbol { kind, label, source: source.clone() })
+        })
+        .collect()
+}
+
+fn citation_symbols(sources: &ProjectSources) -> Vec<ResolvedSymbol> {
+    sources
+        .texts
+        .iter()
+        .flat_map(|(path, content)| {
+            let source = path.to_string_lossy().replace('\\', "/");
+            let is_bib = path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("bib"));
+            let keys = if is_bib { bib_keys_in(content) } else { bibitem_keys_in(content) };
+            keys.into_iter().map(move |label| ResolvedSymbol {
+                kind: SymbolKind::Citation,
+                label,
+                source: source.clone(),
+            })
+        })
+        .collect()
+}
+
+fn file_symbols(sources: &ProjectSources, target: ArgumentTarget) -> Vec<ResolvedSymbol> {
+    let extensions = file_extensions(target);
+    sources
+        .files
+        .iter()
+        .filter_map(|path| {
+            let extension = path
+                .extension()
+                .and_then(|extension| extension.to_str())?
+                .to_ascii_lowercase();
+            if !extensions.contains(&extension.as_str()) {
+                return None;
+            }
+            let relative = path.to_string_lossy();
+            Some(ResolvedSymbol {
+                kind: SymbolKind::File,
+                label: format_file_label(&relative, target),
+                source: relative.replace('\\', "/"),
+            })
+        })
+        .collect()
+}
+
+fn symbol_item(symbol: ResolvedSymbol, from: usize, to: usize) -> CompletionItem {
+    let (kind, detail) = match symbol.kind {
+        SymbolKind::Label => (CompletionKind::Label, "Cross-reference label."),
+        SymbolKind::Citation => (CompletionKind::Citation, "Bibliography entry."),
+        SymbolKind::File => (CompletionKind::File, "Project file."),
+    };
+    let source = match symbol.kind {
+        SymbolKind::File => None,
+        SymbolKind::Label | SymbolKind::Citation => Some(symbol.source),
+    };
+    CompletionItem {
+        label: symbol.label.clone(),
+        detail,
+        kind,
+        provenance: CompletionProvenance::Project,
+        requires: None,
+        from,
+        to,
+        insert_text: symbol.label,
+        source,
+    }
 }
 
 #[cfg(test)]
@@ -820,6 +982,7 @@ fn item(
         from,
         to,
         insert_text,
+        source: None,
     }
 }
 
