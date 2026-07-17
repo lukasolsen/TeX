@@ -35,6 +35,18 @@ import {
 } from "@/domain/identifiers"
 
 describe("LaTeX documentation catalog", () => {
+  it("meets catalog coverage targets", () => {
+    expect(Object.keys(latexDocumentation.commands).length).toBeGreaterThanOrEqual(
+      250
+    )
+    expect(Object.keys(latexDocumentation.packages).length).toBeGreaterThanOrEqual(
+      120
+    )
+    expect(
+      Object.keys(latexDocumentation.documentClasses).length
+    ).toBeGreaterThanOrEqual(25)
+  })
+
   it("finds documentation for a recognised command", () => {
     expect(commandDocumentation("includegraphics")).toMatchObject({
       title: "\\includegraphics",
