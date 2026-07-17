@@ -21,11 +21,6 @@ pub(crate) fn read(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-pub(crate) fn read_utf8(path: &Path, limit: u64) -> io::Result<String> {
-    String::from_utf8(read(path, limit)?)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "file is not valid UTF-8 text"))
-}
-
 /// Reads at most `limit` bytes from the start of the file, discarding any excess
 /// instead of failing. Intended for scanning a file's leading region (e.g. a
 /// preamble) without loading the whole file into memory.
