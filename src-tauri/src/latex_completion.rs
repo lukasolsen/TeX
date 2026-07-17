@@ -153,6 +153,24 @@ mod tests {
     }
 
     #[test]
+    fn reports_the_package_a_capability_requires() {
+        let source = "\\usepackage{amsmath}\n\\begin{ali";
+        let requires = query(source, source.len())
+            .items
+            .into_iter()
+            .find(|item| item.label == "align")
+            .map(|item| item.requires);
+        assert_eq!(requires, Some(Some("amsmath")));
+
+        let core = query("\\sec", 4)
+            .items
+            .into_iter()
+            .find(|item| item.label == "\\section")
+            .map(|item| item.requires);
+        assert_eq!(core, Some(None));
+    }
+
+    #[test]
     fn deduplicates_a_redefined_core_command() {
         let source = "\\renewcommand{\\section}{}\n\\section";
         let matches = query_labels(source, source.len())
@@ -191,6 +209,9 @@ struct CompletionItem {
     detail: &'static str,
     kind: CompletionKind,
     provenance: CompletionProvenance,
+    /// The package a suggestion depends on, so the editor can explain why it appears;
+    /// `None` for core and locally defined entries.
+    requires: Option<&'static str>,
     from: usize,
     to: usize,
     insert_text: String,
@@ -502,6 +523,7 @@ fn command_items(
                     "Project macro.",
                     CompletionKind::Command,
                     CompletionProvenance::Local,
+                    None,
                     from,
                     to,
                     format!("\\{name}"),
@@ -519,6 +541,7 @@ fn command_items(
                     capability.detail,
                     CompletionKind::Command,
                     provenance,
+                    capability.package,
                     from,
                     to,
                     format!("\\{}", capability.name),
@@ -536,6 +559,7 @@ fn command_items(
                     snippet.detail,
                     CompletionKind::Snippet,
                     provenance,
+                    snippet.package,
                     from,
                     to,
                     snippet.insert_text.to_owned(),
@@ -593,6 +617,7 @@ fn environment_items(
                 "Closest open environment.",
                 CompletionKind::Environment,
                 CompletionProvenance::Local,
+                None,
                 from,
                 to,
                 name.to_owned(),
@@ -608,6 +633,7 @@ fn environment_items(
                     "Project environment.",
                     CompletionKind::Environment,
                     CompletionProvenance::Local,
+                    None,
                     from,
                     to,
                     name.to_owned(),
@@ -628,6 +654,7 @@ fn environment_items(
                     capability.detail,
                     CompletionKind::Environment,
                     provenance,
+                    capability.package,
                     from,
                     to,
                     capability.name.to_owned(),
@@ -638,11 +665,16 @@ fn environment_items(
     finalize(ranked)
 }
 
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one flat constructor for a serialized value"
+)]
 fn item(
     label: String,
     detail: &'static str,
     kind: CompletionKind,
     provenance: CompletionProvenance,
+    requires: Option<&'static str>,
     from: usize,
     to: usize,
     insert_text: String,
@@ -652,6 +684,7 @@ fn item(
         detail,
         kind,
         provenance,
+        requires,
         from,
         to,
         insert_text,

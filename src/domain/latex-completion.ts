@@ -7,6 +7,7 @@ import {
   enumValue,
   integer,
   nonEmptyString,
+  nullableString,
   record,
   stringValue,
 } from "@/services/ipc-contract"
@@ -26,6 +27,7 @@ export type LatexCompletionItem = Readonly<{
   detail: string
   kind: LatexCompletionKind
   provenance: LatexCompletionProvenance
+  requires: string | null
   from: number
   to: number
   insertText: string
@@ -57,6 +59,7 @@ export function parseLatexCompletionResponse(
           "package",
           "local",
         ]),
+        requires: nullableString(item.requires, "LaTeX completion requirement", 128),
         from,
         to,
         insertText: nonEmptyString(item.insertText, "LaTeX completion insertion", 16_384),

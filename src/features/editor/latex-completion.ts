@@ -1,5 +1,6 @@
 import {
   snippet,
+  type Completion,
   type CompletionResult,
   type CompletionSource,
 } from "@codemirror/autocomplete"
@@ -8,8 +9,17 @@ import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
-import type { LatexCompletionItem } from "@/domain/latex-completion"
+import type {
+  LatexCompletionItem,
+  LatexCompletionKind,
+} from "@/domain/latex-completion"
 import { requestLatexCompletions } from "@/services/project-service"
+
+const KIND_LABELS: Record<LatexCompletionKind, string> = {
+  command: "Command",
+  environment: "Environment",
+  snippet: "Template",
+}
 
 function isEscaped(source: string, position: number): boolean {
   let slashes = 0
@@ -28,27 +38,107 @@ export function isLatexCompletionContext(source: string, position: number): bool
   return /\\[A-Za-z@]*$/.test(before) || /\\(?:begin|end)\{[A-Za-z@]*$/.test(before)
 }
 
-function option(item: LatexCompletionItem, rank: number) {
+/** Plain-language name for a completion kind, or `null` for an unrecognized value. */
+export function latexCompletionKindLabel(kind: string): string | null {
+  return kind === "command" || kind === "environment" || kind === "snippet"
+    ? KIND_LABELS[kind]
+    : null
+}
+
+/** A sentence explaining where a suggestion comes from, avoiding LaTeX jargon. */
+export function latexCompletionSourceSummary(
+  item: Pick<LatexCompletionItem, "provenance" | "requires">
+): string {
+  switch (item.provenance) {
+    case "local":
+      return "Defined in this project"
+    case "package":
+      return item.requires
+        ? `Provided by the ${item.requires} package`
+        : "Provided by a loaded package"
+    case "core":
+      return "Built into LaTeX"
+  }
+}
+
+/**
+ * A readable preview of a multi-line or placeholder insertion with `${name}`
+ * markers reduced to their names; `null` when the insertion is a plain token.
+ */
+export function latexInsertionPreview(insertText: string): string | null {
+  if (!insertText.includes("\n") && !insertText.includes("${")) return null
+  return insertText.replace(/\$\{([^}]*)\}/g, "$1")
+}
+
+function renderInfo(item: LatexCompletionItem): Node {
+  const card = document.createElement("div")
+  card.className = "tex-completion-info"
+
+  const meta = document.createElement("div")
+  meta.className = "tex-completion-meta"
+  const kind = document.createElement("span")
+  kind.className = `tex-completion-kind tex-completion-kind-${item.kind}`
+  kind.textContent = latexCompletionKindLabel(item.kind) ?? ""
+  const provenance = document.createElement("span")
+  provenance.className = "tex-completion-provenance"
+  provenance.textContent = latexCompletionSourceSummary(item)
+  meta.append(kind, provenance)
+
+  const description = document.createElement("p")
+  description.className = "tex-completion-description"
+  description.textContent = item.detail
+  card.append(meta, description)
+
+  const preview = latexInsertionPreview(item.insertText)
+  if (preview !== null) {
+    const label = document.createElement("p")
+    label.className = "tex-completion-preview-label"
+    label.textContent = "Inserts"
+    const block = document.createElement("pre")
+    block.className = "tex-completion-preview"
+    block.textContent = preview
+    card.append(label, block)
+  }
+
+  const hint = document.createElement("p")
+  hint.className = "tex-completion-hint"
+  hint.textContent = "Press Enter to insert"
+  card.append(hint)
+
+  return card
+}
+
+/** Maps a backend completion item to a CodeMirror option, preserving backend order. */
+export function latexCompletionOption(
+  item: LatexCompletionItem,
+  rank: number
+): Completion {
   return {
     label: item.label,
-    detail: `${item.provenance} · ${item.detail}`,
-    type: item.kind === "environment" ? "class" : "keyword",
-    boost: 64 - rank,
+    detail: item.detail,
+    type: item.kind,
+    boost: 99 - rank,
     apply: item.insertText.includes("${")
       ? snippet(item.insertText)
       : item.insertText,
-    info: () => {
-      const detail = document.createElement("div")
-      detail.className = "tex-completion-info"
-      const source = document.createElement("span")
-      source.className = "tex-completion-source"
-      source.textContent = item.provenance
-      const description = document.createElement("p")
-      description.textContent = item.detail
-      detail.append(source, description)
-      return detail
-    },
+    info: () => renderInfo(item),
   }
+}
+
+/**
+ * Adds a plain-language kind badge to each completion row so newcomers can tell a
+ * command from an environment or a template without decoding an icon.
+ */
+export const latexCompletionRowBadge = {
+  render(completion: Completion): Node | null {
+    const label = latexCompletionKindLabel(completion.type ?? "")
+    if (label === null) return null
+    const badge = document.createElement("span")
+    badge.className = `tex-completion-kind tex-completion-kind-${completion.type}`
+    badge.textContent = label
+    return badge
+  },
+  position: 10,
 }
 
 export function latexCompletionSource(
@@ -70,7 +160,7 @@ export function latexCompletionSource(
     if (first === undefined) return null
     return {
       from: first.from,
-      options: response.items.map(option),
+      options: response.items.map(latexCompletionOption),
       validFor: /[A-Za-z@]*/,
     }
   }
