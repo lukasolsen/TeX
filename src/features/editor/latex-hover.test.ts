@@ -151,6 +151,33 @@ describe("LaTeX documentation catalog", () => {
     }
   })
 
+  it("documents float and graphics commands", () => {
+    for (const name of [
+      "includegraphics",
+      "graphicspath",
+      "resizebox",
+      "scalebox",
+      "rotatebox",
+      "caption",
+      "captionof",
+      "captionsetup",
+      "toprule",
+      "midrule",
+      "bottomrule",
+      "cmidrule",
+      "multicolumn",
+      "multirow",
+      "hline",
+      "newcolumntype",
+      "rowcolor",
+      "cellcolor",
+      "subcaption",
+      "subcaptionbox",
+    ] as const) {
+      expect(commandDocumentation(name)).toBeDefined()
+    }
+  })
+
   it("identifies wide math accents as core LaTeX commands", () => {
     expect(commandDocumentation("widehat")?.markdown).toBe(
       "Places a wide hat over a multi-character expression."
