@@ -4,6 +4,7 @@ enum CompletionContext {
     Command { from: usize, prefix: String },
     BeginEnvironment { from: usize, prefix: String },
     EndEnvironment { from: usize, prefix: String },
+    Argument { from: usize, command: String, prefix: String },
 }
 
 fn completion_context(source: &str, position: usize) -> CompletionContext {
@@ -38,20 +39,95 @@ fn completion_context(source: &str, position: usize) -> CompletionContext {
         }
     }
 
-    if name_start > line_start && source[..name_start].ends_with('{') {
-        let from = name_start;
-        let command = source[..from - '{'.len_utf8()]
-            .rsplit_once('\\')
-            .map(|(_, command)| command)
-            .unwrap_or_default();
-        return match command {
-            "begin" => CompletionContext::BeginEnvironment { from, prefix },
-            "end" => CompletionContext::EndEnvironment { from, prefix },
-            _ => CompletionContext::None,
-        };
+    if let Some(brace_open) = enclosing_brace(source, line_start, position) {
+        if let Some(command) = owning_command(source, line_start, brace_open) {
+            let (from, prefix) = argument_prefix(source, brace_open, position);
+            return match command.as_str() {
+                "begin" => CompletionContext::BeginEnvironment { from, prefix },
+                "end" => CompletionContext::EndEnvironment { from, prefix },
+                _ => CompletionContext::Argument { from, command, prefix },
+            };
+        }
     }
 
     CompletionContext::None
+}
+
+/// The byte index of the innermost unescaped `{` open at `position` on its line,
+/// or `None` when the cursor is not inside a brace group.
+fn enclosing_brace(source: &str, line_start: usize, position: usize) -> Option<usize> {
+    let mut stack = Vec::new();
+    for (offset, character) in source[line_start..position].char_indices() {
+        let index = line_start + offset;
+        match character {
+            '{' if !is_escaped(source, index) => stack.push(index),
+            '}' if !is_escaped(source, index) => {
+                stack.pop();
+            }
+            _ => {}
+        }
+    }
+    stack.pop()
+}
+
+/// The command name that owns the group opened at `brace_open`, skipping one
+/// optional `[…]` group between the command and the brace. `None` when no
+/// backslash-prefixed name precedes the group.
+fn owning_command(source: &str, line_start: usize, brace_open: usize) -> Option<String> {
+    let mut name_end = brace_open;
+    if source[line_start..name_end].ends_with(']') {
+        name_end = matching_bracket(source, line_start, name_end)?;
+    }
+    let mut name_start = name_end;
+    while name_start > line_start {
+        let character = source[..name_start].chars().next_back()?;
+        if !character.is_ascii_alphabetic() {
+            break;
+        }
+        name_start -= character.len_utf8();
+    }
+    if name_start == name_end || !source[..name_start].ends_with('\\') {
+        return None;
+    }
+    let backslash = name_start - '\\'.len_utf8();
+    if backslash < line_start || is_escaped(source, backslash) {
+        return None;
+    }
+    Some(source[name_start..name_end].to_owned())
+}
+
+/// Given `close` one past a `]`, returns the index of the matching unescaped `[`
+/// searching back to `line_start`.
+fn matching_bracket(source: &str, line_start: usize, close: usize) -> Option<usize> {
+    let mut depth = 0_usize;
+    let mut index = close;
+    for character in source[line_start..close].chars().rev() {
+        index -= character.len_utf8();
+        if is_escaped(source, index) {
+            continue;
+        }
+        match character {
+            ']' => depth += 1,
+            '[' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(index);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// The replacement start and typed prefix inside a brace group, measured from the
+/// last comma so comma-separated citation lists complete their final key.
+fn argument_prefix(source: &str, brace_open: usize, position: usize) -> (usize, String) {
+    let content_start = brace_open + '{'.len_utf8();
+    let content = &source[content_start..position];
+    let after_comma = content.rfind(',').map_or(0, |index| index + ','.len_utf8());
+    let trimmed = content[after_comma..].trim_start();
+    (position - trimmed.len(), trimmed.to_owned())
 }
 
 fn is_escaped(source: &str, position: usize) -> bool {
@@ -125,6 +201,61 @@ mod tests {
     fn proposes_the_nearest_open_environment_when_ending() {
         let source = "\\begin{figure}\n  \\end{fi";
         assert_eq!(query(source, source.len()).items[0].label, "figure");
+    }
+
+    #[test]
+    fn detects_a_reference_argument_with_a_colon_name() {
+        assert_eq!(
+            completion_context("\\ref{sec:i", 10),
+            CompletionContext::Argument {
+                command: "ref".into(),
+                from: 5,
+                prefix: "sec:i".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn takes_the_final_key_in_a_citation_list() {
+        let source = "\\cite{a, b, cu";
+        assert_eq!(
+            completion_context(source, source.len()),
+            CompletionContext::Argument {
+                command: "cite".into(),
+                from: source.len() - 2,
+                prefix: "cu".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn detects_an_argument_after_an_optional_group() {
+        let source = "\\includegraphics[width=5cm]{fi";
+        assert_eq!(
+            completion_context(source, source.len()),
+            CompletionContext::Argument {
+                command: "includegraphics".into(),
+                from: source.len() - 2,
+                prefix: "fi".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn treats_an_empty_argument_as_a_blank_prefix() {
+        assert_eq!(
+            completion_context("\\ref{", 5),
+            CompletionContext::Argument {
+                command: "ref".into(),
+                from: 5,
+                prefix: String::new(),
+            }
+        );
+    }
+
+    #[test]
+    fn suppresses_an_argument_inside_a_comment() {
+        assert_eq!(completion_context("% \\ref{se", 9), CompletionContext::None);
     }
 
     #[test]
@@ -493,6 +624,7 @@ fn query(source: &str, position: usize) -> CompletionResponse {
             &local_environments,
             open_environments(source).last().map(String::as_str),
         ),
+        CompletionContext::Argument { .. } => Vec::new(),
     };
     CompletionResponse { items }
 }
