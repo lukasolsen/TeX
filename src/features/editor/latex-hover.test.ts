@@ -21,6 +21,7 @@ import {
   packageDocumentation,
 } from "@/features/editor/latex-documentation"
 import { commandsBibliography } from "@/features/editor/latex-docs/commands-bibliography"
+import { commandsBeamer } from "@/features/editor/latex-docs/commands-beamer"
 import {
   keywordAt,
   latexHoverTooltip,
@@ -115,6 +116,7 @@ describe("LaTeX documentation catalog", () => {
     ] as const) {
       expect(commandDocumentation(name)).toBeDefined()
     }
+    expect(Object.keys(commandsBeamer).length).toBeGreaterThanOrEqual(30)
   })
 
   it("documents common math commands", () => {
@@ -177,6 +179,39 @@ describe("LaTeX documentation catalog", () => {
     }
     expect(commandDocumentation("citepauthor")).toBeUndefined()
     expect(Object.keys(commandsBibliography).length).toBeGreaterThanOrEqual(35)
+  })
+
+  it("documents common beamer commands", () => {
+    for (const name of [
+      "frametitle",
+      "framesubtitle",
+      "pause",
+      "onslide",
+      "only",
+      "uncover",
+      "visible",
+      "invisible",
+      "alert",
+      "usetheme",
+      "usecolortheme",
+      "usefonttheme",
+      "useinnertheme",
+      "useoutertheme",
+      "setbeamertemplate",
+      "setbeamercolor",
+      "setbeamerfont",
+      "logo",
+      "titlegraphic",
+      "institute",
+      "subtitle",
+      "againframe",
+      "note",
+      "AtBeginSection",
+      "insertframenumber",
+      "inserttotalframenumber",
+    ] as const) {
+      expect(commandDocumentation(name)).toBeDefined()
+    }
   })
 
   it("explains that citepalt is not a natbib command", () => {
