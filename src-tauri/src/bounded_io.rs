@@ -26,6 +26,15 @@ pub(crate) fn read_utf8(path: &Path, limit: u64) -> io::Result<String> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "file is not valid UTF-8 text"))
 }
 
+/// Reads at most `limit` bytes from the start of the file, discarding any excess
+/// instead of failing. Intended for scanning a file's leading region (e.g. a
+/// preamble) without loading the whole file into memory.
+pub(crate) fn read_prefix(path: &Path, limit: u64) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    File::open(path)?.take(limit).read_to_end(&mut bytes)?;
+    Ok(bytes)
+}
+
 fn too_large() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "file exceeds its read limit")
 }

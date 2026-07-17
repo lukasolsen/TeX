@@ -4,11 +4,15 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
-use crate::{bounded_io, source_read::MAX_SOURCE_BYTES};
+use crate::bounded_io;
 
 const MAX_TEX_FILES: usize = 1_024;
 const MAX_SCAN_DEPTH: usize = 32;
 const MAX_SCAN_ENTRIES: usize = 4_096;
+/// Root evidence (`\documentclass`, `% !TeX root =`) lives in a file's leading
+/// preamble, so detection only needs to scan this many bytes per file rather than
+/// reading each candidate in full.
+const ROOT_SCAN_PREFIX_BYTES: u64 = 64 * 1024;
 
 const IGNORED_DIRECTORIES: &[&str] = &[
     ".git",
@@ -49,7 +53,8 @@ pub fn detect_root_candidates(project_root: &Path) -> io::Result<Vec<RootCandida
     let canonical_project_root = project_root.canonicalize().ok();
     let mut candidates = BTreeMap::<PathBuf, Vec<RootEvidence>>::new();
     for path in tex_files {
-        let source = bounded_io::read_utf8(&path, MAX_SOURCE_BYTES)?;
+        let bytes = bounded_io::read_prefix(&path, ROOT_SCAN_PREFIX_BYTES)?;
+        let source = String::from_utf8_lossy(&bytes);
         let canonical_path = path.canonicalize()?;
 
         if has_document_class(&source) {
