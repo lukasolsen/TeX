@@ -4,6 +4,7 @@ use std::{
     fmt, fs,
     io::{self, Write},
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -25,6 +26,17 @@ const MAX_PANE_SIZE: u16 = 4096;
 const MAX_RECENT_PROJECTS: usize = 12;
 const MAX_STATE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_WORKSPACE_FILES: usize = 256;
+
+/// Serializes read-modify-write access to the single on-disk state file. Atomic
+/// writes keep each file whole, but without this a mutation in one window could
+/// read stale state and clobber a concurrent mutation from another window.
+static STATE_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_state_writes() -> std::sync::MutexGuard<'static, ()> {
+    STATE_WRITE_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -250,6 +262,7 @@ pub fn save_app_preferences(
         });
     }
     let path = state_path(&app)?;
+    let _state_guard = lock_state_writes();
     let mut state = read_state(&path)?;
     state.preferences = preferences;
     write_state(&path, &state)
@@ -284,6 +297,7 @@ pub fn forget_recent_project(
     access: State<'_, ProjectAccess>,
 ) -> Result<StartupState, PersistenceError> {
     let path = state_path(&app)?;
+    let _state_guard = lock_state_writes();
     let mut state = read_state(&path)?;
     state
         .recent_projects
@@ -340,6 +354,7 @@ pub fn save_workspace_state(
     }
 
     let path = state_path(&app)?;
+    let _state_guard = lock_state_writes();
     let mut state = read_state(&path)?;
     state.last_workspace = Some(WorkspaceState {
         sidebar_width: workspace
@@ -393,6 +408,7 @@ pub fn record_project_opened(
     project_path: &Path,
 ) -> Result<(), PersistenceError> {
     let path = state_path(app)?;
+    let _state_guard = lock_state_writes();
     let mut state = read_state(&path)?;
     let path_text = project_path.to_string_lossy().into_owned();
     state
@@ -437,6 +453,7 @@ fn state_path(app: &AppHandle) -> Result<PathBuf, PersistenceError> {
 }
 
 fn load_startup_state_from_path(path: &Path) -> Result<StartupState, PersistenceError> {
+    let _state_guard = lock_state_writes();
     let read = read_state_with_notice(path)?;
     if read.migrated {
         write_state(path, &read.state)?;
