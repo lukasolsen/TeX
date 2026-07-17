@@ -26,7 +26,7 @@ export const packagesBibliography = {
   biblatex: packageEntry(
     "biblatex",
     "Provides a modern bibliography and citation interface, commonly with Biber.",
-    "\n\nUse `\\addbibresource` and `\\printbibliography`; do not combine it with `natbib`."
+    "\n\n```latex\n\\usepackage[backend=biber,style=authoryear]{biblatex}\n\\addbibresource{references.bib}\n```\n\nUse `\\addbibresource` and `\\printbibliography`; configure the build to run the selected backend. Do not combine it with `natbib` or a separate `\\bibliographystyle`/`\\bibliography` workflow."
   ),
   "biblatex-apa": entry(
     "biblatex-apa",
@@ -47,7 +47,7 @@ export const packagesBibliography = {
   cleveref: packageEntry(
     "cleveref",
     "Formats cross-references with their type and handles multiple references.",
-    "\n\nLoad it late because it integrates with labels and hyperlinks."
+    "\n\n```latex\n\\usepackage{hyperref}\n\\usepackage{cleveref}\n% \\cref{fig:result,tab:measurements}\n```\n\nLoad it late, normally after `hyperref`, because it integrates with labels and hyperlinks. Use its `\\cref` commands consistently instead of manually writing reference types."
   ),
   csquotes: packageEntry(
     "csquotes",

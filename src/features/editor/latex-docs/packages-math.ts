@@ -20,7 +20,8 @@ export const packagesMath = {
   ),
   amsmath: packageEntry(
     "amsmath",
-    "Adds structured mathematical environments such as `align`, `gather`, and `cases`."
+    "Adds structured mathematical environments such as `align`, `gather`, and `cases`.",
+    "\n\n```latex\n\\usepackage{amsmath}\n\\begin{align}\n  E &= mc^2 \\\\\n  F &= ma\n\\end{align}\n```\n\nUse its equation environments instead of `$$...$$`; they provide proper display spacing, numbering, and alignment. Use the starred variants, such as `align*`, only when no equation number is wanted."
   ),
   amssymb: packageEntry(
     "amssymb",

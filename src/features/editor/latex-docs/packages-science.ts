@@ -129,13 +129,18 @@ export const packagesScience = {
   ),
   siunitx: packageEntry(
     "siunitx",
-    "Formats numbers, units, and quantities consistently according to SI conventions."
+    "Formats numbers, units, and quantities consistently according to SI conventions.",
+    "\n\n```latex\n\\usepackage{siunitx}\n\\qty{9.81}{\\metre\\per\\second\\squared}\n```\n\nUse its unit macros instead of typing unit symbols by hand so spacing and typography remain consistent. Set project-wide formatting with `\\sisetup{...}` in the preamble rather than mixing local conventions."
   ),
   smartdiagram: packageEntry(
     "smartdiagram",
     "Creates common diagram layouts from concise input."
   ),
-  tikz: packageEntry("tikz", "Draws vector graphics and diagrams in LaTeX."),
+  tikz: packageEntry(
+    "tikz",
+    "Draws vector graphics and diagrams in LaTeX.",
+    "\n\n```latex\n\\usepackage{tikz}\n\\begin{tikzpicture}\n  \\draw (0,0) -- (2,1);\n\\end{tikzpicture}\n```\n\nLoad extra capabilities explicitly with `\\usetikzlibrary{...}` only when needed. Keep reusable diagrams in separate source files when they become substantial."
+  ),
   "tikz-cd": packageEntry("tikz-cd", "Draws commutative diagrams using TikZ."),
   tipa: packageEntry(
     "tipa",

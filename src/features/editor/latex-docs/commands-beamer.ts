@@ -145,7 +145,7 @@ export const commandsBeamer = {
   ),
   usetheme: command(
     "usetheme",
-    "Loads a complete Beamer presentation theme in the preamble. Refine its components later with colour, font, inner, or outer themes.\n\n```latex\n\\usetheme{Madrid}\n```"
+    "Loads a complete Beamer presentation theme in the preamble. Its optional argument passes theme options, and its required argument names the theme. Refine its components later with colour, font, inner, or outer themes.\n\n```latex\n\\usetheme{Madrid}\n```\n\nChoose the theme before fine-tuning colours or templates: a later theme selection can replace those settings. [beamer on CTAN](https://ctan.org/pkg/beamer)"
   ),
   visible: command(
     "visible",

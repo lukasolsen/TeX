@@ -29,7 +29,7 @@ export const commandsFloats = {
   ),
   caption: command(
     "caption",
-    "Creates a numbered caption and a list entry for a float or caption-capable environment. It is a core LaTeX command; the `caption` package extends its formatting options."
+    "Creates a numbered caption and a list entry for a float or caption-capable environment. `\\caption[short list text]{full caption text}` uses the optional text in a list of figures or tables.\n\n```latex\n\\caption{Measured response at each temperature.}\n\\label{fig:response}\n```\n\nPut `\\label` after the caption so it records the figure or table number. It is a core LaTeX command; the `caption` package extends its formatting options."
   ),
   captionof: command(
     "captionof",
@@ -101,7 +101,7 @@ export const commandsFloats = {
   ),
   includegraphics: command(
     "includegraphics",
-    "Places an image asset. It is supplied by the `graphicx` package.\n\n```latex\n\\includegraphics[width=0.8\\linewidth]{figures/result.pdf}\n```\n\nKeep paths relative to the source file. [graphicx on CTAN](https://ctan.org/pkg/graphicx)"
+    "Places an image asset. It is supplied by the `graphicx` package. Its required argument is the file name; common key-value options include `width`, `height`, `scale`, `angle`, and `keepaspectratio`.\n\n```latex\n\\includegraphics[width=0.8\\linewidth]{figures/result.pdf}\n```\n\nSet one dimension, or use `keepaspectratio` when setting both, to avoid distortion. Keep paths relative to the source file. [graphicx on CTAN](https://ctan.org/pkg/graphicx)"
   ),
   listof: command(
     "listof",

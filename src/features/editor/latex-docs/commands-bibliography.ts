@@ -45,7 +45,7 @@ export const commandsBibliography = {
   ),
   cite: command(
     "cite",
-    "Inserts a citation for one or more comma-separated bibliography keys. Core LaTeX and natbib styles determine its output; with `biblatex`, prefer its documented citation commands for the selected style. A starred form is parsed as this command and may alter name-list output in packages that support it."
+    "Inserts a citation for one or more comma-separated bibliography keys. Standard LaTeX accepts an optional post-note as `\\cite[see p.~12]{knuth1984}`.\n\n```latex\nAs shown by \\cite{knuth1984,lamport1994}, \\ldots\n```\n\nThe active bibliography package and style determine the output. With `biblatex`, prefer its documented citation commands for the selected style; do not mix `biblatex` with a BibTeX/natbib workflow. A starred form is parsed as this command and may alter name-list output in packages that support it. [biblatex on CTAN](https://ctan.org/pkg/biblatex)"
   ),
   citealias: command(
     "citealias",
@@ -198,7 +198,7 @@ export const commandsBibliography = {
   ),
   printbibliography: command(
     "printbibliography",
-    "Prints the bibliography managed by `biblatex`. It accepts filters such as `type`, `keyword`, `category`, and `heading`." +
+    "Prints the bibliography managed by `biblatex`. It accepts filters such as `type`, `keyword`, `category`, and `heading`.\n\n```latex\n\\printbibliography[type=article,title={Articles}]\n```\n\nIt requires a preceding `\\addbibresource{...}` and the bibliography tool configured by `biblatex` (commonly Biber)." +
       biblatexOnly
   ),
   smartcite: command(

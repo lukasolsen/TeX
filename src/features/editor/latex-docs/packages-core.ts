@@ -77,11 +77,13 @@ export const packagesCore = {
   ),
   geometry: packageEntry(
     "geometry",
-    "Configures page size and margins with a key-value interface."
+    "Configures page size and margins with a key-value interface.",
+    "\n\nFor example, set the paper size and a uniform margin together:\n\n```latex\n\\usepackage[a4paper,margin=25mm]{geometry}\n```\n\nUse explicit `left`, `right`, `top`, and `bottom` values only when the document's requirements call for different margins. Configure it in the preamble rather than changing layout mid-document."
   ),
   graphicx: packageEntry(
     "graphicx",
-    "Enables `\\includegraphics` and graphic scaling, rotation, and clipping."
+    "Enables `\\includegraphics` and graphic scaling, rotation, and clipping.",
+    "\n\n```latex\n\\usepackage{graphicx}\n\\graphicspath{{figures/}}\n```\n\nUse `\\includegraphics` options such as `width` or `keepaspectratio` at the image call site; avoid scaling both dimensions independently unless distortion is intentional."
   ),
   grffile: packageEntry(
     "grffile",
@@ -95,7 +97,7 @@ export const packagesCore = {
   hyperref: packageEntry(
     "hyperref",
     "Adds PDF hyperlinks, metadata, and link targets.",
-    "\n\nLoad it near the end of the preamble unless another package requires otherwise."
+    "\n\n```latex\n\\usepackage[hidelinks]{hyperref}\n```\n\nLoad it near the end of the preamble unless another package requires otherwise. Package order matters: packages that extend references often need to load after it. Do not add visual link-colour options unless they meet the document's accessibility and submission requirements."
   ),
   ifthen: packageEntry(
     "ifthen",

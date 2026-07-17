@@ -17,7 +17,7 @@ export const packagesLanguages = {
   babel: packageEntry(
     "babel",
     "Configures language-aware hyphenation, captions, and typography.",
-    "\n\nSelect languages in package options and follow its engine-specific guidance."
+    "\n\n```latex\n\\usepackage[english,ngerman]{babel}\n```\n\nSelect every document language in the package options, then switch where needed with `\\selectlanguage` or `otherlanguage`. Follow its engine-specific guidance and do not combine it casually with another package that manages the same language settings."
   ),
   beramono: packageEntry("beramono", "Provides the Bera Mono typewriter font."),
   berasans: packageEntry("berasans", "Provides the Bera Sans font."),
@@ -49,7 +49,7 @@ export const packagesLanguages = {
   fontspec: packageEntry(
     "fontspec",
     "Selects system and OpenType fonts with XeLaTeX or LuaLaTeX.",
-    "\n\nDo not use it with pdfLaTeX."
+    "\n\n```latex\n\\usepackage{fontspec}\n\\setmainfont{Latin Modern Roman}\n```\n\nCompile with XeLaTeX or LuaLaTeX; do not use it with pdfLaTeX. Font names must be available to the selected engine, so prefer project-approved fonts for reproducible builds."
   ),
   fourier: packageEntry(
     "fourier",

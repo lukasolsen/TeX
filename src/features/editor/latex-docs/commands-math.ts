@@ -42,7 +42,7 @@ export const commandsMath = {
   exists: command("exists", "Produces the existential quantifier `∃` in math mode."),
   exp: command("exp", "Typesets the exponential operator with correct upright spacing."),
   forall: command("forall", "Produces the universal quantifier `∀` in math mode."),
-  frac: command("frac", "Creates a fraction with numerator and denominator.\n\n```latex\n$\\frac{a+b}{c}$\n```\n\nUse `\\dfrac` or `\\tfrac` from `amsmath` only when an explicit style is needed."),
+  frac: command("frac", "Creates a fraction with the required arguments `\\frac{numerator}{denominator}` in math mode.\n\n```latex\n$\\frac{a+b}{c}$\n```\n\nBrace multi-token numerators and denominators so their grouping is unambiguous. Use `\\dfrac` or `\\tfrac` from `amsmath` only when an explicit style is needed."),
   gcd: command("gcd", "Typesets the greatest-common-divisor operator with correct upright spacing."),
   geq: command("geq", "Produces the greater-than-or-equal relation `≥` in math mode."),
   grave: command("grave", "Places a grave accent over a math atom."),
