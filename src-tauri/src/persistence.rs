@@ -356,14 +356,35 @@ pub fn save_workspace_state(
 }
 
 fn approve_restorable_projects(access: &ProjectAccess, startup: &StartupState) {
-    for project in &startup.recent_projects {
-        if matches!(project.availability, ProjectAvailability::Available) {
-            let _ = access.approve(Path::new(&project.path));
-        }
-    }
+    // Approve only the workspace actually being restored on launch. Recent
+    // projects are approved lazily when the user reopens one (see
+    // `approve_if_recent`), so session authority stays scoped to the project in
+    // use instead of every directory in the recents list.
     if let Some(workspace) = &startup.last_workspace {
         let _ = access.approve(Path::new(&workspace.project_path));
     }
+}
+
+/// Grants session authority for `project_path` only if it is present in the
+/// Rust-owned recents list (or is the restored workspace), so a recent project
+/// can be reopened on demand without pre-approving every recent for the whole
+/// session. Returns whether authority was granted.
+pub fn approve_if_recent(app: &AppHandle, access: &ProjectAccess, project_path: &str) -> bool {
+    let Ok(path) = state_path(app) else {
+        return false;
+    };
+    let Ok(state) = read_state(&path) else {
+        return false;
+    };
+    let known = state
+        .recent_projects
+        .iter()
+        .any(|project| project.path == project_path)
+        || state
+            .last_workspace
+            .as_ref()
+            .is_some_and(|workspace| workspace.project_path == project_path);
+    known && access.approve(Path::new(project_path)).is_ok()
 }
 
 pub fn record_project_opened(

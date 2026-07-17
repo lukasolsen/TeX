@@ -109,7 +109,16 @@ pub fn open_project(
     app: AppHandle,
     access: State<'_, ProjectAccess>,
 ) -> Result<ProjectSummary, ProjectOpenError> {
-    let approved = access.resolve(&path).map_err(map_io_error)?;
+    let approved = match access.resolve(&path) {
+        Ok(root) => root,
+        // A recent project the user reopens is approved lazily here, using its
+        // presence in the Rust-owned recents list as the trust anchor, rather
+        // than pre-approving every recent at startup.
+        Err(_) if persistence::approve_if_recent(&app, &access, &path) => {
+            access.resolve(&path).map_err(map_io_error)?
+        }
+        Err(error) => return Err(map_io_error(error)),
+    };
     let mut project = open_project_path(&approved)?;
     let project_path = Path::new(&project.path);
     if let Ok(configuration) = load_configuration_for_project(&app, project_path) {
