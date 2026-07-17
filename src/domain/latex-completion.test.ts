@@ -121,6 +121,6 @@ describe("LaTeX completion contract", () => {
           },
         ],
       })
-    ).toThrow()
+    ).toThrow("TeX rejected an invalid LaTeX completion kind response.")
   })
 })

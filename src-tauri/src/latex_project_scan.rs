@@ -108,35 +108,34 @@ mod tests {
 
     use super::scan_project;
 
-    fn temp_root(tag: &str) -> PathBuf {
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+    fn temp_root(tag: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let root = std::env::temp_dir().join(format!("tex-scan-{tag}-{unique}"));
-        fs::create_dir(&root).expect("create temp root");
-        root
+        fs::create_dir(&root)?;
+        Ok(root)
     }
 
     #[test]
-    fn overlays_the_active_buffer_over_stale_disk() {
-        let root = temp_root("overlay");
-        fs::write(root.join("main.tex"), "\\label{old}").expect("write");
+    fn overlays_the_active_buffer_over_stale_disk() -> Result<(), Box<dyn std::error::Error>> {
+        let root = temp_root("overlay")?;
+        fs::write(root.join("main.tex"), "\\label{old}")?;
         let sources = scan_project(&root, Path::new("main.tex"), "\\label{new}");
         let text = sources
             .texts
             .iter()
             .find(|(path, _)| path == Path::new("main.tex"))
             .map(|(_, content)| content.as_str())
-            .expect("active text present");
+            .ok_or("active text present")?;
         assert!(text.contains("new"));
         assert!(!text.contains("old"));
         fs::remove_dir_all(root).ok();
+        Ok(())
     }
 
     #[test]
-    fn represents_an_unsaved_active_file_absent_on_disk() {
-        let root = temp_root("unsaved");
+    fn represents_an_unsaved_active_file_absent_on_disk() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let root = temp_root("unsaved")?;
         let sources = scan_project(&root, Path::new("draft.tex"), "\\label{fresh}");
         assert!(sources
             .files
@@ -147,15 +146,16 @@ mod tests {
             .iter()
             .any(|(path, content)| path == Path::new("draft.tex") && content.contains("fresh")));
         fs::remove_dir_all(root).ok();
+        Ok(())
     }
 
     #[test]
-    fn gathers_files_and_texts_across_the_tree() {
-        let root = temp_root("tree");
-        fs::create_dir(root.join("chapters")).expect("subdir");
-        fs::write(root.join("refs.bib"), "@book{key,}").expect("bib");
-        fs::write(root.join("chapters/intro.tex"), "\\label{sec:intro}").expect("tex");
-        fs::write(root.join("plot.png"), [0x89_u8, 0x50, 0x4e, 0x47]).expect("png");
+    fn gathers_files_and_texts_across_the_tree() -> Result<(), Box<dyn std::error::Error>> {
+        let root = temp_root("tree")?;
+        fs::create_dir(root.join("chapters"))?;
+        fs::write(root.join("refs.bib"), "@book{key,}")?;
+        fs::write(root.join("chapters/intro.tex"), "\\label{sec:intro}")?;
+        fs::write(root.join("plot.png"), [0x89_u8, 0x50, 0x4e, 0x47])?;
         let sources = scan_project(&root, Path::new("main.tex"), "");
 
         assert!(sources
@@ -175,5 +175,6 @@ mod tests {
             .iter()
             .any(|(path, _)| path == Path::new("plot.png")));
         fs::remove_dir_all(root).ok();
+        Ok(())
     }
 }

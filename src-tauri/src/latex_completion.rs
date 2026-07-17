@@ -332,18 +332,15 @@ mod tests {
     }
 
     #[test]
-    fn completes_a_project_label_inside_a_ref_argument() {
+    fn completes_a_project_label_inside_a_ref_argument() -> Result<(), Box<dyn std::error::Error>> {
         use std::fs;
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos();
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let root = std::env::temp_dir().join(format!("tex-completion-ref-{unique}"));
-        fs::create_dir(&root).expect("create temp root");
-        fs::write(root.join("intro.tex"), "\\label{sec:intro}\n").expect("write source");
-        let canonical = root.canonicalize().expect("canonical root");
+        fs::create_dir(&root)?;
+        fs::write(root.join("intro.tex"), "\\label{sec:intro}\n")?;
+        let canonical = root.canonicalize()?;
 
         let request = CompletionRequest {
             project_path: canonical.to_string_lossy().into_owned(),
@@ -361,6 +358,7 @@ mod tests {
         ));
 
         fs::remove_dir_all(root).ok();
+        Ok(())
     }
 }
 use std::collections::HashSet;
