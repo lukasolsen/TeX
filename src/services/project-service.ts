@@ -4,6 +4,11 @@ import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
+import type {
+  LatexCompletionRequest,
+  LatexCompletionResponse,
+} from "@/domain/latex-completion"
+import { parseLatexCompletionResponse } from "@/domain/latex-completion"
 
 import type {
   ProjectError,
@@ -90,6 +95,14 @@ export async function readProjectSource(
       projectPath,
       relativePath,
     })
+  )
+}
+
+export async function requestLatexCompletions(
+  request: LatexCompletionRequest
+): Promise<LatexCompletionResponse> {
+  return parseLatexCompletionResponse(
+    await invoke<unknown>("latex_completions", request)
   )
 }
 

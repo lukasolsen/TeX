@@ -4,8 +4,6 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
-  completeFromList,
-  snippet,
 } from "@codemirror/autocomplete"
 import {
   defaultKeymap,
@@ -55,6 +53,7 @@ import {
   tooltips,
 } from "@codemirror/view"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
+import { latexCompletionSource } from "@/features/editor/latex-completion"
 import { latexHighlightStyle } from "@/features/editor/latex-highlighting"
 import {
   latexSemanticHighlighting,
@@ -246,28 +245,65 @@ function sourceEditorTheme(fontSize: number) {
       fontFamily: "var(--font-mono)",
       fontSize: "0.92em",
     },
+    ".cm-tooltip-autocomplete": {
+      border: "1px solid var(--border)",
+      borderRadius: "0.625rem",
+      backgroundColor: "var(--popover)",
+      color: "var(--popover-foreground)",
+      boxShadow: "0 12px 32px color-mix(in srgb, black 18%, transparent)",
+      overflow: "hidden",
+    },
+    ".cm-tooltip-autocomplete > ul": {
+      maxHeight: "18rem",
+      minWidth: "19rem",
+      fontFamily: "var(--font-mono)",
+      fontSize: "0.75rem",
+    },
+    ".cm-tooltip-autocomplete > ul > li": {
+      display: "flex",
+      alignItems: "baseline",
+      gap: "0.5rem",
+      padding: "0.4rem 0.625rem",
+    },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+      backgroundColor: "var(--accent)",
+      color: "var(--accent-foreground)",
+    },
+    ".cm-completionDetail": {
+      marginLeft: "auto",
+      maxWidth: "14rem",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      color: "var(--muted-foreground)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.6875rem",
+    },
+    ".cm-completionInfo": {
+      maxWidth: "20rem",
+      borderLeft: "1px solid var(--border)",
+      backgroundColor: "var(--popover)",
+      color: "var(--popover-foreground)",
+    },
+    ".tex-completion-info": { padding: "0.75rem" },
+    ".tex-completion-info p": {
+      margin: "0.45rem 0 0",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.75rem",
+      lineHeight: "1.4",
+      color: "var(--muted-foreground)",
+    },
+    ".tex-completion-source": {
+      borderRadius: "999px",
+      backgroundColor: "var(--muted)",
+      padding: "0.12rem 0.38rem",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.625rem",
+      fontWeight: "600",
+      textTransform: "capitalize",
+    },
   })
 }
-
-const latexSnippets = completeFromList([
-  {
-    label: "itemize environment",
-    detail: "LaTeX snippet",
-    apply: snippet("\\begin{itemize}\n\t\\item ${item}\n\\end{itemize}"),
-  },
-  {
-    label: "figure environment",
-    detail: "LaTeX snippet",
-    apply: snippet(
-      "\\begin{figure}[htbp]\n\t\\centering\n\t${figure}\n\t\\caption{${caption}}\n\t\\label{fig:${label}}\n\\end{figure}"
-    ),
-  },
-  {
-    label: "equation environment",
-    detail: "LaTeX snippet",
-    apply: snippet("\\begin{equation}\n\t${equation}\n\\end{equation}"),
-  },
-])
 
 export function LatexEditor({
   content,
@@ -525,8 +561,14 @@ export function LatexEditor({
         },
       ]),
       autocompletion({
-        override: [latexSnippets],
-        activateOnTyping: false,
+        override: [
+          latexCompletionSource(
+            () => projectPathRef.current,
+            () => activePath.current
+          ),
+        ],
+        activateOnTyping: true,
+        maxRenderedOptions: 12,
       }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },
