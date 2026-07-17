@@ -59,7 +59,16 @@ pub(crate) fn run_bounded(
             return Err(error);
         }
     };
-    let status = wait_for_group(&mut child, timeout)?;
+    let status = match wait_for_group(&mut child, timeout) {
+        Ok(status) => status,
+        Err(error) => {
+            // wait_for_group already killed the group (closing the pipes); join the
+            // drain threads so they are not abandoned before we return the error.
+            let _ = join_reader(stdout_reader);
+            let _ = join_reader(stderr_reader);
+            return Err(error);
+        }
+    };
 
     let stdout = join_reader(stdout_reader)?;
     let stderr = join_reader(stderr_reader)?;
