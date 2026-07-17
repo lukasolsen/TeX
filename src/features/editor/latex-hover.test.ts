@@ -116,7 +116,6 @@ describe("LaTeX documentation catalog", () => {
     ] as const) {
       expect(commandDocumentation(name)).toBeDefined()
     }
-    expect(Object.keys(commandsBeamer).length).toBeGreaterThanOrEqual(30)
   })
 
   it("documents common math commands", () => {
@@ -211,6 +210,27 @@ describe("LaTeX documentation catalog", () => {
       "inserttotalframenumber",
     ] as const) {
       expect(commandDocumentation(name)).toBeDefined()
+    }
+    expect(Object.keys(commandsBeamer).length).toBeGreaterThanOrEqual(30)
+  })
+
+  it("uses fenced LaTeX examples for non-obvious beamer commands", () => {
+    for (const name of [
+      "againframe",
+      "beamerdefaultoverlayspecification",
+      "onslide",
+      "temporal",
+      "setbeamercolor",
+      "setbeamerfont",
+      "setbeamersize",
+      "setbeamertemplate",
+      "usecolortheme",
+      "usefonttheme",
+      "useinnertheme",
+      "useoutertheme",
+      "usetheme",
+    ] as const) {
+      expect(commandDocumentation(name)?.markdown).toMatch(/```latex\n[\s\S]+?\n```/)
     }
   })
 

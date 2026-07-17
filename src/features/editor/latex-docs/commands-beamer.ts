@@ -17,7 +17,7 @@ export const commandsBeamer = {
   ),
   againframe: command(
     "againframe",
-    "Replays a frame previously given a `label` option, for example `\\begin{frame}[label=summary]`. Use it for a recap without duplicating the frame source."
+    "Replays a frame previously given a `label` option. Use it for a recap without duplicating the frame source.\n\n```latex\n\\begin{frame}[label=summary]\n  Summary\n\\end{frame}\n\\againframe{summary}\n```"
   ),
   alert: command(
     "alert",
@@ -29,7 +29,7 @@ export const commandsBeamer = {
   ),
   beamerdefaultoverlayspecification: command(
     "beamerdefaultoverlayspecification",
-    "Sets the default overlay specification Beamer uses when an overlay-aware command has none explicitly, for example `\\beamerdefaultoverlayspecification{<+->}`."
+    "Sets the default overlay specification Beamer uses when an overlay-aware command has none explicitly.\n\n```latex\n\\beamerdefaultoverlayspecification{<+->}\n```"
   ),
   framesubtitle: command(
     "framesubtitle",
@@ -85,7 +85,7 @@ export const commandsBeamer = {
   ),
   onslide: command(
     "onslide",
-    "Applies an overlay specification to following material, changing how it is covered on slides where it is inactive. Use it inside overlay-aware content such as a `frame`."
+    "Applies an overlay specification to following material, changing how it is covered on slides where it is inactive. Use it inside overlay-aware content such as a `frame`.\n\n```latex\n\\onslide<2->{This appears from overlay 2 onward.}\n```"
   ),
   pause: command(
     "pause",
@@ -93,19 +93,19 @@ export const commandsBeamer = {
   ),
   setbeamercolor: command(
     "setbeamercolor",
-    "Configures a named Beamer colour element, such as `normal text` or `frametitle`, with foreground, background, or parent settings. Put global theme customisation in the preamble."
+    "Configures a named Beamer colour element, such as `normal text` or `frametitle`, with foreground, background, or parent settings. Put global theme customisation in the preamble.\n\n```latex\n\\setbeamercolor{frametitle}{fg=white,bg=blue}\n```"
   ),
   setbeamerfont: command(
     "setbeamerfont",
-    "Configures a named Beamer font element, such as `frametitle`, with settings including family, series, shape, size, or parent. Put global theme customisation in the preamble."
+    "Configures a named Beamer font element, such as `frametitle`, with settings including family, series, shape, size, or parent. Put global theme customisation in the preamble.\n\n```latex\n\\setbeamerfont{frametitle}{series=\\bfseries}\n```"
   ),
   setbeamersize: command(
     "setbeamersize",
-    "Sets Beamer layout dimensions, including `text margin left` and `text margin right`. Use it in the preamble so frame layout remains consistent."
+    "Sets Beamer layout dimensions, including `text margin left` and `text margin right`. Use it in the preamble so frame layout remains consistent.\n\n```latex\n\\setbeamersize{text margin left=1cm,text margin right=1cm}\n```"
   ),
   setbeamertemplate: command(
     "setbeamertemplate",
-    "Replaces the definition of a named Beamer template such as `navigation symbols`, `footline`, or `itemize items`. Define global template changes in the preamble."
+    "Replaces the definition of a named Beamer template such as `navigation symbols`, `footline`, or `itemize items`. Define global template changes in the preamble.\n\n```latex\n\\setbeamertemplate{navigation symbols}{}\n```"
   ),
   structure: command(
     "structure",
@@ -117,7 +117,7 @@ export const commandsBeamer = {
   ),
   temporal: command(
     "temporal",
-    "Chooses among three arguments before, on, and after the selected overlays: `\\temporal<2>{past}{present}{future}`."
+    "Chooses among three arguments before, on, and after the selected overlays.\n\n```latex\n\\temporal<2>{past}{present}{future}\n```"
   ),
   titlegraphic: command(
     "titlegraphic",
@@ -129,23 +129,23 @@ export const commandsBeamer = {
   ),
   usecolortheme: command(
     "usecolortheme",
-    "Loads a Beamer colour theme. Use it in the preamble after selecting the presentation class; optional theme options adjust the chosen theme."
+    "Loads a Beamer colour theme. Use it in the preamble after selecting the presentation class; optional theme options adjust the chosen theme.\n\n```latex\n\\usecolortheme{dolphin}\n```"
   ),
   usefonttheme: command(
     "usefonttheme",
-    "Loads a Beamer font theme in the preamble. It changes theme-controlled typography rather than the document's ordinary text font settings."
+    "Loads a Beamer font theme in the preamble. It changes theme-controlled typography rather than the document's ordinary text font settings.\n\n```latex\n\\usefonttheme{professionalfonts}\n```"
   ),
   useinnertheme: command(
     "useinnertheme",
-    "Loads a Beamer inner theme, which controls elements inside frames such as title pages, item markers, and blocks. Use it in the preamble."
+    "Loads a Beamer inner theme, which controls elements inside frames such as title pages, item markers, and blocks. Use it in the preamble.\n\n```latex\n\\useinnertheme{rounded}\n```"
   ),
   useoutertheme: command(
     "useoutertheme",
-    "Loads a Beamer outer theme, which controls presentation chrome such as headlines, footlines, and sidebars. Use it in the preamble."
+    "Loads a Beamer outer theme, which controls presentation chrome such as headlines, footlines, and sidebars. Use it in the preamble.\n\n```latex\n\\useoutertheme{infolines}\n```"
   ),
   usetheme: command(
     "usetheme",
-    "Loads a complete Beamer presentation theme in the preamble, for example `\\usetheme{Madrid}`. Refine its components later with colour, font, inner, or outer themes."
+    "Loads a complete Beamer presentation theme in the preamble. Refine its components later with colour, font, inner, or outer themes.\n\n```latex\n\\usetheme{Madrid}\n```"
   ),
   visible: command(
     "visible",
