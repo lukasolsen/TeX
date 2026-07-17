@@ -20,6 +20,7 @@ import {
   latexDocumentation,
   packageDocumentation,
 } from "@/features/editor/latex-documentation"
+import { commandsBibliography } from "@/features/editor/latex-docs/commands-bibliography"
 import {
   keywordAt,
   latexHoverTooltip,
@@ -155,7 +156,7 @@ describe("LaTeX documentation catalog", () => {
     for (const name of [
       "cite",
       "citep",
-      "citepauthor",
+      "citeauthor",
       "citeyear",
       "citet",
       "nocite",
@@ -174,6 +175,8 @@ describe("LaTeX documentation catalog", () => {
     ] as const) {
       expect(commandDocumentation(name)).toBeDefined()
     }
+    expect(commandDocumentation("citepauthor")).toBeUndefined()
+    expect(Object.keys(commandsBibliography).length).toBeGreaterThanOrEqual(35)
   })
 
   it("documents float and graphics commands", () => {

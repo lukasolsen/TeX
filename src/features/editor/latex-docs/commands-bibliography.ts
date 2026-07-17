@@ -18,6 +18,11 @@ export const commandsBibliography = {
     "Registers a `.bib` database for `biblatex`, normally in the preamble after loading the package. Use `\\printbibliography` to produce the reference list." +
       biblatexOnly
   ),
+  addtocategory: command(
+    "addtocategory",
+    "Adds one or more bibliography keys to a named `biblatex` category for later filtering." +
+      biblatexOnly
+  ),
   autocite: command(
     "autocite",
     "Creates a citation whose form is selected by the active `biblatex` style's autocite setting." +
@@ -42,6 +47,11 @@ export const commandsBibliography = {
     "cite",
     "Inserts a citation for one or more comma-separated bibliography keys. Core LaTeX and natbib styles determine its output; with `biblatex`, prefer its documented citation commands for the selected style. A starred form is parsed as this command and may alter name-list output in packages that support it."
   ),
+  citealias: command(
+    "citealias",
+    "Prints the alias text assigned with `\\defcitealias` for a natbib citation key." +
+      natbibOnly
+  ),
   citealp: command(
     "citealp",
     "Creates a natbib parenthetical-style citation without enclosing parentheses." +
@@ -61,19 +71,33 @@ export const commandsBibliography = {
     "Prints the full author list for a natbib citation, equivalent to the full-name author form." +
       natbibOnly
   ),
+  citenum: command(
+    "citenum",
+    "Prints the numeric citation label without its surrounding delimiters in natbib's numeric mode." +
+      natbibOnly
+  ),
   citep: command(
     "citep",
     "Creates a parenthetical natbib citation, with optional pre- and post-notes before the key list. Its starred form requests the full author list where the chosen style supports it." +
       natbibOnly
   ),
-  citepauthor: command(
-    "citepauthor",
-    "Prints the author name or names in parentheses using natbib." + natbibOnly
+  citepalias: command(
+    "citepalias",
+    "Prints a natbib citation alias in parenthetical form." + natbibOnly
+  ),
+  cites: command(
+    "cites",
+    "Combines multiple `biblatex` citations while allowing separate notes and key lists for each citation." +
+      biblatexOnly
   ),
   citet: command(
     "citet",
     "Creates a textual natbib citation, placing the author name in the sentence and the year in parentheses. Its starred form requests the full author list where supported." +
       natbibOnly
+  ),
+  citetalias: command(
+    "citetalias",
+    "Prints a natbib citation alias as textual citation text." + natbibOnly
   ),
   citetext: command(
     "citetext",
@@ -99,10 +123,25 @@ export const commandsBibliography = {
     "Prints a natbib citation year enclosed in the configured parentheses." +
       natbibOnly
   ),
-  citenum: command(
-    "citenum",
-    "Prints the numeric citation label without its surrounding delimiters in natbib's numeric mode." +
-      natbibOnly
+  DeclareAutoCiteCommand: command(
+    "DeclareAutoCiteCommand",
+    "Changes which `biblatex` citation commands `\\autocite` selects in inline, footnote, and superscript contexts." +
+      biblatexOnly
+  ),
+  DeclareBibliographyCategory: command(
+    "DeclareBibliographyCategory",
+    "Declares a named category for filtering `biblatex` bibliographies. Use it in the preamble with `\\addtocategory`." +
+      biblatexOnly
+  ),
+  DeclareCiteCommand: command(
+    "DeclareCiteCommand",
+    "Defines a custom `biblatex` citation command from formatting hooks. Use it in the preamble." +
+      biblatexOnly
+  ),
+  DeclareMultiCiteCommand: command(
+    "DeclareMultiCiteCommand",
+    "Defines a multi-citation command based on an existing `biblatex` citation command. Use it in the preamble." +
+      biblatexOnly
   ),
   defbibheading: command(
     "defbibheading",
@@ -134,10 +173,14 @@ export const commandsBibliography = {
     "Prints a complete bibliography-style entry inline at the citation location using `biblatex`." +
       biblatexOnly
   ),
+  multicite: command(
+    "multicite",
+    "Combines several `biblatex` citation commands in one citation group; it is useful for custom citation command definitions." +
+      biblatexOnly
+  ),
   nocite: command(
     "nocite",
-    "Adds bibliography keys to the reference list without placing a citation in the text. Use `\\nocite{*}` to include every entry from the selected BibTeX database." +
-      natbibOnly
+    "Adds bibliography keys to the reference list without placing a citation in the text. BibTeX/natbib and `biblatex` both provide it; use `\\nocite{*}` to include every entry from the selected bibliography database."
   ),
   parencite: command(
     "parencite",
@@ -167,54 +210,6 @@ export const commandsBibliography = {
   textcite: command(
     "textcite",
     "Creates a textual `biblatex` citation, normally integrating the label name into the sentence." +
-      biblatexOnly
-  ),
-  citealias: command(
-    "citealias",
-    "Prints the alias text assigned with `\\defcitealias` for a natbib citation key." +
-      natbibOnly
-  ),
-  citetalias: command(
-    "citetalias",
-    "Prints a natbib citation alias as textual citation text." + natbibOnly
-  ),
-  citepalias: command(
-    "citepalias",
-    "Prints a natbib citation alias in parenthetical form." + natbibOnly
-  ),
-  multicite: command(
-    "multicite",
-    "Combines several `biblatex` citation commands in one citation group; it is useful for custom citation command definitions." +
-      biblatexOnly
-  ),
-  cites: command(
-    "cites",
-    "Combines multiple `biblatex` citations while allowing separate notes and key lists for each citation." +
-      biblatexOnly
-  ),
-  DeclareCiteCommand: command(
-    "DeclareCiteCommand",
-    "Defines a custom `biblatex` citation command from formatting hooks. Use it in the preamble." +
-      biblatexOnly
-  ),
-  DeclareMultiCiteCommand: command(
-    "DeclareMultiCiteCommand",
-    "Defines a multi-citation command based on an existing `biblatex` citation command. Use it in the preamble." +
-      biblatexOnly
-  ),
-  DeclareAutoCiteCommand: command(
-    "DeclareAutoCiteCommand",
-    "Changes which `biblatex` citation commands `\\autocite` selects in inline, footnote, and superscript contexts." +
-      biblatexOnly
-  ),
-  DeclareBibliographyCategory: command(
-    "DeclareBibliographyCategory",
-    "Declares a named category for filtering `biblatex` bibliographies. Use it in the preamble with `\\addtocategory`." +
-      biblatexOnly
-  ),
-  addtocategory: command(
-    "addtocategory",
-    "Adds one or more bibliography keys to a named `biblatex` category for later filtering." +
       biblatexOnly
   ),
 } as const satisfies Readonly<Record<string, LatexDocumentation>>
