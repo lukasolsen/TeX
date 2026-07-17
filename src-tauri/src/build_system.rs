@@ -998,7 +998,7 @@ mod tests {
                 "-interaction=nonstopmode",
                 "-file-line-error",
                 "-synctex=1",
-                "main.tex"
+                "./main.tex"
             ]
         );
         Ok(())
