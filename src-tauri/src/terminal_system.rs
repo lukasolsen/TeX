@@ -111,17 +111,26 @@ pub fn open_terminal(
     let rows = clamp_dimension(request.rows);
 
     let mut sessions = lock_sessions(&controller)?;
+    // A session whose shell has exited but has not yet been reaped must not be
+    // handed back (it is a dead descriptor) nor counted against capacity.
     if let Some((terminal_id, session)) = sessions
         .iter()
-        .find(|(_, session)| session.project_root == project_root)
+        .find(|(_, session)| {
+            session.project_root == project_root && session.running.load(Ordering::Acquire)
+        })
     {
         return Ok(TerminalDescriptor {
             terminal_id: terminal_id.clone(),
             base64_snapshot: snapshot(&session.scrollback),
-            running: session.running.load(Ordering::Acquire),
+            running: true,
         });
     }
-    if sessions.len() >= MAX_SESSIONS {
+    if sessions
+        .values()
+        .filter(|session| session.running.load(Ordering::Acquire))
+        .count()
+        >= MAX_SESSIONS
+    {
         return Err(TerminalError {
             code: "terminal-capacity-reached",
             message: "Too many terminals are open. Close one before opening another.",
@@ -129,7 +138,14 @@ pub fn open_terminal(
     }
 
     let terminal_id = format!("terminal-{}", NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed));
-    let session = spawn_session(&app, &project_root, &terminal_id, cols, rows)?;
+    let session = spawn_session(
+        &app,
+        controller.inner(),
+        &project_root,
+        &terminal_id,
+        cols,
+        rows,
+    )?;
     let descriptor = TerminalDescriptor {
         terminal_id: terminal_id.clone(),
         base64_snapshot: String::new(),
@@ -194,6 +210,7 @@ pub fn close_terminal(
 
 fn spawn_session(
     app: &AppHandle,
+    controller: &TerminalController,
     project_root: &std::path::Path,
     terminal_id: &str,
     cols: u16,
@@ -226,6 +243,7 @@ fn spawn_session(
     let running = Arc::new(AtomicBool::new(true));
 
     let worker_app = app.clone();
+    let worker_controller = controller.clone();
     let worker_scrollback = Arc::clone(&scrollback);
     let worker_running = Arc::clone(&running);
     let worker_id = terminal_id.to_owned();
@@ -236,6 +254,7 @@ fn spawn_session(
                 reader,
                 child,
                 &worker_app,
+                &worker_controller,
                 &worker_id,
                 &worker_scrollback,
                 &worker_running,
@@ -257,6 +276,7 @@ fn supervise_terminal(
     mut reader: Box<dyn Read + Send>,
     mut child: Box<dyn Child + Send + Sync>,
     app: &AppHandle,
+    controller: &TerminalController,
     terminal_id: &str,
     scrollback: &Arc<Mutex<VecDeque<u8>>>,
     running: &AtomicBool,
@@ -285,6 +305,11 @@ fn supervise_terminal(
         .wait()
         .ok()
         .map(|status| i32::try_from(status.exit_code()).unwrap_or(-1));
+    // Reap the session so its PTY handle and slot are released once the shell
+    // exits on its own, rather than lingering until an explicit close_terminal.
+    if let Ok(mut sessions) = controller.sessions.lock() {
+        sessions.remove(terminal_id);
+    }
     let _ = app.emit(
         TERMINAL_EVENT,
         TerminalEvent::Exit {
