@@ -143,7 +143,11 @@ fn collect_tex_files(
                 continue;
             }
             collect_tex_files(&path, depth + 1, visited_entries, files)?;
-        } else if path.extension().is_some_and(|extension| extension == "tex") {
+        } else if path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("tex"))
+        {
             if files.len() == MAX_TEX_FILES {
                 return Err(io::Error::other("project exceeds the root scan file limit"));
             }
