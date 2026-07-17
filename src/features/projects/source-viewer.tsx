@@ -1,14 +1,23 @@
-import { useId, useState, type ReactElement } from "react"
+import { useEffect, useId, useRef, useState, type ReactElement } from "react"
 import {
+  ChevronLeft,
+  ChevronRight,
   CircleAlert,
   FileCode2,
   LoaderCircle,
   Save,
+  Search,
   ShieldAlert,
+  X,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import {
   Dialog,
   DialogContent,
@@ -38,6 +47,7 @@ import type {
 } from "@/domain/identifiers"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 import { shortcutLabel } from "@/lib/shortcuts"
+import { cn } from "@/lib/utils"
 
 export function SourceViewer({
   fontSize,
@@ -80,6 +90,58 @@ export function SourceViewer({
   const editorConflictId = useId()
   const diskConflictId = useId()
   const [reviewingConflict, setReviewingConflict] = useState(false)
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState("")
+  const [replaceOpen, setReplaceOpen] = useState(false)
+  const [replacement, setReplacement] = useState("")
+  const [caseSensitive, setCaseSensitive] = useState(false)
+  const [wholeWord, setWholeWord] = useState(false)
+  const [regexp, setRegexp] = useState(false)
+  const [findStatus, setFindStatus] = useState<{
+    matches: number
+    valid: boolean
+  } | null>(null)
+  const findInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const openFind = () => setFindOpen(true)
+    window.addEventListener("tex:open-source-find", openFind)
+    return () => window.removeEventListener("tex:open-source-find", openFind)
+  }, [])
+
+  useEffect(() => {
+    const updateStatus = (event: Event) => {
+      if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail !== "object" ||
+        event.detail === null
+      )
+        return
+      if (
+        typeof event.detail.matches === "number" &&
+        typeof event.detail.valid === "boolean"
+      )
+        setFindStatus(event.detail)
+    }
+    window.addEventListener("tex:source-find-status", updateStatus)
+    return () =>
+      window.removeEventListener("tex:source-find-status", updateStatus)
+  }, [])
+
+  useEffect(() => {
+    if (!findOpen) return
+    findInput.current?.focus()
+  }, [findOpen])
+
+  const updateFind = (
+    query: string,
+    next = { caseSensitive, wholeWord, regexp }
+  ) => {
+    setFindQuery(query)
+    window.dispatchEvent(
+      new CustomEvent("tex:source-find", { detail: { query, ...next } })
+    )
+  }
 
   if (state.status === "empty") {
     return (
@@ -135,7 +197,195 @@ export function SourceViewer({
   const conflict =
     state.saveState.status === "conflict" ? state.saveState.external : null
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-source">
+    <div className="relative flex min-h-0 flex-1 flex-col bg-source">
+      {findOpen ? (
+        <div className="absolute top-2 right-3 z-20 flex w-[min(34rem,calc(100%-1.5rem))] flex-col gap-1 rounded-md border bg-popover p-1 shadow-lg">
+          <div className="flex items-center gap-1">
+            <InputGroup className="min-w-0 flex-1">
+              <InputGroupAddon>
+                <Search />
+              </InputGroupAddon>
+              <InputGroupInput
+                aria-label="Find in source"
+                onChange={(event) => updateFind(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    window.dispatchEvent(
+                      new Event(
+                        event.shiftKey
+                          ? "tex:source-find-previous"
+                          : "tex:source-find-next"
+                      )
+                    )
+                  }
+                  if (event.key === "Escape") setFindOpen(false)
+                }}
+                placeholder="Find in source"
+                ref={findInput}
+                value={findQuery}
+              />
+            </InputGroup>
+            <Button
+              aria-label="Previous search result"
+              onClick={() =>
+                window.dispatchEvent(new Event("tex:source-find-previous"))
+              }
+              size="icon-xs"
+              variant="ghost"
+            >
+              <ChevronLeft />
+            </Button>
+            <Button
+              aria-label="Match case"
+              aria-pressed={caseSensitive}
+              onClick={() => {
+                const next = !caseSensitive
+                setCaseSensitive(next)
+                updateFind(findQuery, {
+                  caseSensitive: next,
+                  wholeWord,
+                  regexp,
+                })
+              }}
+              size="icon-xs"
+              variant={caseSensitive ? "secondary" : "ghost"}
+            >
+              Aa
+            </Button>
+            <Button
+              aria-label="Match whole word"
+              aria-pressed={wholeWord}
+              onClick={() => {
+                const next = !wholeWord
+                setWholeWord(next)
+                updateFind(findQuery, {
+                  caseSensitive,
+                  wholeWord: next,
+                  regexp,
+                })
+              }}
+              size="icon-xs"
+              variant={wholeWord ? "secondary" : "ghost"}
+            >
+              W
+            </Button>
+            <Button
+              aria-label="Use regular expression"
+              aria-pressed={regexp}
+              onClick={() => {
+                const next = !regexp
+                setRegexp(next)
+                updateFind(findQuery, {
+                  caseSensitive,
+                  wholeWord,
+                  regexp: next,
+                })
+              }}
+              size="icon-xs"
+              variant={regexp ? "secondary" : "ghost"}
+            >
+              .*
+            </Button>
+            <Button
+              aria-label="Show replace"
+              aria-pressed={replaceOpen}
+              onClick={() => setReplaceOpen((open) => !open)}
+              size="xs"
+              variant={replaceOpen ? "secondary" : "ghost"}
+            >
+              Replace
+            </Button>
+            <Button
+              aria-label="Next search result"
+              onClick={() =>
+                window.dispatchEvent(new Event("tex:source-find-next"))
+              }
+              size="icon-xs"
+              variant="ghost"
+            >
+              <ChevronRight />
+            </Button>
+            <Button
+              aria-label="Close source find"
+              onClick={() => setFindOpen(false)}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <X />
+            </Button>
+          </div>
+          {findQuery !== "" && findStatus !== null ? (
+            <span
+              className={cn(
+                "px-1 text-[11px]",
+                findStatus.valid && findStatus.matches > 0
+                  ? "text-muted-foreground"
+                  : "text-destructive"
+              )}
+            >
+              {findStatus.valid
+                ? findStatus.matches === 0
+                  ? "No results"
+                  : `${findStatus.matches} results`
+                : "Invalid expression"}
+            </span>
+          ) : null}
+          {replaceOpen ? (
+            <div className="flex items-center gap-1">
+              <InputGroup className="min-w-0 flex-1">
+                <InputGroupInput
+                  aria-label="Replace in source"
+                  onChange={(event) => setReplacement(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      window.dispatchEvent(
+                        new CustomEvent("tex:source-replace", {
+                          detail: {
+                            query: findQuery,
+                            replacement,
+                            action: event.shiftKey ? "all" : "next",
+                          },
+                        })
+                      )
+                    }
+                    if (event.key === "Escape") setFindOpen(false)
+                  }}
+                  placeholder="Replace with"
+                  value={replacement}
+                />
+              </InputGroup>
+              <Button
+                disabled={findQuery === ""}
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("tex:source-replace", {
+                      detail: { query: findQuery, replacement, action: "next" },
+                    })
+                  )
+                }
+                size="xs"
+                variant="ghost"
+              >
+                Replace
+              </Button>
+              <Button
+                disabled={findQuery === ""}
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("tex:source-replace", {
+                      detail: { query: findQuery, replacement, action: "all" },
+                    })
+                  )
+                }
+                size="xs"
+                variant="ghost"
+              >
+                All
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {state.saveState.status === "recovery" ? (
         <Alert className="m-2 rounded-lg">
           <Save aria-hidden="true" />
@@ -197,6 +447,7 @@ export function SourceViewer({
           onCursorChange(state.document.path, line, column)
         }
         onOpenReference={onOpenReference}
+        onOpenFind={() => setFindOpen(true)}
         onSave={onSave}
         onViewerStateChange={onViewerStateChange}
         path={state.document.path}

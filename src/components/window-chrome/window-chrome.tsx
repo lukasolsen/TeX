@@ -15,9 +15,19 @@ import {
   windowMenuLabels,
 } from "./window-chrome-model"
 
+export type WorkspaceChromeAction =
+  | "build"
+  | "build-details"
+  | "find-source"
+  | "project-home"
+  | "save"
+  | "search-project"
+  | "toggle-pdf"
+
 type WindowChromeProps = Readonly<{
   onNewWindow: () => void
   onOpenCommands: (() => void) | null
+  onWorkspaceAction: ((action: WorkspaceChromeAction) => void) | null
   onOpenProject: (() => void) | null
   onOpenSettings: (() => void) | null
   onReturnHome: (() => void) | null
@@ -27,6 +37,7 @@ type WindowChromeProps = Readonly<{
 export function WindowChrome({
   onNewWindow,
   onOpenCommands,
+  onWorkspaceAction,
   onOpenProject,
   onOpenSettings,
   onReturnHome,
@@ -93,6 +104,7 @@ export function WindowChrome({
                 onOpenProject={onOpenProject}
                 onOpenSettings={onOpenSettings}
                 onReturnHome={onReturnHome}
+                onWorkspaceAction={onWorkspaceAction}
               />
             </WindowMenu>
           ))}
@@ -178,24 +190,39 @@ function WindowMenuContent({
   onOpenProject,
   onOpenSettings,
   onReturnHome,
+  onWorkspaceAction,
 }: Pick<
   WindowChromeProps,
-  "onNewWindow" | "onOpenProject" | "onOpenSettings" | "onReturnHome"
+  | "onNewWindow"
+  | "onOpenProject"
+  | "onOpenSettings"
+  | "onReturnHome"
+  | "onWorkspaceAction"
 > & { label: string }): ReactElement {
   if (label === "File") {
     return (
       <>
-        <WindowMenuItem
-          onClick={onNewWindow}
-          shortcut={shortcutLabel(["primary", "shift", "n"])}
-        >
-          New Window
-        </WindowMenuItem>
+        {onWorkspaceAction !== null ? (
+          <WindowMenuItem
+            onClick={() => onWorkspaceAction("save")}
+            shortcut={shortcutLabel(["primary", "s"])}
+          >
+            Save source
+          </WindowMenuItem>
+        ) : null}
         {onOpenProject !== null ? (
           <WindowMenuItem onClick={onOpenProject}>Open project</WindowMenuItem>
         ) : null}
         {onReturnHome !== null ? (
-          <WindowMenuItem onClick={onReturnHome}>Project home</WindowMenuItem>
+          <WindowMenuItem
+            onClick={
+              onWorkspaceAction === null
+                ? onReturnHome
+                : () => onWorkspaceAction("project-home")
+            }
+          >
+            Project home
+          </WindowMenuItem>
         ) : null}
         <MenuInfo message="Project files stay on this device." />
       </>
@@ -208,8 +235,53 @@ function WindowMenuContent({
         {onOpenSettings !== null ? (
           <WindowMenuItem onClick={onOpenSettings}>Settings</WindowMenuItem>
         ) : null}
+        {onWorkspaceAction !== null ? (
+          <WindowMenuItem onClick={() => onWorkspaceAction("toggle-pdf")}>
+            Toggle PDF viewer
+          </WindowMenuItem>
+        ) : null}
         <MenuInfo message="Workspace panels are controlled from the editor." />
       </>
+    )
+  }
+
+  if (label === "Build" && onWorkspaceAction !== null) {
+    return (
+      <>
+        <WindowMenuItem onClick={() => onWorkspaceAction("build")}>
+          Build PDF
+        </WindowMenuItem>
+        <WindowMenuItem onClick={() => onWorkspaceAction("build-details")}>
+          Show build details
+        </WindowMenuItem>
+      </>
+    )
+  }
+
+  if (label === "Search" && onWorkspaceAction !== null) {
+    return (
+      <>
+        <WindowMenuItem onClick={() => onWorkspaceAction("find-source")}>
+          Find in source
+        </WindowMenuItem>
+        <WindowMenuItem
+          onClick={() => onWorkspaceAction("search-project")}
+          shortcut={shortcutLabel(["primary", "shift", "f"])}
+        >
+          Search project
+        </WindowMenuItem>
+      </>
+    )
+  }
+
+  if (label === "Window") {
+    return (
+      <WindowMenuItem
+        onClick={onNewWindow}
+        shortcut={shortcutLabel(["primary", "shift", "n"])}
+      >
+        New Window
+      </WindowMenuItem>
     )
   }
 

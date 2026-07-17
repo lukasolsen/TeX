@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react"
-import {
-  CaseSensitive,
-  ChevronRight,
-  Replace,
-  Search,
-  Undo2,
-  X,
-} from "lucide-react"
+import { CaseSensitive, Replace, Search, Undo2, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -124,6 +117,18 @@ export function ProjectSearchPanel({
       files.set(result.path, result.revision)
     return [...files].map(([path, revision]) => ({ path, revision }))
   }, [response])
+  const resultGroups = useMemo(() => {
+    const groups = new Map<
+      ProjectRelativePath,
+      ProjectSearchResponse["results"][number][]
+    >()
+    for (const result of response?.results ?? []) {
+      const matches = groups.get(result.path) ?? []
+      matches.push(result)
+      groups.set(result.path, matches)
+    }
+    return [...groups]
+  }, [response])
 
   async function applyReplacement(): Promise<void> {
     if (response === null || mutationInFlight.current) return
@@ -183,7 +188,7 @@ export function ProjectSearchPanel({
       aria-label="Project search"
       className="flex size-full min-h-0 flex-col bg-sidebar"
     >
-      <header className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
         <Search aria-hidden="true" />
         <h2 className="text-xs font-medium">Project search</h2>
         <Button
@@ -361,31 +366,38 @@ export function ProjectSearchPanel({
               {state.response.searchedFiles} files
               {state.response.truncated ? " · first 500 shown" : ""}
             </p>
-            <ol className="p-1.5">
-              {state.response.results.map((result, index) => (
+            <ol className="flex flex-col gap-3 p-2">
+              {resultGroups.map(([path, results]) => (
                 <li
-                  key={`${result.path}:${result.line}:${result.column}:${index}`}
+                  className="overflow-hidden rounded-md border bg-background"
+                  key={path}
                 >
-                  <button
-                    className="flex min-h-12 w-full min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                    onClick={() =>
-                      onNavigate(result.path, result.line, result.column)
-                    }
-                    type="button"
-                  >
-                    <ChevronRight
-                      aria-hidden="true"
-                      className="mt-0.5 shrink-0"
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-xs font-medium">
-                        {result.path}:{result.line}:{result.column}
-                      </span>
-                      <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                        {result.context}
-                      </span>
+                  <p className="truncate border-b bg-muted/45 px-3 py-1.5 font-mono text-xs text-foreground">
+                    {path}{" "}
+                    <span className="font-sans text-muted-foreground">
+                      · {results.length}
                     </span>
-                  </button>
+                  </p>
+                  <ol className="p-1">
+                    {results.map((result, index) => (
+                      <li key={`${result.line}:${result.column}:${index}`}>
+                        <button
+                          className="flex w-full min-w-0 items-baseline gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          onClick={() =>
+                            onNavigate(result.path, result.line, result.column)
+                          }
+                          type="button"
+                        >
+                          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                            {result.line}:{result.column}
+                          </span>
+                          <span className="truncate font-mono text-xs text-foreground/85">
+                            {result.context}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ol>
                 </li>
               ))}
             </ol>

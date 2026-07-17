@@ -26,7 +26,6 @@ import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
 import { SourceTabs } from "@/features/projects/source-tabs"
-import { WorkspaceToolbar } from "@/features/projects/workspace-toolbar"
 import { WorkspaceCommandPalette } from "@/features/commands/workspace-command-palette"
 import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
@@ -292,6 +291,45 @@ export function ProjectWorkspacePage({
   }, [])
 
   useEffect(() => {
+    const runWorkspaceAction = (event: Event) => {
+      if (!(event instanceof CustomEvent)) return
+      switch (event.detail) {
+        case "build":
+          if (buildEnabled) runDetached(build.build())
+          break
+        case "build-details":
+          onUpdateWorkspaceView({ buildPanelOpen: true })
+          break
+        case "find-source":
+          window.dispatchEvent(new Event("tex:open-source-find"))
+          break
+        case "project-home":
+          onReturnHome()
+          break
+        case "save":
+          runDetached(onSaveDocument())
+          break
+        case "search-project":
+          setSearchOpen(true)
+          break
+        case "toggle-pdf":
+          onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })
+          break
+      }
+    }
+    window.addEventListener("tex:workspace-action", runWorkspaceAction)
+    return () =>
+      window.removeEventListener("tex:workspace-action", runWorkspaceAction)
+  }, [
+    build,
+    buildEnabled,
+    onReturnHome,
+    onSaveDocument,
+    onUpdateWorkspaceView,
+    pdfOpen,
+  ])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey
       if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
@@ -351,7 +389,7 @@ export function ProjectWorkspacePage({
 
   return (
     <main
-      className="grid h-full min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
+      className="grid h-full min-h-144 grid-rows-[minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
       onFocusCapture={(event) => {
         const focus = event.target.closest<HTMLElement>(
           "[data-workspace-focus]"
@@ -361,20 +399,6 @@ export function ProjectWorkspacePage({
         }
       }}
     >
-      <WorkspaceToolbar
-        buildEnabled={buildEnabled}
-        buildStatus={latestBuild?.status ?? null}
-        onBuild={() => runDetached(build.build())}
-        onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
-        onOpenSearch={() => setSearchOpen(true)}
-        onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
-        onReturnHome={onReturnHome}
-        onSave={() => runDetached(onSaveDocument())}
-        onStop={() => runDetached(build.stop())}
-        pdfOpen={pdfOpen}
-        session={session}
-      />
-
       <ResizablePanelGroup
         className="min-h-0 min-w-0"
         onLayoutChanged={(_layout, metadata) => {
@@ -452,6 +476,7 @@ export function ProjectWorkspacePage({
                   selectedFile={selectedFile}
                   selectedPdf={session.workspace.selectedPdf}
                   selectedRoot={session.workspace.selectedRoot}
+                  projectName={session.project.name}
                   tree={session.project.tree}
                   tab={session.workspace.sidebarTab}
                   onTabChange={(sidebarTab) =>

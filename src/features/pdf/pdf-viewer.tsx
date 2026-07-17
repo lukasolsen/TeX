@@ -41,7 +41,6 @@ import {
 import {
   InputGroup,
   InputGroupAddon,
-  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
@@ -443,6 +442,7 @@ export function PdfViewer({
   >([])
   const [outlineTruncated, setOutlineTruncated] = useState(false)
   const [query, setQuery] = useState("")
+  const [searchOpen, setSearchOpen] = useState(false)
   const [matches, setMatches] = useState<number[]>([])
   const [matchIndex, setMatchIndex] = useState(0)
   const [searchStatus, setSearchStatus] = useState<
@@ -1007,7 +1007,8 @@ export function PdfViewer({
       if (modifier && event.key.toLowerCase() === "f") {
         event.preventDefault()
         event.stopPropagation()
-        searchInputRef.current?.focus()
+        setSearchOpen(true)
+        window.requestAnimationFrame(() => searchInputRef.current?.focus())
       } else if (modifier && (event.key === "+" || event.key === "=")) {
         event.preventDefault()
         event.stopPropagation()
@@ -1234,6 +1235,20 @@ export function PdfViewer({
         </Button>
         <div className="ml-auto flex items-center gap-1">
           <Button
+            aria-label="Find in PDF"
+            onClick={() => {
+              setSearchOpen(true)
+              window.requestAnimationFrame(() =>
+                searchInputRef.current?.focus()
+              )
+            }}
+            size="icon-xs"
+            title={`Find in PDF (${shortcutLabel(["primary", "f"])})`}
+            variant="ghost"
+          >
+            <Search />
+          </Button>
+          <Button
             aria-label="Synchronize source to PDF"
             disabled={sourceLocation === null}
             onClick={() => runDetached(forwardSearch())}
@@ -1327,91 +1342,100 @@ export function PdfViewer({
             ) : null}
           </aside>
         ) : null}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex shrink-0 items-center gap-2 border-b bg-background px-2 py-1.5">
-            <InputGroup className="max-w-sm">
-              <InputGroupAddon>
-                <Search />
-              </InputGroupAddon>
-              <InputGroupInput
-                aria-label="Find in PDF"
-                maxLength={256}
-                onChange={(event) => {
-                  searchGeneration.current += 1
-                  setQuery(event.target.value)
-                  setMatches([])
-                  setMatchIndex(0)
-                  setSearchStatus("idle")
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") runDetached(runSearch())
-                }}
-                placeholder="Find in PDF"
-                ref={searchInputRef}
-                value={query}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton onClick={() => runDetached(runSearch())}>
-                  Find
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
-            <span className="text-xs text-muted-foreground" role="status">
-              {searchStatus === "searching"
-                ? "Searching PDF…"
-                : searchStatus === "error"
-                  ? "PDF search failed"
-                  : searchStatus === "truncated"
-                    ? `First ${matches.length} matching pages`
-                    : matches.length === 0
-                      ? query === "" || searchStatus === "idle"
-                        ? query === ""
-                          ? "Selectable text"
-                          : "Press Enter to search"
-                        : "No matches"
-                      : `${matchIndex + 1} of ${matches.length} pages`}
-            </span>
-            {syncStatus !== null ? (
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {searchOpen ? (
+            <div className="absolute top-2 right-3 z-20 flex w-[min(30rem,calc(100%-1.5rem))] items-center gap-1 rounded-md border bg-popover p-1 shadow-lg">
+              <InputGroup className="min-w-0 flex-1">
+                <InputGroupAddon>
+                  <Search />
+                </InputGroupAddon>
+                <InputGroupInput
+                  aria-label="Find in PDF"
+                  maxLength={256}
+                  onChange={(event) => {
+                    searchGeneration.current += 1
+                    setQuery(event.target.value)
+                    setMatches([])
+                    setMatchIndex(0)
+                    setSearchStatus("idle")
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") runDetached(runSearch())
+                    if (event.key === "Escape") setSearchOpen(false)
+                  }}
+                  placeholder="Find in PDF"
+                  ref={searchInputRef}
+                  value={query}
+                />
+              </InputGroup>
               <span
-                className="ml-auto max-w-64 truncate text-xs text-muted-foreground"
+                className="shrink-0 text-xs text-muted-foreground"
                 role="status"
-                title={syncStatus}
               >
-                {syncStatus}
+                {searchStatus === "searching"
+                  ? "Searching PDF…"
+                  : searchStatus === "error"
+                    ? "PDF search failed"
+                    : searchStatus === "truncated"
+                      ? `First ${matches.length} matching pages`
+                      : matches.length === 0
+                        ? query === "" || searchStatus === "idle"
+                          ? query === ""
+                            ? "Selectable text"
+                            : "Press Enter to search"
+                          : "No matches"
+                        : `${matchIndex + 1} of ${matches.length} pages`}
               </span>
-            ) : null}
-            {matches.length > 0 ? (
-              <>
-                <Button
-                  aria-label="Previous search result"
-                  onClick={() => {
-                    const next =
-                      (matchIndex - 1 + matches.length) % matches.length
-                    setMatchIndex(next)
-                    const pageNumber = matches[next]
-                    if (pageNumber !== undefined) goToPage(pageNumber)
-                  }}
-                  size="icon-xs"
-                  variant="ghost"
+              {syncStatus !== null ? (
+                <span
+                  className="ml-auto max-w-64 truncate text-xs text-muted-foreground"
+                  role="status"
+                  title={syncStatus}
                 >
-                  <ChevronLeft />
-                </Button>
-                <Button
-                  aria-label="Next search result"
-                  onClick={() => {
-                    const next = (matchIndex + 1) % matches.length
-                    setMatchIndex(next)
-                    const pageNumber = matches[next]
-                    if (pageNumber !== undefined) goToPage(pageNumber)
-                  }}
-                  size="icon-xs"
-                  variant="ghost"
-                >
-                  <ChevronRight />
-                </Button>
-              </>
-            ) : null}
-          </div>
+                  {syncStatus}
+                </span>
+              ) : null}
+              {matches.length > 0 ? (
+                <>
+                  <Button
+                    aria-label="Previous search result"
+                    onClick={() => {
+                      const next =
+                        (matchIndex - 1 + matches.length) % matches.length
+                      setMatchIndex(next)
+                      const pageNumber = matches[next]
+                      if (pageNumber !== undefined) goToPage(pageNumber)
+                    }}
+                    size="icon-xs"
+                    variant="ghost"
+                  >
+                    <ChevronLeft />
+                  </Button>
+                  <Button
+                    aria-label="Next search result"
+                    onClick={() => {
+                      const next = (matchIndex + 1) % matches.length
+                      setMatchIndex(next)
+                      const pageNumber = matches[next]
+                      if (pageNumber !== undefined) goToPage(pageNumber)
+                    }}
+                    size="icon-xs"
+                    variant="ghost"
+                  >
+                    <ChevronRight />
+                  </Button>
+                </>
+              ) : null}
+              <Button
+                aria-label="Close PDF find"
+                onClick={() => setSearchOpen(false)}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <X />
+              </Button>
+            </div>
+          ) : null}
           {loadState.updateError !== null ? (
             <Alert className="m-2 py-2" variant="destructive">
               <FileSearch />
