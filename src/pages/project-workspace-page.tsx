@@ -285,6 +285,13 @@ export function ProjectWorkspacePage({
   }
 
   useEffect(() => {
+    const openCommandPalette = () => setCommandPaletteOpen(true)
+    window.addEventListener("tex:open-command-palette", openCommandPalette)
+    return () =>
+      window.removeEventListener("tex:open-command-palette", openCommandPalette)
+  }, [])
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey
       if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
@@ -357,13 +364,9 @@ export function ProjectWorkspacePage({
       <WorkspaceToolbar
         buildEnabled={buildEnabled}
         buildStatus={latestBuild?.status ?? null}
-        feedback={feedback}
         onBuild={() => runDetached(build.build())}
-        onOpenProject={onOpenProject}
-        onOpenCommands={() => setCommandPaletteOpen(true)}
         onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
         onOpenSearch={() => setSearchOpen(true)}
-        onOpenSettings={() => onOpenSettings(lastWorkspaceFocus.current)}
         onTogglePdf={() => onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })}
         onReturnHome={onReturnHome}
         onSave={() => runDetached(onSaveDocument())}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import * as windowChromeModel from "./window-chrome-model"
 import {
   shouldRestoreStartupWorkspace,
   windowChromeMode,
@@ -28,6 +29,12 @@ describe("window chrome mode", () => {
       "Window",
       "Help",
     ])
+  })
+
+  it("defines the centered command palette control", () => {
+    expect(windowChromeModel).toHaveProperty("windowChromeCommandCenter", {
+      label: "Commands",
+    })
   })
 
   it("keeps secondary windows on the project home screen", () => {

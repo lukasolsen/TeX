@@ -1,7 +1,7 @@
 import { Menu } from "@base-ui/react/menu"
 import { Menubar } from "@base-ui/react/menubar"
 import { getCurrentWindow } from "@tauri-apps/api/window"
-import { Braces, Maximize2, Minimize2, Square, X } from "lucide-react"
+import { Braces, Command, Maximize2, Minimize2, Square, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import type { MouseEvent, ReactElement, ReactNode } from "react"
 
@@ -9,10 +9,15 @@ import { runDetached } from "@/lib/promises"
 import { shortcutLabel } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
 
-import { windowChromeMode, windowMenuLabels } from "./window-chrome-model"
+import {
+  windowChromeCommandCenter,
+  windowChromeMode,
+  windowMenuLabels,
+} from "./window-chrome-model"
 
 type WindowChromeProps = Readonly<{
   onNewWindow: () => void
+  onOpenCommands: (() => void) | null
   onOpenProject: (() => void) | null
   onOpenSettings: (() => void) | null
   onReturnHome: (() => void) | null
@@ -21,6 +26,7 @@ type WindowChromeProps = Readonly<{
 /** Compact desktop window chrome with platform-appropriate controls. */
 export function WindowChrome({
   onNewWindow,
+  onOpenCommands,
   onOpenProject,
   onOpenSettings,
   onReturnHome,
@@ -31,7 +37,10 @@ export function WindowChrome({
   useEffect(() => {
     if (mode === "macos-native") return
     const appWindow = getCurrentWindow()
-    void appWindow.isMaximized().then(setMaximized).catch(() => undefined)
+    void appWindow
+      .isMaximized()
+      .then(setMaximized)
+      .catch(() => undefined)
   }, [mode])
 
   const startDragging = (event: MouseEvent<HTMLElement>) => {
@@ -61,7 +70,7 @@ export function WindowChrome({
     <header
       aria-label="Application title bar"
       className={cn(
-        "flex h-8 shrink-0 select-none items-stretch border-b bg-workspace-chrome text-foreground",
+        "relative flex h-9 shrink-0 items-stretch border-b bg-workspace-chrome text-foreground select-none",
         mode === "macos-native" && "pl-[4.5rem]"
       )}
     >
@@ -89,6 +98,22 @@ export function WindowChrome({
           ))}
         </Menubar>
       </div>
+      {onOpenCommands !== null ? (
+        <button
+          aria-label="Open command palette"
+          className="absolute top-1/2 left-1/2 hidden h-7 w-80 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-border/80 bg-muted/45 px-3 text-left text-xs text-muted-foreground shadow-xs transition-colors outline-none hover:border-border hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 min-[760px]:flex xl:w-96"
+          onClick={onOpenCommands}
+          type="button"
+        >
+          <Command aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="flex-1 truncate">
+            {windowChromeCommandCenter.label}
+          </span>
+          <kbd className="rounded border border-border/70 bg-background/60 px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">
+            {shortcutLabel(["primary", "shift", "p"])}
+          </kbd>
+        </button>
+      ) : null}
       {mode === "custom-controls" ? (
         <div
           aria-label="Window controls"
@@ -152,11 +177,17 @@ function WindowMenuContent({
   onOpenProject,
   onOpenSettings,
   onReturnHome,
-}: WindowChromeProps & { label: string }): ReactElement {
+}: Pick<
+  WindowChromeProps,
+  "onNewWindow" | "onOpenProject" | "onOpenSettings" | "onReturnHome"
+> & { label: string }): ReactElement {
   if (label === "File") {
     return (
       <>
-        <WindowMenuItem onClick={onNewWindow} shortcut={shortcutLabel(["primary", "shift", "n"])}>
+        <WindowMenuItem
+          onClick={onNewWindow}
+          shortcut={shortcutLabel(["primary", "shift", "n"])}
+        >
           New Window
         </WindowMenuItem>
         {onOpenProject !== null ? (
@@ -201,7 +232,9 @@ function WindowMenuContent({
   }
   return (
     <MenuInfo
-      message={descriptions[label] ?? "Commands are not available in this menu."}
+      message={
+        descriptions[label] ?? "Commands are not available in this menu."
+      }
     />
   )
 }
@@ -254,7 +287,8 @@ function WindowControl({
       aria-label={label}
       className={cn(
         "flex w-10 items-center justify-center border-l border-border/70 text-muted-foreground transition-colors duration-100 outline-none hover:bg-foreground/7 hover:text-foreground focus-visible:bg-foreground/10 focus-visible:text-foreground [&_svg]:size-3.5 [&_svg]:stroke-[1.7]",
-        close && "border-l-0 hover:bg-[#c42b1c] hover:text-white focus-visible:bg-[#c42b1c] focus-visible:text-white"
+        close &&
+          "border-l-0 hover:bg-[#c42b1c] hover:text-white focus-visible:bg-[#c42b1c] focus-visible:text-white"
       )}
       onClick={onClick}
       type="button"
