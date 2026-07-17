@@ -6,6 +6,7 @@ mod build_system;
 mod latex_completion;
 #[cfg(test)]
 mod latex_fixtures;
+mod latex_symbols;
 mod pdf_read;
 mod persistence;
 mod process_support;
