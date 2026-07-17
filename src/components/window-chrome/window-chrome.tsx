@@ -109,9 +109,10 @@ export function WindowChrome({
           <span className="flex-1 truncate">
             {windowChromeCommandCenter.label}
           </span>
-          <kbd className="rounded border border-border/70 bg-background/60 px-1.5 py-0.5 font-sans text-[10px] text-muted-foreground">
+          <span aria-hidden="true" className="h-3 w-px bg-border/70" />
+          <span className="font-mono text-[10px] text-muted-foreground/75">
             {shortcutLabel(["primary", "shift", "p"])}
-          </kbd>
+          </span>
         </button>
       ) : null}
       {mode === "custom-controls" ? (
