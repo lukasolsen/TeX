@@ -19,10 +19,8 @@ mod source_edit;
 mod source_read;
 mod synctex;
 mod watch_system;
+mod window_management;
 
-#[cfg(target_os = "macos")]
-use tauri::{LogicalPosition, TitleBarStyle};
-use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_log::{Target, TargetKind};
 
 /// Starts the desktop application and registers its validated local capabilities.
@@ -45,27 +43,10 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_dialog::init())
-        .setup(|app| {
-            let window_builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("TeX")
-                .inner_size(1400.0, 918.0)
-                .min_inner_size(900.0, 600.0)
-                .center();
-
-            #[cfg(target_os = "macos")]
-            let window_builder = window_builder
-                .title_bar_style(TitleBarStyle::Overlay)
-                .hidden_title(true)
-                .traffic_light_position(LogicalPosition::new(12.0, 10.0));
-
-            #[cfg(not(target_os = "macos"))]
-            let window_builder = window_builder.decorations(false);
-
-            window_builder.build()?;
-            Ok(())
-        })
+        .setup(|app| Ok(window_management::create_main_window(app.handle())?))
         .invoke_handler(tauri::generate_handler![
             readiness::phase_zero_readiness,
+            window_management::create_new_window,
             project_open::choose_project_folder,
             project_open::open_project,
             project_files::create_project_entry,
