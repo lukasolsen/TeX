@@ -38,6 +38,7 @@ pub fn run() {
         .manage(build_system::BuildController::default())
         .manage(project_access::ProjectAccess::default())
         .manage(latex_project_scan::ScanCache::default())
+        .manage(source_edit::SourceWriteLocks::default())
         .manage(terminal_system::TerminalController::default())
         .manage(watch_system::WatchController::default())
         .plugin(

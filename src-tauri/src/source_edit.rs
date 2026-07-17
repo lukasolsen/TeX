@@ -1,7 +1,9 @@
 use std::{
+    collections::HashMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -20,6 +22,26 @@ use crate::{bounded_io, project_access::ProjectAccess};
 pub struct SourceEditError {
     pub code: &'static str,
     pub message: &'static str,
+}
+
+/// Serializes source writes per canonical path so a save's read-check-write
+/// (optimistic-concurrency) sequence is atomic with respect to other saves of the
+/// same file. Without this, two saves starting from the same expected revision
+/// could both pass the external-change guard and the second would silently
+/// overwrite the first.
+#[derive(Default)]
+pub struct SourceWriteLocks {
+    locks: Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>,
+}
+
+impl SourceWriteLocks {
+    fn lock_for(&self, path: &Path) -> Arc<Mutex<()>> {
+        let mut map = self.locks.lock().unwrap_or_else(|error| error.into_inner());
+        // Drop locks no longer held by an in-flight save so the map cannot grow
+        // without bound across a long editing session.
+        map.retain(|_, lock| Arc::strong_count(lock) > 1);
+        Arc::clone(map.entry(path.to_path_buf()).or_default())
+    }
 }
 
 /// Upper bound for a serialized recovery draft. The draft content is itself
@@ -48,6 +70,7 @@ pub fn save_project_source(
     content: String,
     expected_revision: SourceRevision,
     access: State<'_, ProjectAccess>,
+    write_locks: State<'_, SourceWriteLocks>,
 ) -> Result<SourceDocument, SourceEditError> {
     if content.len() as u64 > MAX_SOURCE_BYTES {
         return Err(too_large());
@@ -56,6 +79,10 @@ pub fn save_project_source(
     let canonical_project_path = root.to_string_lossy().into_owned();
     let relative = Path::new(&relative_path);
     let path = resolve_source_path(&root, relative).map_err(|_| unavailable())?;
+    // Hold the per-file lock across the whole read-check-write so a concurrent
+    // save cannot slip between the external-change guard and the write.
+    let file_lock = write_locks.lock_for(&path);
+    let _write_guard = file_lock.lock().unwrap_or_else(|error| error.into_inner());
     let current = bounded_io::read(&path, MAX_SOURCE_BYTES).map_err(|_| unavailable())?;
     if revision_for_content(&current) != expected_revision {
         return Err(SourceEditError {
