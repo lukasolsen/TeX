@@ -265,7 +265,11 @@ export type ProjectSessionController = Readonly<{
 }>
 
 /** Owns startup restoration and the project editing session state machine. */
-export function useProjectSession(): ProjectSessionController {
+export function useProjectSession({
+  restoreStartupWorkspace = true,
+}: {
+  restoreStartupWorkspace?: boolean
+} = {}): ProjectSessionController {
   const [state, setState] = useState<AppSessionState>({ status: "starting" })
   const stateRef = useRef<AppSessionState>(state)
   const documentRequest = useRef(0)
@@ -314,7 +318,7 @@ export function useProjectSession(): ProjectSessionController {
       try {
         const startup = await loadStartupState()
         if (!active || request !== projectRequest.current) return
-        if (startup.lastWorkspace === null) {
+        if (!restoreStartupWorkspace || startup.lastWorkspace === null) {
           setState({
             status: "home",
             startup,
@@ -367,7 +371,7 @@ export function useProjectSession(): ProjectSessionController {
     return () => {
       active = false
     }
-  }, [persistWorkspace])
+  }, [persistWorkspace, restoreStartupWorkspace])
 
   const openProjectAtPath = useCallback(
     async (path: CanonicalProjectPath) => {

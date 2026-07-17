@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { windowChromeMode, windowMenuLabels } from "./window-chrome-model"
+import {
+  shouldRestoreStartupWorkspace,
+  windowChromeMode,
+  windowMenuLabels,
+} from "./window-chrome-model"
 
 describe("window chrome mode", () => {
   it("keeps the native macOS traffic lights", () => {
@@ -24,5 +28,10 @@ describe("window chrome mode", () => {
       "Window",
       "Help",
     ])
+  })
+
+  it("keeps secondary windows on the project home screen", () => {
+    expect(shouldRestoreStartupWorkspace("main")).toBe(true)
+    expect(shouldRestoreStartupWorkspace("tex-window-2")).toBe(false)
   })
 })

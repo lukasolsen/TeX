@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react"
 import type { ReactElement } from "react"
+import { getCurrentWindow } from "@tauri-apps/api/window"
 import type { WorkspaceFocus } from "@/domain/project"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
@@ -9,6 +10,7 @@ import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
 import { runDetached } from "@/lib/promises"
 import { WindowChrome } from "@/components/window-chrome/window-chrome"
+import { shouldRestoreStartupWorkspace } from "@/components/window-chrome/window-chrome-model"
 import { createNewWindow } from "@/services/project-service"
 
 const ProjectWorkspacePage = lazy(() =>
@@ -23,6 +25,9 @@ export default function App(): ReactElement {
   const [focusRestoreToken, setFocusRestoreToken] = useState(0)
   const { preferences, saveError, setAccentColor, setColorTheme } =
     useAppPreferences()
+  const restoreStartupWorkspace = shouldRestoreStartupWorkspace(
+    getCurrentWindow().label
+  )
   const {
     chooseAndOpenProject,
     clearFeedback,
@@ -49,7 +54,7 @@ export default function App(): ReactElement {
     updatePdfViewerState,
     updateEditorViewerState,
     updateWorkspaceView,
-  } = useProjectSession()
+  } = useProjectSession({ restoreStartupWorkspace })
   const openNewWindow = useCallback(() => {
     runDetached(createNewWindow())
   }, [])
