@@ -45,6 +45,8 @@ pub fn detect_root_candidates(project_root: &Path) -> io::Result<Vec<RootCandida
     let mut visited_entries = 0_usize;
     collect_tex_files(project_root, 0, &mut visited_entries, &mut tex_files)?;
 
+    // Canonicalize the project root once rather than once per magic-comment file.
+    let canonical_project_root = project_root.canonicalize().ok();
     let mut candidates = BTreeMap::<PathBuf, Vec<RootEvidence>>::new();
     for path in tex_files {
         let source = bounded_io::read_utf8(&path, MAX_SOURCE_BYTES)?;
@@ -58,8 +60,10 @@ pub fn detect_root_candidates(project_root: &Path) -> io::Result<Vec<RootCandida
             );
         }
 
-        if let Some(root) = magic_comment_root(&source, &path, project_root) {
-            insert_evidence(&mut candidates, root, RootEvidence::MagicComment);
+        if let Some(project_root) = canonical_project_root.as_deref() {
+            if let Some(root) = magic_comment_root(&source, &path, project_root) {
+                insert_evidence(&mut candidates, root, RootEvidence::MagicComment);
+            }
         }
     }
 
@@ -158,7 +162,11 @@ fn collect_tex_files(
     Ok(())
 }
 
-fn magic_comment_root(source: &str, source_path: &Path, project_root: &Path) -> Option<PathBuf> {
+fn magic_comment_root(
+    source: &str,
+    source_path: &Path,
+    canonical_project_root: &Path,
+) -> Option<PathBuf> {
     let root = source
         .lines()
         .find_map(|line| line.trim().strip_prefix("% !TeX root = "))?
@@ -184,7 +192,6 @@ fn magic_comment_root(source: &str, source_path: &Path, project_root: &Path) -> 
         .join(relative_root)
         .canonicalize()
         .ok()?;
-    let canonical_project_root = project_root.canonicalize().ok()?;
     candidate.strip_prefix(canonical_project_root).ok()?;
     candidate.is_file().then_some(candidate)
 }
