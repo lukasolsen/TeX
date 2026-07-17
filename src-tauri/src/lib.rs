@@ -3,8 +3,11 @@
 mod bounded_io;
 mod build_operations;
 mod build_system;
+mod latex_completion;
 #[cfg(test)]
 mod latex_fixtures;
+mod latex_project_scan;
+mod latex_symbols;
 mod pdf_read;
 mod persistence;
 mod process_support;
@@ -66,6 +69,7 @@ pub fn run() {
             source_edit::save_recovery_draft,
             source_edit::load_recovery_draft,
             source_edit::discard_recovery_draft,
+            latex_completion::latex_completions,
             project_search::search_project_sources,
             project_search::replace_project_sources,
             project_search::undo_project_replace,

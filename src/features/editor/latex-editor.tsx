@@ -4,8 +4,6 @@ import {
   closeBrackets,
   closeBracketsKeymap,
   completionKeymap,
-  completeFromList,
-  snippet,
 } from "@codemirror/autocomplete"
 import {
   defaultKeymap,
@@ -55,6 +53,10 @@ import {
   tooltips,
 } from "@codemirror/view"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
+import {
+  latexCompletionRowBadge,
+  latexCompletionSource,
+} from "@/features/editor/latex-completion"
 import { latexHighlightStyle } from "@/features/editor/latex-highlighting"
 import {
   latexSemanticHighlighting,
@@ -246,28 +248,142 @@ function sourceEditorTheme(fontSize: number) {
       fontFamily: "var(--font-mono)",
       fontSize: "0.92em",
     },
+    ".cm-tooltip-autocomplete": {
+      border: "1px solid var(--border)",
+      borderRadius: "0.75rem",
+      backgroundColor: "var(--popover)",
+      color: "var(--popover-foreground)",
+      boxShadow: "0 16px 40px color-mix(in srgb, black 22%, transparent)",
+      overflow: "hidden",
+    },
+    ".cm-tooltip-autocomplete > ul": {
+      maxHeight: "24rem",
+      minWidth: "28rem",
+      maxWidth: "34rem",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.875rem",
+    },
+    ".cm-tooltip-autocomplete > ul > li": {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.625rem",
+      minHeight: "2.75rem",
+      padding: "0.5rem 0.85rem",
+      lineHeight: "1.35",
+      borderBottom: "1px solid color-mix(in oklch, var(--border) 45%, transparent)",
+    },
+    ".cm-tooltip-autocomplete > ul > li:last-child": { borderBottom: "none" },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+      backgroundColor: "var(--accent)",
+      color: "var(--accent-foreground)",
+    },
+    ".cm-completionLabel": {
+      fontFamily: "var(--font-mono)",
+      fontWeight: "500",
+      color: "var(--foreground)",
+    },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionLabel": {
+      color: "var(--accent-foreground)",
+    },
+    ".cm-completionMatchedText": {
+      textDecoration: "none",
+      fontWeight: "700",
+      color: "var(--primary)",
+    },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText":
+      { color: "inherit" },
+    ".cm-completionDetail": {
+      marginLeft: "auto",
+      paddingLeft: "1rem",
+      maxWidth: "16rem",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
+      fontStyle: "normal",
+      color: "var(--muted-foreground)",
+      fontSize: "0.75rem",
+    },
+    ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail": {
+      color: "color-mix(in oklch, var(--accent-foreground) 78%, transparent)",
+    },
+    ".tex-completion-icon": {
+      flex: "none",
+      width: "18px",
+      height: "18px",
+    },
+    ".tex-completion-icon-command": { color: "var(--completion-icon-command)" },
+    ".tex-completion-icon-environment": {
+      color: "var(--completion-icon-environment)",
+    },
+    ".tex-completion-icon-snippet": { color: "var(--completion-icon-snippet)" },
+    ".tex-completion-icon-label": { color: "var(--completion-icon-label)" },
+    ".tex-completion-icon-citation": { color: "var(--completion-icon-citation)" },
+    ".tex-completion-icon-file": { color: "var(--completion-icon-file)" },
+    ".cm-completionInfo": {
+      minWidth: "18rem",
+      maxWidth: "24rem",
+      borderLeft: "1px solid var(--border)",
+      backgroundColor: "var(--popover)",
+      color: "var(--popover-foreground)",
+      padding: "0",
+    },
+    ".tex-completion-info": {
+      display: "flex",
+      flexDirection: "column",
+      gap: "0.5rem",
+      padding: "0.875rem 1rem",
+    },
+    ".tex-completion-meta": {
+      display: "flex",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: "0.5rem",
+    },
+    ".tex-completion-provenance": {
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.75rem",
+      color: "var(--muted-foreground)",
+    },
+    ".tex-completion-description": {
+      margin: "0",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.8125rem",
+      lineHeight: "1.5",
+      color: "var(--popover-foreground)",
+    },
+    ".tex-completion-preview-label": {
+      margin: "0.25rem 0 0",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.6875rem",
+      fontWeight: "600",
+      letterSpacing: "0.04em",
+      textTransform: "uppercase",
+      color: "var(--muted-foreground)",
+    },
+    ".tex-completion-preview": {
+      margin: "0",
+      maxHeight: "12rem",
+      overflow: "auto",
+      border: "1px solid var(--border)",
+      borderRadius: "0.5rem",
+      backgroundColor: "var(--editor-preview)",
+      padding: "0.6rem 0.7rem",
+      fontFamily: "var(--font-mono)",
+      fontSize: "0.6875rem",
+      lineHeight: "1.55",
+      whiteSpace: "pre",
+      color: "var(--editor-preview-foreground)",
+    },
+    ".tex-completion-hint": {
+      margin: "0.25rem 0 0",
+      paddingTop: "0.5rem",
+      borderTop: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.6875rem",
+      color: "var(--muted-foreground)",
+    },
   })
 }
-
-const latexSnippets = completeFromList([
-  {
-    label: "itemize environment",
-    detail: "LaTeX snippet",
-    apply: snippet("\\begin{itemize}\n\t\\item ${item}\n\\end{itemize}"),
-  },
-  {
-    label: "figure environment",
-    detail: "LaTeX snippet",
-    apply: snippet(
-      "\\begin{figure}[htbp]\n\t\\centering\n\t${figure}\n\t\\caption{${caption}}\n\t\\label{fig:${label}}\n\\end{figure}"
-    ),
-  },
-  {
-    label: "equation environment",
-    detail: "LaTeX snippet",
-    apply: snippet("\\begin{equation}\n\t${equation}\n\\end{equation}"),
-  },
-])
 
 export function LatexEditor({
   content,
@@ -525,8 +641,16 @@ export function LatexEditor({
         },
       ]),
       autocompletion({
-        override: [latexSnippets],
-        activateOnTyping: false,
+        override: [
+          latexCompletionSource(
+            () => projectPathRef.current,
+            () => activePath.current
+          ),
+        ],
+        addToOptions: [latexCompletionRowBadge],
+        icons: false,
+        activateOnTyping: true,
+        maxRenderedOptions: 12,
       }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },

@@ -429,7 +429,7 @@ fn transaction_id(project_path: &str) -> String {
     format!("{:x}", digest.finalize())
 }
 
-fn ignored_name(name: &std::ffi::OsStr) -> bool {
+pub(crate) fn ignored_name(name: &std::ffi::OsStr) -> bool {
     matches!(
         name.to_str(),
         Some(

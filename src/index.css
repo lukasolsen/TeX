@@ -79,6 +79,12 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.47 0.13 243);
+  --completion-icon-command: #7c5cff;
+  --completion-icon-environment: #2f76d6;
+  --completion-icon-snippet: #b0791f;
+  --completion-icon-label: #0e9488;
+  --completion-icon-citation: #d6336c;
+  --completion-icon-file: #4b7bab;
   --radius: 0.625rem;
   --home-surface: oklch(0.965 0.003 250);
   --home-document: oklch(0.992 0.002 250);
@@ -146,6 +152,12 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.76 0.1 243);
+  --completion-icon-command: #a78bfa;
+  --completion-icon-environment: #6aa6f5;
+  --completion-icon-snippet: #e0b060;
+  --completion-icon-label: #2dd4bf;
+  --completion-icon-citation: #f472a6;
+  --completion-icon-file: #8fbce0;
   --home-surface: oklch(0.15 0.004 250);
   --home-document: oklch(0.195 0.007 250);
   --home-nav: oklch(0.18 0.005 250);
