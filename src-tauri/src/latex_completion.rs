@@ -1071,22 +1071,35 @@ fn braced_values(source: &str, command: &str) -> Vec<String> {
 
 fn open_environments(source: &str) -> Vec<String> {
     let mut stack = Vec::new();
-    for (start, _) in source.match_indices("\\begin{") {
-        if let Some(name) = braced_values(&source[start..], "\\begin")
-            .into_iter()
-            .next()
-        {
-            stack.push(name);
+    // Read only the immediate `{NAME}` at each match site rather than rescanning
+    // the remaining source per occurrence, keeping the whole pass linear.
+    for (start, matched) in source.match_indices("\\begin{") {
+        if let Some(name) = environment_name(&source[start + matched.len()..]) {
+            stack.push(name.to_owned());
         }
     }
-    for (start, _) in source.match_indices("\\end{") {
-        if let Some(name) = braced_values(&source[start..], "\\end").into_iter().next() {
-            if stack.last() == Some(&name) {
+    for (start, matched) in source.match_indices("\\end{") {
+        if let Some(name) = environment_name(&source[start + matched.len()..]) {
+            if stack.last().map(String::as_str) == Some(name) {
                 stack.pop();
             }
         }
     }
     stack
+}
+
+/// The trimmed environment name immediately following a `\begin{`/`\end{`, up to
+/// the first `}`. The scan is bounded so a `{` never closed cannot make the
+/// enclosing pass quadratic on adversarial input.
+fn environment_name(after_open_brace: &str) -> Option<&str> {
+    const MAX_ENVIRONMENT_NAME: usize = 128;
+    let mut limit = after_open_brace.len().min(MAX_ENVIRONMENT_NAME);
+    while limit > 0 && !after_open_brace.is_char_boundary(limit) {
+        limit -= 1;
+    }
+    let window = &after_open_brace[..limit];
+    let close = window.find('}')?;
+    Some(window[..close].trim())
 }
 
 fn unavailable() -> CompletionError {
