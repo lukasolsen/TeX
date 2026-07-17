@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs, io,
     path::{Component, Path, PathBuf},
 };
@@ -239,8 +240,11 @@ fn validate_configuration_structure(
     for directory in &configuration.generated_directories {
         canonical_child(root, directory, true)?;
     }
+    let mut seen_environment_keys = HashSet::new();
     for setting in &configuration.environment {
         if !ALLOWED_ENVIRONMENT_KEYS.contains(&setting.name.as_str())
+            // Reject duplicate keys so the effective value is unambiguous.
+            || !seen_environment_keys.insert(setting.name.as_str())
             || setting.value.chars().any(char::is_control)
             || setting.value.len() > MAX_ARGUMENT_LENGTH
         {
