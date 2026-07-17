@@ -38,12 +38,24 @@ export function isLatexCompletionContext(source: string, position: number): bool
     if (source[index] === "%" && !isEscaped(source, index)) return false
   }
   const before = source.slice(lineStart, position)
-  return /\\[A-Za-z@]*$/.test(before) || /\\(?:begin|end)\{[A-Za-z@]*$/.test(before)
+  return (
+    // A command prefix being typed, e.g. `\sec`.
+    /\\[A-Za-z@]*$/.test(before) ||
+    // The environment name inside `\begin{…}` / `\end{…}`.
+    /\\(?:begin|end)\{[A-Za-z@]*$/.test(before) ||
+    // The cursor inside a command's mandatory argument (tolerating one optional
+    // `[…]` group), e.g. `\ref{sec`, `\cite{a, b`, `\includegraphics[w]{fi`.
+    // Mirrors the backend's `completion_context` Argument detection so argument
+    // completions actually reach the command.
+    /\\[A-Za-z@]+(?:\[[^\]]*\])?\{[^{}]*$/.test(before)
+  )
 }
 
 /** Plain-language name for a completion kind, or `null` for an unrecognized value. */
 export function latexCompletionKindLabel(kind: string): string | null {
-  return kind in KIND_LABELS ? KIND_LABELS[kind as LatexCompletionKind] : null
+  return Object.hasOwn(KIND_LABELS, kind)
+    ? KIND_LABELS[kind as LatexCompletionKind]
+    : null
 }
 
 /** A sentence explaining where a suggestion comes from, avoiding LaTeX jargon. */

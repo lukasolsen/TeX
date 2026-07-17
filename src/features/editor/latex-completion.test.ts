@@ -22,6 +22,17 @@ describe("LaTeX completion source", () => {
   it("does not request completions inside a comment", () => {
     expect(isLatexCompletionContext("% \\section", 10)).toBe(false)
   })
+
+  it("requests completions inside a mandatory argument", () => {
+    expect(isLatexCompletionContext("\\ref{sec", 8)).toBe(true)
+    expect(isLatexCompletionContext("\\ref{", 5)).toBe(true)
+    expect(isLatexCompletionContext("\\cite{a, b, cu", 14)).toBe(true)
+    expect(isLatexCompletionContext("\\includegraphics[width=5cm]{fi", 30)).toBe(true)
+  })
+
+  it("does not request completions after an argument closes", () => {
+    expect(isLatexCompletionContext("\\ref{sec} ", 10)).toBe(false)
+  })
 })
 
 describe("LaTeX completion presentation", () => {
