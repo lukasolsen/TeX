@@ -344,7 +344,7 @@ export function ProjectWorkspacePage({
 
   return (
     <main
-      className="grid h-svh min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
+      className="grid h-full min-h-144 grid-rows-[3.25rem_minmax(0,1fr)_1.75rem] overflow-hidden bg-workspace"
       onFocusCapture={(event) => {
         const focus = event.target.closest<HTMLElement>(
           "[data-workspace-focus]"

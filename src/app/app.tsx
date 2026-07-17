@@ -8,6 +8,7 @@ import { StartupScreen } from "@/components/feedback/startup-screen"
 import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
 import { runDetached } from "@/lib/promises"
+import { WindowChrome } from "@/components/window-chrome/window-chrome"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -49,20 +50,25 @@ export default function App(): ReactElement {
     updateWorkspaceView,
   } = useProjectSession()
 
-  if (state.status === "starting") return <StartupScreen />
-  if (settingsOpen) {
+  let content: ReactElement
+  let onReturnHome: (() => void) | null = null
+
+  if (state.status === "starting") {
+    content = <StartupScreen />
+  } else if (settingsOpen) {
     const workspace =
       state.status === "workspace" ? state.session.workspace : null
-    return (
+    onReturnHome = () => {
+      setSettingsOpen(false)
+      if (workspace !== null) {
+        setFocusRestoreToken((token) => token + 1)
+      }
+    }
+    content = (
       <SettingsPage
         accentColor={preferences.accentColor}
         colorTheme={preferences.colorTheme}
-        onClose={() => {
-          setSettingsOpen(false)
-          if (workspace !== null) {
-            setFocusRestoreToken((token) => token + 1)
-          }
-        }}
+        onClose={onReturnHome}
         onSetColorTheme={setColorTheme}
         onSetAccentColor={setAccentColor}
         onSetEditorFontSize={setEditorFontSize}
@@ -71,9 +77,9 @@ export default function App(): ReactElement {
         workspace={workspace}
       />
     )
-  }
-  if (state.status === "workspace") {
-    return (
+  } else if (state.status === "workspace") {
+    onReturnHome = () => runDetached(returnHome())
+    content = (
       <Suspense fallback={<StartupScreen />}>
         <ProjectWorkspacePage
           feedback={state.openFeedback}
@@ -111,17 +117,31 @@ export default function App(): ReactElement {
         />
       </Suspense>
     )
+  } else {
+    content = (
+      <ProjectHomePage
+        feedback={state.openFeedback}
+        onClearFeedback={clearFeedback}
+        onForgetProject={(path) => runDetached(forgetProject(path))}
+        onOpenProject={() => runDetached(chooseAndOpenProject())}
+        onOpenRecent={(path) => runDetached(openProjectAtPath(path))}
+        onOpenSettings={() => setSettingsOpen(true)}
+        startup={state.startup}
+      />
+    )
   }
 
+  const applicationReady = state.status !== "starting"
   return (
-    <ProjectHomePage
-      feedback={state.openFeedback}
-      onClearFeedback={clearFeedback}
-      onForgetProject={(path) => runDetached(forgetProject(path))}
-      onOpenProject={() => runDetached(chooseAndOpenProject())}
-      onOpenRecent={(path) => runDetached(openProjectAtPath(path))}
-      onOpenSettings={() => setSettingsOpen(true)}
-      startup={state.startup}
-    />
+    <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+      <WindowChrome
+        onOpenProject={
+          applicationReady ? () => runDetached(chooseAndOpenProject()) : null
+        }
+        onOpenSettings={applicationReady ? () => setSettingsOpen(true) : null}
+        onReturnHome={onReturnHome}
+      />
+      <div className="min-h-0 flex-1">{content}</div>
+    </div>
   )
 }

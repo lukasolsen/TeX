@@ -9,7 +9,7 @@ export function StartupScreen(): ReactElement {
   return (
     <main
       aria-label="Starting TeX"
-      className="relative flex min-h-svh items-center justify-center overflow-hidden bg-home-surface px-6"
+      className="relative flex h-full min-h-0 items-center justify-center overflow-hidden bg-home-surface px-6"
     >
       <div
         aria-hidden="true"
