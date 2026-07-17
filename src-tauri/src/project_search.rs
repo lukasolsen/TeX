@@ -105,7 +105,7 @@ enum WriteSetFailure {
 
 /// Searches bounded text sources without sending project-wide file access to the webview.
 #[tauri::command]
-pub fn search_project_sources(
+pub async fn search_project_sources(
     project_path: String,
     query: String,
     case_sensitive: bool,
@@ -113,12 +113,16 @@ pub fn search_project_sources(
 ) -> Result<ProjectSearchResponse, SearchError> {
     let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let matcher = literal_matcher(&query, case_sensitive)?;
-    search(&root, &matcher)
+    // Offload the recursive traversal + per-file regex to a blocking worker so a
+    // large project cannot freeze the UI/IPC thread for the duration.
+    tauri::async_runtime::spawn_blocking(move || search(&root, &matcher))
+        .await
+        .map_err(|_| unavailable())?
 }
 
 /// Applies a previewed replacement only if every source revision still matches.
 #[tauri::command]
-pub fn replace_project_sources(
+pub async fn replace_project_sources(
     app: AppHandle,
     project_path: String,
     query: String,
@@ -132,6 +136,22 @@ pub fn replace_project_sources(
     if replacement.len() > MAX_REPLACEMENT_BYTES || expected_files.len() > MAX_REPLACE_FILES {
         return Err(replace_too_large());
     }
+    // Offload the reads, regex replacement, and atomic writes to a blocking worker
+    // so a large replacement set cannot freeze the UI/IPC thread.
+    tauri::async_runtime::spawn_blocking(move || {
+        run_replace(&app, &root, &matcher, &replacement, expected_files)
+    })
+    .await
+    .map_err(|_| unavailable())?
+}
+
+fn run_replace(
+    app: &AppHandle,
+    root: &Path,
+    matcher: &Regex,
+    replacement: &str,
+    expected_files: Vec<FileRevisionExpectation>,
+) -> Result<ReplaceResponse, SearchError> {
     let mut pending = Vec::new();
     let mut seen = HashSet::new();
     let mut pending_bytes = 0_usize;
@@ -140,7 +160,7 @@ pub fn replace_project_sources(
         if !seen.insert(expected.path.clone()) {
             return Err(unavailable());
         }
-        let document = read_source(&root, Path::new(&expected.path)).map_err(|_| unavailable())?;
+        let document = read_source(root, Path::new(&expected.path)).map_err(|_| unavailable())?;
         if document.revision != expected.revision {
             return Err(changed());
         }
@@ -149,7 +169,7 @@ pub fn replace_project_sources(
             continue;
         }
         let after = matcher
-            .replace_all(&document.content, NoExpand(replacement.as_str()))
+            .replace_all(&document.content, NoExpand(replacement))
             .into_owned();
         pending_bytes = pending_bytes
             .checked_add(document.content.len())
@@ -164,7 +184,7 @@ pub fn replace_project_sources(
             .map_err(|_| unavailable())?;
         // Re-assert containment: canonicalize follows symlinks, so a component
         // swapped between the read above and this write must not escape the root.
-        if !absolute_path.starts_with(&root) {
+        if !absolute_path.starts_with(root) {
             return Err(unavailable());
         }
         pending.push(PendingReplacement {
@@ -197,7 +217,7 @@ pub fn replace_project_sources(
             })
             .collect(),
     };
-    persist_transaction(&app, &transaction_id, &transaction)?;
+    persist_transaction(app, &transaction_id, &transaction)?;
 
     if let Err(failure) = apply_write_set(
         &pending,
@@ -209,7 +229,7 @@ pub fn replace_project_sources(
                 // Every file was rolled back to its original content, so the
                 // persisted backup is now an orphan whose after_revision can never
                 // match disk and which undo could never consume. Remove it.
-                if let Ok(path) = transaction_path(&app, &transaction_id) {
+                if let Ok(path) = transaction_path(app, &transaction_id) {
                     let _ = fs::remove_file(path);
                 }
                 unavailable()
@@ -218,7 +238,7 @@ pub fn replace_project_sources(
         });
     }
 
-    prune_transaction_history(&app);
+    prune_transaction_history(app);
     Ok(ReplaceResponse {
         transaction_id,
         changed_files: pending.len(),
