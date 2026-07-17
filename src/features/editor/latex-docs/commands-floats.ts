@@ -73,7 +73,7 @@ export const commandsFloats = {
   ),
   DeclareCaptionSubType: command(
     "DeclareCaptionSubType",
-    "Declares a sub-caption type for a custom float type. It is supplied by the `subcaption` package and belongs in the preamble."
+    "Declares a sub-caption type for a custom float type. It is supplied by the `caption` package and belongs in the preamble."
   ),
   doublerulesepcolor: command(
     "doublerulesepcolor",

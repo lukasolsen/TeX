@@ -194,6 +194,13 @@ describe("LaTeX documentation catalog", () => {
     expect(documentation?.markdown).not.toContain("`url`")
   })
 
+  it("attributes DeclareCaptionSubType to caption", () => {
+    const documentation = commandDocumentation("DeclareCaptionSubType")
+
+    expect(documentation?.markdown).toContain("`caption` package")
+    expect(documentation?.markdown).not.toContain("`subcaption` package")
+  })
+
   it("returns undefined for unknown documentation names", () => {
     expect(commandDocumentation("unknowncommand")).toBeUndefined()
     expect(documentClassDocumentation("unknownclass")).toBeUndefined()
