@@ -160,6 +160,11 @@ export default function App(): ReactElement {
     <div className="flex h-svh min-h-0 flex-col overflow-hidden">
       <WindowChrome
         onNewWindow={openNewWindow}
+        onOpenCommands={
+          state.status === "workspace" && !settingsOpen
+            ? () => window.dispatchEvent(new Event("tex:open-command-palette"))
+            : null
+        }
         onOpenProject={
           applicationReady ? () => runDetached(chooseAndOpenProject()) : null
         }

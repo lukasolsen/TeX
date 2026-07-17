@@ -1,5 +1,9 @@
 export type WindowChromeMode = "macos-native" | "custom-controls"
 
+export const windowChromeCommandCenter = {
+  label: "Commands",
+} as const
+
 const menuLabels = [
   "File",
   "Edit",

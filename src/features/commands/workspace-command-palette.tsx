@@ -31,6 +31,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command"
 import type { ProjectEntry } from "@/domain/project"
@@ -124,7 +125,7 @@ export function WorkspaceCommandPalette({
       <CommandInput placeholder="Type a command or file name…" />
       <CommandList>
         <CommandEmpty>No matching command or source file.</CommandEmpty>
-        <CommandGroup heading="Commands">
+        <CommandGroup heading="Build & preview">
           <CommandItem disabled={!buildEnabled} onSelect={() => run(onBuild)}>
             <Hammer /> Build PDF
           </CommandItem>
@@ -140,6 +141,13 @@ export function WorkspaceCommandPalette({
           <CommandItem onSelect={() => run(onRevealOutput)}>
             <FolderOpen /> Reveal built PDF
           </CommandItem>
+          <CommandItem onSelect={() => run(onToggleWatch)}>
+            {watchActive ? <EyeOff /> : <Eye />}
+            {watchActive ? "Stop watching project" : "Watch project and build"}
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator className="mx-2" />
+        <CommandGroup heading="Diagnostics">
           <CommandItem
             disabled={!diagnosticsAvailable}
             onSelect={() => run(onFirstDiagnostic)}
@@ -172,16 +180,9 @@ export function WorkspaceCommandPalette({
           >
             <ScrollText /> Show diagnostic log context
           </CommandItem>
-          <CommandItem onSelect={() => run(onToggleWatch)}>
-            {watchActive ? <EyeOff /> : <Eye />}
-            {watchActive ? "Stop watching project" : "Watch project and build"}
-          </CommandItem>
-          <CommandItem onSelect={() => run(onOpenBuild)}>
-            <PanelBottomOpen /> Show build details
-            <CommandShortcut>
-              {shortcutLabel(["primary", "shift", "b"])}
-            </CommandShortcut>
-          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator className="mx-2" />
+        <CommandGroup heading="Editing">
           <CommandItem onSelect={() => run(onSave)}>
             <Save /> Save source
             <CommandShortcut>{shortcutLabel(["primary", "s"])}</CommandShortcut>
@@ -208,6 +209,21 @@ export function WorkspaceCommandPalette({
             <MessageSquareText /> Toggle line comment
             <CommandShortcut>{shortcutLabel(["primary", "/"])}</CommandShortcut>
           </CommandItem>
+          <CommandItem onSelect={() => run(onZoomIn)}>
+            <ZoomIn /> Increase editor font
+          </CommandItem>
+          <CommandItem onSelect={() => run(onZoomOut)}>
+            <ZoomOut /> Decrease editor font
+          </CommandItem>
+        </CommandGroup>
+        <CommandSeparator className="mx-2" />
+        <CommandGroup heading="Workspace">
+          <CommandItem onSelect={() => run(onOpenBuild)}>
+            <PanelBottomOpen /> Show build details
+            <CommandShortcut>
+              {shortcutLabel(["primary", "shift", "b"])}
+            </CommandShortcut>
+          </CommandItem>
           <CommandItem onSelect={() => run(onTogglePdf)}>
             {pdfOpen ? <PanelRightClose /> : <PanelRightOpen />}
             {pdfOpen ? "Hide PDF viewer" : "Show PDF viewer"}
@@ -218,13 +234,8 @@ export function WorkspaceCommandPalette({
           <CommandItem onSelect={() => run(onOpenSettings)}>
             <Settings /> Open settings
           </CommandItem>
-          <CommandItem onSelect={() => run(onZoomIn)}>
-            <ZoomIn /> Increase editor font
-          </CommandItem>
-          <CommandItem onSelect={() => run(onZoomOut)}>
-            <ZoomOut /> Decrease editor font
-          </CommandItem>
         </CommandGroup>
+        <CommandSeparator className="mx-2" />
         <CommandGroup heading="Open source file">
           {sourceFiles.map((path) => (
             <CommandItem

@@ -101,19 +101,14 @@ describe("primary workflow accessibility", () => {
     await expectNoAutomatedAccessibilityViolations()
   })
 
-  it("keeps workspace toolbar routes keyboard reachable", async () => {
-    const onOpenCommands = vi.fn<() => void>()
+  it("keeps the workspace build action named", async () => {
     render(
       <WorkspaceToolbar
         buildEnabled={false}
         buildStatus={null}
-        feedback={{ status: "idle" }}
         onBuild={callback}
         onOpenBuild={callback}
-        onOpenCommands={onOpenCommands}
-        onOpenProject={callback}
         onOpenSearch={callback}
-        onOpenSettings={callback}
         onReturnHome={callback}
         onSave={callback}
         onStop={callback}
@@ -122,10 +117,7 @@ describe("primary workflow accessibility", () => {
         session={session}
       />
     )
-    const commands = screen.getByRole("button", { name: /commands/i })
-    commands.focus()
-    await userEvent.keyboard("{Enter}")
-    expect(onOpenCommands).toHaveBeenCalledOnce()
+    expect(screen.getByRole("button", { name: /build pdf/i })).toBeTruthy()
     await expectNoAutomatedAccessibilityViolations()
   })
 

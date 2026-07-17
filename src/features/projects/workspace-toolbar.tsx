@@ -1,20 +1,18 @@
 import {
   CircleStop,
-  FolderOpen,
   Hammer,
   Home,
   PanelRightClose,
   PanelRightOpen,
   Save,
   Search,
-  Settings,
   SquareTerminal,
 } from "lucide-react"
 import type { ReactElement } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import type { OpenProjectFeedback, ProjectSession } from "@/domain/project"
+import type { ProjectSession } from "@/domain/project"
 import type { BuildRun } from "@/domain/build"
 import { shortcutLabel } from "@/lib/shortcuts"
 
@@ -22,15 +20,11 @@ import { shortcutLabel } from "@/lib/shortcuts"
 export function WorkspaceToolbar({
   buildEnabled,
   buildStatus,
-  feedback,
   onBuild,
-  onOpenProject,
-  onOpenCommands,
   onOpenBuild,
   onOpenSearch,
   onReturnHome,
   onSave,
-  onOpenSettings,
   onTogglePdf,
   onStop,
   pdfOpen,
@@ -38,22 +32,16 @@ export function WorkspaceToolbar({
 }: {
   buildEnabled: boolean
   buildStatus: BuildRun["status"] | null
-  feedback: OpenProjectFeedback
   onBuild: () => void
-  onOpenProject: () => void
-  onOpenCommands: () => void
   onOpenBuild: () => void
   onOpenSearch: () => void
   onReturnHome: () => void
   onSave: () => void
-  onOpenSettings: () => void
   onTogglePdf: () => void
   onStop: () => void
   pdfOpen: boolean
   session: ProjectSession
 }): ReactElement {
-  const isOpening =
-    feedback.status === "choosing" || feedback.status === "opening"
   const documentState = session.documentState
   const saveUnavailable =
     documentState.status !== "ready" ||
@@ -138,37 +126,6 @@ export function WorkspaceToolbar({
         variant={pdfOpen ? "ghost" : "secondary"}
       >
         {pdfOpen ? <PanelRightClose /> : <PanelRightOpen />}
-      </Button>
-      <Button
-        aria-label="Open settings"
-        onClick={onOpenSettings}
-        size="icon-sm"
-        title="Open settings"
-        variant="ghost"
-      >
-        <Settings aria-hidden="true" />
-      </Button>
-      <Button
-        onClick={onOpenCommands}
-        size="sm"
-        title={`Command palette (${shortcutLabel(["primary", "shift", "p"])})`}
-        variant="ghost"
-      >
-        <SquareTerminal data-icon="inline-start" />
-        <span className="hidden lg:inline">Commands</span>
-        <kbd className="hidden rounded border bg-muted px-1 py-0.5 font-sans text-[10px] text-muted-foreground xl:inline">
-          {shortcutLabel(["primary", "shift", "p"])}
-        </kbd>
-      </Button>
-      <Button
-        disabled={isOpening}
-        onClick={onOpenProject}
-        size="sm"
-        variant="outline"
-      >
-        <FolderOpen data-icon="inline-start" />
-        <span className="hidden sm:inline">Open project</span>
-        <span className="sm:hidden">Open</span>
       </Button>
     </header>
   )
