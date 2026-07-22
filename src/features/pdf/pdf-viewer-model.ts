@@ -1,4 +1,7 @@
-import type { PdfViewerState } from "@/domain/project"
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist"
+
+import type { PdfPreferences } from "@/domain/preferences"
+import type { PdfViewerState, ProjectError } from "@/domain/project"
 import { clamp } from "@/lib/math"
 
 export const MAX_SUPPORTED_PDF_PAGES = 2_048
@@ -136,4 +139,86 @@ export function applyPdfCandidate(
     revision: candidate.revision,
     viewer: stateAfterPdfReplacement(current.viewer, candidate.pageCount).state,
   }
+}
+
+/** The state a PDF opens in the first time it is viewed. Once a document has a
+ * remembered state, that state wins: a preference change never moves a reader. */
+export function initialViewerState(defaults: PdfPreferences): PdfViewerState {
+  return {
+    page: 1,
+    position: 0,
+    zoom: defaults.defaultZoom,
+    rotation: 0,
+    layout: defaults.defaultLayout,
+    sidebar: defaults.defaultSidebar,
+  }
+}
+
+export function destroyPdfTask(task: PDFDocumentLoadingTask): void {
+  void task.destroy().catch(() => {
+    // Destruction is terminal; no document state remains to recover.
+  })
+}
+
+export function pageNumbers(
+  count: number,
+  layout: PdfViewerState["layout"],
+  page: number
+): number[] {
+  return layout === "single"
+    ? [Math.max(1, Math.min(count, page))]
+    : Array.from({ length: count }, (_, index) => index + 1)
+}
+
+export type OutlineItem = Awaited<
+  ReturnType<PDFDocumentProxy["getOutline"]>
+>[number]
+
+export type PdfLoadState =
+  | { status: "loading" }
+  | {
+      status: "ready"
+      document: PDFDocumentProxy
+      updateError: ProjectError | null
+    }
+  | { status: "error"; error: ProjectError }
+
+export type PdfUpdateOrigin = "initial" | "build" | "external"
+
+export type PendingPdfUpdate = Readonly<{
+  document: PDFDocumentProxy
+  outline: ReadonlyArray<FlatPdfOutlineItem<OutlineItem>>
+  outlineTruncated: boolean
+  origin: PdfUpdateOrigin
+  generation: number
+}>
+
+export type PdfTextSelection = Readonly<{ page: number; text: string }>
+
+export function restorePdfSelection(
+  root: HTMLElement,
+  selectionToRestore: PdfTextSelection | null
+): boolean {
+  if (
+    selectionToRestore === null ||
+    selectionToRestore.text === "" ||
+    !document.getSelection()?.isCollapsed
+  )
+    return false
+  for (const span of root.querySelectorAll<HTMLElement>(
+    `[data-page="${selectionToRestore.page}"] .textLayer span`
+  )) {
+    const content = span.textContent ?? ""
+    const offset = content.indexOf(selectionToRestore.text)
+    const node = span.firstChild
+    if (offset < 0 || node === null) continue
+    const range = document.createRange()
+    range.setStart(node, offset)
+    range.setEnd(node, offset + selectionToRestore.text.length)
+    const selection = document.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+    return true
+  }
+  return false
 }

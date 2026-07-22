@@ -4,17 +4,20 @@ import {
   applyPdfCandidate,
   boundedPdfOutputScale,
   flattenPdfOutline,
+  initialViewerState,
   MAX_PDF_CANVAS_DIMENSION,
   MAX_PDF_CANVAS_PIXELS,
   MAX_PDF_SEARCH_MATCH_PAGES,
   MAX_SUPPORTED_PDF_PAGES,
   normalizePdfOutline,
+  pageNumbers,
   pdfPageSizeSupported,
   pdfViewportScale,
   rotatePdfClockwise,
   stateAfterPdfReplacement,
   shouldRenderPdfPage,
 } from "@/features/pdf/pdf-viewer-model"
+import type { PdfPreferences } from "@/domain/preferences"
 import type { PdfViewerState } from "@/domain/project"
 
 describe("PDF viewer model", () => {
@@ -93,6 +96,37 @@ describe("PDF resource limits", () => {
     expect(canvasDimension * canvasDimension).toBeLessThanOrEqual(
       MAX_PDF_CANVAS_PIXELS
     )
+  })
+})
+
+describe("initial viewer state", () => {
+  const preferences: PdfPreferences = {
+    defaultZoom: 1.25,
+    defaultLayout: "single",
+    defaultSidebar: "outline",
+  }
+
+  it("opens a first-seen PDF at page one from the given preferences", () => {
+    expect(initialViewerState(preferences)).toEqual({
+      page: 1,
+      position: 0,
+      zoom: 1.25,
+      rotation: 0,
+      layout: "single",
+      sidebar: "outline",
+    })
+  })
+})
+
+describe("page numbers", () => {
+  it("renders only the clamped current page in single layout", () => {
+    expect(pageNumbers(10, "single", 4)).toEqual([4])
+    expect(pageNumbers(10, "single", 0)).toEqual([1])
+    expect(pageNumbers(10, "single", 99)).toEqual([10])
+  })
+
+  it("renders every page in order for continuous layout", () => {
+    expect(pageNumbers(3, "continuous", 2)).toEqual([1, 2, 3])
   })
 })
 
