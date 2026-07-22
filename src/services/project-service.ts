@@ -49,7 +49,9 @@ export async function createNewWindow(): Promise<void> {
 }
 
 export async function chooseProjectFolder(): Promise<CanonicalProjectPath | null> {
-  return parseOptionalProjectPath(await invoke<unknown>("choose_project_folder"))
+  return parseOptionalProjectPath(
+    await invoke<unknown>("choose_project_folder")
+  )
 }
 
 export async function openProjectFolder(

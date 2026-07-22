@@ -1,7 +1,4 @@
-import type {
-  TerminalDescriptor,
-  TerminalEvent,
-} from "@/domain/terminal"
+import type { TerminalDescriptor, TerminalEvent } from "@/domain/terminal"
 import {
   IpcContractError,
   nonEmptyString,

@@ -275,10 +275,9 @@ function updateRun(run: BuildRun, event: BuildEvent): BuildRun {
   return {
     ...run,
     entries,
-    diagnostics: (
-      event.diagnostic === null
-        ? run.diagnostics
-        : [...run.diagnostics, event.diagnostic]
+    diagnostics: (event.diagnostic === null
+      ? run.diagnostics
+      : [...run.diagnostics, event.diagnostic]
     ).filter((diagnostic) => retainedSequences.has(diagnostic.logSequence)),
   }
 }

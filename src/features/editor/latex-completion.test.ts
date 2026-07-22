@@ -31,7 +31,9 @@ describe("LaTeX completion source", () => {
     expect(isLatexCompletionContext("\\ref{sec", 8)).toBe(true)
     expect(isLatexCompletionContext("\\ref{", 5)).toBe(true)
     expect(isLatexCompletionContext("\\cite{a, b, cu", 14)).toBe(true)
-    expect(isLatexCompletionContext("\\includegraphics[width=5cm]{fi", 30)).toBe(true)
+    expect(
+      isLatexCompletionContext("\\includegraphics[width=5cm]{fi", 30)
+    ).toBe(true)
   })
 
   it("does not request completions after an argument closes", () => {
@@ -55,7 +57,10 @@ describe("LaTeX completion presentation", () => {
       latexCompletionSourceSummary({ provenance: "local", requires: null })
     ).toBe("Defined in this project")
     expect(
-      latexCompletionSourceSummary({ provenance: "package", requires: "amsmath" })
+      latexCompletionSourceSummary({
+        provenance: "package",
+        requires: "amsmath",
+      })
     ).toBe("Provided by the amsmath package")
     expect(
       latexCompletionSourceSummary({ provenance: "package", requires: null })
@@ -88,7 +93,9 @@ describe("LaTeX completion presentation", () => {
   it("previews multi-line insertions with readable placeholders", () => {
     expect(latexInsertionPreview("\\section")).toBeNull()
     expect(
-      latexInsertionPreview("\\begin{figure}\n  \\caption{${caption}}\n\\end{figure}")
+      latexInsertionPreview(
+        "\\begin{figure}\n  \\caption{${caption}}\n\\end{figure}"
+      )
     ).toContain("\\caption{caption}")
   })
 
@@ -114,7 +121,10 @@ describe("LaTeX completion presentation", () => {
   })
 
   it("shows an icon on each completion row instead of a text badge", () => {
-    const node = latexCompletionRowBadge.render({ label: "\\ref", type: "label" })
+    const node = latexCompletionRowBadge.render({
+      label: "\\ref",
+      type: "label",
+    })
     expect(node).not.toBeNull()
     const el = node as Element
     expect(el.tagName.toLowerCase()).toBe("svg")
@@ -122,7 +132,9 @@ describe("LaTeX completion presentation", () => {
     // The kind is now an icon, not the old text-badge span.
     expect(el.classList.contains("tex-completion-kind")).toBe(false)
     expect(el.getAttribute("aria-label")).toBe("Label")
-    expect(latexCompletionRowBadge.render({ label: "x", type: "gremlin" })).toBeNull()
+    expect(
+      latexCompletionRowBadge.render({ label: "x", type: "gremlin" })
+    ).toBeNull()
   })
 
   it("puts the kind icon in the info card meta row", () => {

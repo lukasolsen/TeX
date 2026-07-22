@@ -54,10 +54,12 @@ describe("project model", () => {
   })
 
   it("restores only roots and source files that still exist", () => {
-    expect(preferredRoot(project, projectRelativePath("missing.tex"))).toBe("main.tex")
-    expect(preferredRoot(project, projectRelativePath("chapters/intro.tex"))).toBe(
-      "chapters/intro.tex"
+    expect(preferredRoot(project, projectRelativePath("missing.tex"))).toBe(
+      "main.tex"
     )
+    expect(
+      preferredRoot(project, projectRelativePath("chapters/intro.tex"))
+    ).toBe("chapters/intro.tex")
     expect(
       preferredSourceFile(
         project,
@@ -75,7 +77,9 @@ describe("project model", () => {
     expect(
       treeContainsPath(project.tree, projectRelativePath("chapters/intro.tex"))
     ).toBe(true)
-    expect(treeContainsPath(project.tree, projectRelativePath("chapters"))).toBe(false)
+    expect(
+      treeContainsPath(project.tree, projectRelativePath("chapters"))
+    ).toBe(false)
   })
 
   it("keeps preview support explicit and case-insensitive", () => {
@@ -85,7 +89,9 @@ describe("project model", () => {
   })
 
   it("restores a project PDF or selects the root output", () => {
-    expect(preferredPdf(project, null, projectRelativePath("main.tex"))).toBe("main.pdf")
+    expect(preferredPdf(project, null, projectRelativePath("main.tex"))).toBe(
+      "main.pdf"
+    )
     expect(
       preferredPdf(
         project,
@@ -93,7 +99,9 @@ describe("project model", () => {
         projectRelativePath("main.tex")
       )
     ).toBe("main.pdf")
-    expect(preferredPdf(project, projectRelativePath("main.pdf"), null)).toBe("main.pdf")
+    expect(preferredPdf(project, projectRelativePath("main.pdf"), null)).toBe(
+      "main.pdf"
+    )
   })
 
   it("finds direct LaTeX dependencies and ignores comments", () => {

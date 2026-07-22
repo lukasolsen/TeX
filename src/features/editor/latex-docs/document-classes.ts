@@ -1,4 +1,7 @@
-import { entry, type LatexDocumentation } from "@/features/editor/latex-docs/entry"
+import {
+  entry,
+  type LatexDocumentation,
+} from "@/features/editor/latex-docs/entry"
 
 export const documentClasses = {
   acmart: entry(

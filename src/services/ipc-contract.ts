@@ -7,7 +7,10 @@ export class IpcContractError extends Error {
   }
 }
 
-export function record(value: unknown, contract: string): Record<string, unknown> {
+export function record(
+  value: unknown,
+  contract: string
+): Record<string, unknown> {
   if (!isRecord(value)) throw new IpcContractError(contract)
   return value
 }

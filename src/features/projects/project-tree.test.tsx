@@ -32,7 +32,9 @@ describe("ProjectTree", () => {
       />
     )
 
-    fireEvent.contextMenu(screen.getByRole("complementary", { name: "Project files" }))
+    fireEvent.contextMenu(
+      screen.getByRole("complementary", { name: "Project files" })
+    )
     await user.click(screen.getByRole("menuitem", { name: "New file" }))
     const input = screen.getByRole("textbox", { name: "New file name" })
     await user.type(input, "testing/example.txt{Enter}")

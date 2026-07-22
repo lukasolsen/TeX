@@ -51,9 +51,9 @@ describe("project IPC contracts", () => {
   })
 
   it("rejects non-finite SyncTeX coordinates and malformed transactions", () => {
-    expect(() => parseForwardSearchResult({ page: 1, x: Number.NaN, y: 2 })).toThrow(
-      "invalid SyncTeX x coordinate"
-    )
+    expect(() =>
+      parseForwardSearchResult({ page: 1, x: Number.NaN, y: 2 })
+    ).toThrow("invalid SyncTeX x coordinate")
     expect(() =>
       parseReplaceResponse({
         transactionId: "abc",

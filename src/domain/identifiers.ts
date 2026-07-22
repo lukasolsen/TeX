@@ -14,7 +14,8 @@ export type RevisionHash = string & { readonly [revisionHashBrand]: true }
 
 /** Establishes the absolute-path invariant after Rust has canonicalized a root. */
 export function canonicalProjectPath(value: string): CanonicalProjectPath {
-  if (!isAbsolutePath(value)) throw new TypeError("Project path is not absolute")
+  if (!isAbsolutePath(value))
+    throw new TypeError("Project path is not absolute")
   // The runtime predicate above is the constructor for this opaque scalar.
   return value as CanonicalProjectPath
 }
@@ -27,8 +28,8 @@ export function projectRelativePath(value: string): ProjectRelativePath {
     normalized.length === 0 ||
     normalized.startsWith("/") ||
     /^[A-Za-z]:/.test(normalized) ||
-    components.some((component) =>
-      component === "" || component === "." || component === ".."
+    components.some(
+      (component) => component === "" || component === "." || component === ".."
     )
   )
     throw new TypeError("Project-relative path is invalid")
@@ -44,7 +45,8 @@ export function buildId(value: string): BuildId {
 
 /** Establishes the exact SHA-256 wire representation used for source revisions. */
 export function revisionHash(value: string): RevisionHash {
-  if (!/^[\dA-Fa-f]{64}$/.test(value)) throw new TypeError("Revision hash is invalid")
+  if (!/^[\dA-Fa-f]{64}$/.test(value))
+    throw new TypeError("Revision hash is invalid")
   return value as RevisionHash
 }
 

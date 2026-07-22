@@ -39,7 +39,9 @@ const PATH_LIMIT = 32 * 1024
 const CONTENT_LIMIT = 2 * 1024 * 1024
 const MAX_WORKSPACE_FILES = 256
 
-export function parseOptionalProjectPath(value: unknown): CanonicalProjectPath | null {
+export function parseOptionalProjectPath(
+  value: unknown
+): CanonicalProjectPath | null {
   return value === null
     ? null
     : canonicalProjectPath(nonEmptyString(value, "project path", PATH_LIMIT))
@@ -50,7 +52,9 @@ export function parseProjectSummary(value: unknown): ProjectSummary {
   const budget = { entries: 0 }
   return {
     name: nonEmptyString(input.name, "project name", 4_096),
-    path: canonicalProjectPath(nonEmptyString(input.path, "project path", PATH_LIMIT)),
+    path: canonicalProjectPath(
+      nonEmptyString(input.path, "project path", PATH_LIMIT)
+    ),
     tree: parseProjectEntry(input.tree, budget, 0),
     rootCandidates: arrayValue(
       input.rootCandidates,
@@ -59,7 +63,9 @@ export function parseProjectSummary(value: unknown): ProjectSummary {
       (candidate) => {
         const item = record(candidate, "root candidate")
         return {
-          path: projectRelativePath(nonEmptyString(item.path, "root path", PATH_LIMIT)),
+          path: projectRelativePath(
+            nonEmptyString(item.path, "root path", PATH_LIMIT)
+          ),
           evidence: arrayValue(item.evidence, "root evidence", 3, (evidence) =>
             enumValue(evidence, "root evidence", [
               "documentClass",
@@ -70,31 +76,55 @@ export function parseProjectSummary(value: unknown): ProjectSummary {
         }
       }
     ),
-    rootDetectionNote: nullableString(input.rootDetectionNote, "root note", 8_192),
-    persistenceNote: nullableString(input.persistenceNote, "persistence note", 8_192),
+    rootDetectionNote: nullableString(
+      input.rootDetectionNote,
+      "root note",
+      8_192
+    ),
+    persistenceNote: nullableString(
+      input.persistenceNote,
+      "persistence note",
+      8_192
+    ),
   }
 }
 
 export function parseStartupState(value: unknown): StartupState {
   const input = record(value, "startup state")
   return {
-    recentProjects: arrayValue(input.recentProjects, "recent projects", 12, (project) => {
-      const item = record(project, "recent project")
-      return {
-        name: nonEmptyString(item.name, "recent project name", 4_096),
-        path: canonicalProjectPath(
-          nonEmptyString(item.path, "recent project path", PATH_LIMIT)
-        ),
-        lastOpenedAt: integer(item.lastOpenedAt, "recent project time", 0, Number.MAX_SAFE_INTEGER),
-        availability: enumValue(item.availability, "project availability", [
-          "available",
-          "missing",
-        ]),
+    recentProjects: arrayValue(
+      input.recentProjects,
+      "recent projects",
+      12,
+      (project) => {
+        const item = record(project, "recent project")
+        return {
+          name: nonEmptyString(item.name, "recent project name", 4_096),
+          path: canonicalProjectPath(
+            nonEmptyString(item.path, "recent project path", PATH_LIMIT)
+          ),
+          lastOpenedAt: integer(
+            item.lastOpenedAt,
+            "recent project time",
+            0,
+            Number.MAX_SAFE_INTEGER
+          ),
+          availability: enumValue(item.availability, "project availability", [
+            "available",
+            "missing",
+          ]),
+        }
       }
-    }),
+    ),
     lastWorkspace:
-      input.lastWorkspace === null ? null : parseWorkspaceState(input.lastWorkspace),
-    restorationNotice: nullableString(input.restorationNotice, "restoration notice", 16_384),
+      input.lastWorkspace === null
+        ? null
+        : parseWorkspaceState(input.lastWorkspace),
+    restorationNotice: nullableString(
+      input.restorationNotice,
+      "restoration notice",
+      16_384
+    ),
   }
 }
 
@@ -117,11 +147,19 @@ export function parseAppPreferences(value: unknown): AppPreferences {
 export function parseSourceDocument(value: unknown): SourceDocument {
   const input = record(value, "source document")
   const content = stringValue(input.content, "source content", CONTENT_LIMIT)
-  const byteLength = integer(input.byteLength, "source byte length", 0, CONTENT_LIMIT)
+  const byteLength = integer(
+    input.byteLength,
+    "source byte length",
+    0,
+    CONTENT_LIMIT
+  )
   const revision = parseSourceRevision(input.revision)
-  if (revision.byteLength !== byteLength) throw new IpcContractError("source revision")
+  if (revision.byteLength !== byteLength)
+    throw new IpcContractError("source revision")
   return {
-    path: projectRelativePath(nonEmptyString(input.path, "source path", PATH_LIMIT)),
+    path: projectRelativePath(
+      nonEmptyString(input.path, "source path", PATH_LIMIT)
+    ),
     content,
     byteLength,
     revision,
@@ -131,9 +169,15 @@ export function parseSourceDocument(value: unknown): SourceDocument {
 function parseSourceRevision(value: unknown): SourceRevision {
   const input = record(value, "source revision")
   const contentHash = stringValue(input.contentHash, "source hash", 64)
-  if (!/^[\dA-Fa-f]{64}$/.test(contentHash)) throw new IpcContractError("source hash")
+  if (!/^[\dA-Fa-f]{64}$/.test(contentHash))
+    throw new IpcContractError("source hash")
   return {
-    byteLength: integer(input.byteLength, "source byte length", 0, CONTENT_LIMIT),
+    byteLength: integer(
+      input.byteLength,
+      "source byte length",
+      0,
+      CONTENT_LIMIT
+    ),
     contentHash: revisionHash(contentHash),
   }
 }
@@ -150,38 +194,71 @@ export function parseRecoveryDraft(value: unknown): RecoveryDraft | null {
     ),
     content: stringValue(input.content, "recovery content", CONTENT_LIMIT),
     baseRevision: parseSourceRevision(input.baseRevision),
-    savedAt: integer(input.savedAt, "recovery timestamp", 0, Number.MAX_SAFE_INTEGER),
+    savedAt: integer(
+      input.savedAt,
+      "recovery timestamp",
+      0,
+      Number.MAX_SAFE_INTEGER
+    ),
   }
 }
 
-export function parseProjectSearchResponse(value: unknown): ProjectSearchResponse {
+export function parseProjectSearchResponse(
+  value: unknown
+): ProjectSearchResponse {
   const input = record(value, "project search")
   return {
     results: arrayValue(input.results, "search results", 500, (result) => {
       const item = record(result, "search result")
       return {
-        path: projectRelativePath(nonEmptyString(item.path, "search path", PATH_LIMIT)),
+        path: projectRelativePath(
+          nonEmptyString(item.path, "search path", PATH_LIMIT)
+        ),
         line: integer(item.line, "search line", 1, Number.MAX_SAFE_INTEGER),
-        column: integer(item.column, "search column", 1, Number.MAX_SAFE_INTEGER),
+        column: integer(
+          item.column,
+          "search column",
+          1,
+          Number.MAX_SAFE_INTEGER
+        ),
         context: stringValue(item.context, "search context", 361),
         revision: parseSourceRevision(item.revision),
       }
     }),
-    totalMatches: integer(input.totalMatches, "search match count", 0, Number.MAX_SAFE_INTEGER),
-    searchedFiles: integer(input.searchedFiles, "searched file count", 0, 2_048),
+    totalMatches: integer(
+      input.totalMatches,
+      "search match count",
+      0,
+      Number.MAX_SAFE_INTEGER
+    ),
+    searchedFiles: integer(
+      input.searchedFiles,
+      "searched file count",
+      0,
+      2_048
+    ),
     truncated: booleanValue(input.truncated, "search truncation"),
   }
 }
 
 export function parseReplaceResponse(value: unknown): ReplaceResponse {
   const input = record(value, "replace response")
-  const transactionId = stringValue(input.transactionId, "replace transaction", 64)
+  const transactionId = stringValue(
+    input.transactionId,
+    "replace transaction",
+    64
+  )
   if (!/^[\dA-Fa-f]{64}$/.test(transactionId))
     throw new IpcContractError("replace transaction")
   return {
     transactionId,
     changedFiles: integer(input.changedFiles, "changed file count", 0, 128),
-    replacedMatches: integer(input.replacedMatches, "replaced match count", 0, Number.MAX_SAFE_INTEGER),
+    replacedMatches: integer(
+      input.replacedMatches,
+      "replaced match count",
+      0,
+      Number.MAX_SAFE_INTEGER
+    ),
   }
 }
 
@@ -235,8 +312,11 @@ function parseProjectEntry(
   return {
     name: nonEmptyString(input.name, "project entry name", 4_096),
     kind: enumValue(input.kind, "project entry kind", ["directory", "file"]),
-    children: arrayValue(input.children, "project entry children", 2_048, (child) =>
-      parseProjectEntry(child, budget, depth + 1)
+    children: arrayValue(
+      input.children,
+      "project entry children",
+      2_048,
+      (child) => parseProjectEntry(child, budget, depth + 1)
     ),
   }
 }
@@ -247,19 +327,41 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
     projectPath: canonicalProjectPath(
       nonEmptyString(input.projectPath, "workspace project path", PATH_LIMIT)
     ),
-    pinnedFiles: arrayValue(input.pinnedFiles, "pinned files", MAX_WORKSPACE_FILES, (path) =>
-      projectRelativePath(nonEmptyString(path, "pinned file", PATH_LIMIT))
+    pinnedFiles: arrayValue(
+      input.pinnedFiles,
+      "pinned files",
+      MAX_WORKSPACE_FILES,
+      (path) =>
+        projectRelativePath(nonEmptyString(path, "pinned file", PATH_LIMIT))
     ),
-    selectedRoot: parseNullableRelativePath(input.selectedRoot, "selected root"),
-    selectedFile: parseNullableRelativePath(input.selectedFile, "selected file"),
+    selectedRoot: parseNullableRelativePath(
+      input.selectedRoot,
+      "selected root"
+    ),
+    selectedFile: parseNullableRelativePath(
+      input.selectedFile,
+      "selected file"
+    ),
     sidebarWidth: integer(input.sidebarWidth, "sidebar width", 220, 4_096),
     editorFontSize: integer(input.editorFontSize, "editor font size", 11, 24),
     pdfPaneOpen: booleanValue(input.pdfPaneOpen, "PDF pane state"),
     pdfPaneWidth: integer(input.pdfPaneWidth, "PDF pane width", 160, 4_096),
     buildPanelOpen: booleanValue(input.buildPanelOpen, "build panel state"),
-    buildPanelHeight: integer(input.buildPanelHeight, "build panel height", 160, 4_096),
-    sidebarTab: enumValue(input.sidebarTab, "sidebar tab", ["files", "outline", "references"]),
-    buildPanelTab: enumValue(input.buildPanelTab, "build panel tab", ["output", "problems"]),
+    buildPanelHeight: integer(
+      input.buildPanelHeight,
+      "build panel height",
+      160,
+      4_096
+    ),
+    sidebarTab: enumValue(input.sidebarTab, "sidebar tab", [
+      "files",
+      "outline",
+      "references",
+    ]),
+    buildPanelTab: enumValue(input.buildPanelTab, "build panel tab", [
+      "output",
+      "problems",
+    ]),
     bottomPanelTab: input.bottomPanelTab === "terminal" ? "terminal" : "build",
     buildProfile: enumValue(input.buildProfile, "build profile", [
       "latexmkPdf",
@@ -269,7 +371,10 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
     ]),
     selectedPdf: parseNullableRelativePath(input.selectedPdf, "selected PDF"),
     pdfViewerStates: parseStateMap(input.pdfViewerStates, parsePdfViewerState),
-    editorViewerStates: parseStateMap(input.editorViewerStates, parseEditorViewerState),
+    editorViewerStates: parseStateMap(
+      input.editorViewerStates,
+      parseEditorViewerState
+    ),
   }
 }
 
@@ -310,7 +415,8 @@ function parsePdfViewerState(value: unknown): PdfViewerState {
 }
 
 function parseRotation(value: number): 0 | 90 | 180 | 270 {
-  if (value === 0 || value === 90 || value === 180 || value === 270) return value
+  if (value === 0 || value === 90 || value === 180 || value === 270)
+    return value
   throw new IpcContractError("PDF rotation")
 }
 
@@ -319,7 +425,17 @@ function parseEditorViewerState(value: unknown): EditorViewerState {
   return {
     line: integer(input.line, "editor line", 1, Number.MAX_SAFE_INTEGER),
     column: integer(input.column, "editor column", 1, Number.MAX_SAFE_INTEGER),
-    scrollTop: finiteNumber(input.scrollTop, "editor vertical scroll", 0, Number.MAX_SAFE_INTEGER),
-    scrollLeft: finiteNumber(input.scrollLeft, "editor horizontal scroll", 0, Number.MAX_SAFE_INTEGER),
+    scrollTop: finiteNumber(
+      input.scrollTop,
+      "editor vertical scroll",
+      0,
+      Number.MAX_SAFE_INTEGER
+    ),
+    scrollLeft: finiteNumber(
+      input.scrollLeft,
+      "editor horizontal scroll",
+      0,
+      Number.MAX_SAFE_INTEGER
+    ),
   }
 }

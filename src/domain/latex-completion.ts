@@ -13,17 +13,8 @@ import {
 } from "@/services/ipc-contract"
 
 export type LatexCompletionKind =
-  | "command"
-  | "environment"
-  | "snippet"
-  | "label"
-  | "citation"
-  | "file"
-export type LatexCompletionProvenance =
-  | "core"
-  | "package"
-  | "local"
-  | "project"
+  "command" | "environment" | "snippet" | "label" | "citation" | "file"
+export type LatexCompletionProvenance = "core" | "package" | "local" | "project"
 
 export type LatexCompletionRequest = Readonly<{
   projectPath: CanonicalProjectPath
@@ -55,7 +46,12 @@ export function parseLatexCompletionResponse(
   return {
     items: arrayValue(input.items, "LaTeX completion items", 64, (value) => {
       const item = record(value, "LaTeX completion item")
-      const from = integer(item.from, "LaTeX completion start", 0, 2 * 1024 * 1024)
+      const from = integer(
+        item.from,
+        "LaTeX completion start",
+        0,
+        2 * 1024 * 1024
+      )
       const to = integer(item.to, "LaTeX completion end", from, 2 * 1024 * 1024)
       return {
         label: nonEmptyString(item.label, "LaTeX completion label", 512),
@@ -74,11 +70,23 @@ export function parseLatexCompletionResponse(
           "local",
           "project",
         ]),
-        requires: nullableString(item.requires, "LaTeX completion requirement", 128),
+        requires: nullableString(
+          item.requires,
+          "LaTeX completion requirement",
+          128
+        ),
         from,
         to,
-        insertText: nonEmptyString(item.insertText, "LaTeX completion insertion", 16_384),
-        source: nullableString(item.source ?? null, "LaTeX completion source", 1_024),
+        insertText: nonEmptyString(
+          item.insertText,
+          "LaTeX completion insertion",
+          16_384
+        ),
+        source: nullableString(
+          item.source ?? null,
+          "LaTeX completion source",
+          1_024
+        ),
       }
     }),
   }

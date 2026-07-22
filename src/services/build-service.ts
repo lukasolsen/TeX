@@ -1,7 +1,10 @@
 import { invoke } from "@tauri-apps/api/core"
 import { listen, type UnlistenFn } from "@tauri-apps/api/event"
 
-import type { CanonicalProjectPath, ProjectRelativePath } from "@/domain/identifiers"
+import type {
+  CanonicalProjectPath,
+  ProjectRelativePath,
+} from "@/domain/identifiers"
 
 import type {
   BuildEvent,
@@ -36,7 +39,9 @@ const PROJECT_FILES_EVENT = "tex://project-files-event"
 export async function previewBuild(
   request: BuildRequest
 ): Promise<BuildInvocation> {
-  return parseBuildInvocation(await invoke<unknown>("preview_build", { request }))
+  return parseBuildInvocation(
+    await invoke<unknown>("preview_build", { request })
+  )
 }
 
 export async function getBuildProfiles(): Promise<BuildProfile[]> {
@@ -47,7 +52,9 @@ export async function startBuild(request: BuildRequest): Promise<BuildRun> {
   return parseBuildRun(await invoke<unknown>("start_build", { request }))
 }
 
-export async function stopBuild(projectPath: CanonicalProjectPath): Promise<void> {
+export async function stopBuild(
+  projectPath: CanonicalProjectPath
+): Promise<void> {
   return invoke("stop_build", { projectPath })
 }
 
@@ -67,11 +74,15 @@ export async function listenForBuildEvents(
   )
 }
 
-export async function startProjectWatch(projectPath: CanonicalProjectPath): Promise<void> {
+export async function startProjectWatch(
+  projectPath: CanonicalProjectPath
+): Promise<void> {
   return invoke("start_project_watch", { projectPath })
 }
 
-export async function stopProjectWatch(projectPath: CanonicalProjectPath): Promise<void> {
+export async function stopProjectWatch(
+  projectPath: CanonicalProjectPath
+): Promise<void> {
   return invoke("stop_project_watch", { projectPath })
 }
 
@@ -91,11 +102,15 @@ export async function listenForWatchEvents(
   )
 }
 
-export async function startProjectTreeWatch(projectPath: CanonicalProjectPath): Promise<void> {
+export async function startProjectTreeWatch(
+  projectPath: CanonicalProjectPath
+): Promise<void> {
   return invoke("start_project_tree_watch", { projectPath })
 }
 
-export async function stopProjectTreeWatch(projectPath: CanonicalProjectPath): Promise<void> {
+export async function stopProjectTreeWatch(
+  projectPath: CanonicalProjectPath
+): Promise<void> {
   return invoke("stop_project_tree_watch", { projectPath })
 }
 

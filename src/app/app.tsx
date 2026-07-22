@@ -5,6 +5,7 @@ import type { WorkspaceFocus } from "@/domain/project"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
 import { useProjectSession } from "@/features/projects/use-project-session"
+import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { StartupScreen } from "@/components/feedback/startup-screen"
 import { SettingsPage } from "@/pages/settings-page"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
@@ -157,29 +158,32 @@ export default function App(): ReactElement {
 
   const applicationReady = state.status !== "starting"
   return (
-    <div className="flex h-svh min-h-0 flex-col overflow-hidden">
-      <WindowChrome
-        onNewWindow={openNewWindow}
-        onOpenCommands={
-          state.status === "workspace" && !settingsOpen
-            ? () => window.dispatchEvent(new Event("tex:open-command-palette"))
-            : null
-        }
-        onWorkspaceAction={
-          state.status === "workspace" && !settingsOpen
-            ? (action) =>
-                window.dispatchEvent(
-                  new CustomEvent("tex:workspace-action", { detail: action })
-                )
-            : null
-        }
-        onOpenProject={
-          applicationReady ? () => runDetached(chooseAndOpenProject()) : null
-        }
-        onOpenSettings={applicationReady ? () => setSettingsOpen(true) : null}
-        onReturnHome={onReturnHome}
-      />
-      <div className="min-h-0 flex-1">{content}</div>
-    </div>
+    <NotificationProvider>
+      <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+        <WindowChrome
+          onNewWindow={openNewWindow}
+          onOpenCommands={
+            state.status === "workspace" && !settingsOpen
+              ? () =>
+                  window.dispatchEvent(new Event("tex:open-command-palette"))
+              : null
+          }
+          onWorkspaceAction={
+            state.status === "workspace" && !settingsOpen
+              ? (action) =>
+                  window.dispatchEvent(
+                    new CustomEvent("tex:workspace-action", { detail: action })
+                  )
+              : null
+          }
+          onOpenProject={
+            applicationReady ? () => runDetached(chooseAndOpenProject()) : null
+          }
+          onOpenSettings={applicationReady ? () => setSettingsOpen(true) : null}
+          onReturnHome={onReturnHome}
+        />
+        <div className="min-h-0 flex-1">{content}</div>
+      </div>
+    </NotificationProvider>
   )
 }

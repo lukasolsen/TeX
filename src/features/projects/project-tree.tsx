@@ -509,7 +509,10 @@ export function ProjectTree({
             </ul>
           </ScrollArea>
           {creationError !== null ? (
-            <p className="border-t px-3 py-2 text-xs text-destructive" role="alert">
+            <p
+              className="border-t px-3 py-2 text-xs text-destructive"
+              role="alert"
+            >
               {creationError}
             </p>
           ) : null}

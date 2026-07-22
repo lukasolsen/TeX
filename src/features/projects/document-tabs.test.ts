@@ -30,7 +30,11 @@ const workspace: WorkspaceState = {
 
 describe("document tabs", () => {
   it("replaces an unpinned preview and retains pinned documents", () => {
-    const pinned = openDocument(workspace, projectRelativePath("main.tex"), true)
+    const pinned = openDocument(
+      workspace,
+      projectRelativePath("main.tex"),
+      true
+    )
     const preview = openDocument(
       pinned,
       projectRelativePath("chapters/intro.tex"),
@@ -60,9 +64,14 @@ describe("document tabs", () => {
   })
 
   it("does not require a save when the selected file is reselected", () => {
-    expect(shouldSaveBeforeOpening(workspace, projectRelativePath("main.tex"))).toBe(false)
     expect(
-      shouldSaveBeforeOpening(workspace, projectRelativePath("chapters/intro.tex"))
+      shouldSaveBeforeOpening(workspace, projectRelativePath("main.tex"))
+    ).toBe(false)
+    expect(
+      shouldSaveBeforeOpening(
+        workspace,
+        projectRelativePath("chapters/intro.tex")
+      )
     ).toBe(true)
   })
 })

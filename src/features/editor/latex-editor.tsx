@@ -270,7 +270,8 @@ function sourceEditorTheme(fontSize: number) {
       minHeight: "2.75rem",
       padding: "0.5rem 0.85rem",
       lineHeight: "1.35",
-      borderBottom: "1px solid color-mix(in oklch, var(--border) 45%, transparent)",
+      borderBottom:
+        "1px solid color-mix(in oklch, var(--border) 45%, transparent)",
     },
     ".cm-tooltip-autocomplete > ul > li:last-child": { borderBottom: "none" },
     ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
@@ -317,7 +318,9 @@ function sourceEditorTheme(fontSize: number) {
     },
     ".tex-completion-icon-snippet": { color: "var(--completion-icon-snippet)" },
     ".tex-completion-icon-label": { color: "var(--completion-icon-label)" },
-    ".tex-completion-icon-citation": { color: "var(--completion-icon-citation)" },
+    ".tex-completion-icon-citation": {
+      color: "var(--completion-icon-citation)",
+    },
     ".tex-completion-icon-file": { color: "var(--completion-icon-file)" },
     ".cm-completionInfo": {
       minWidth: "18rem",
@@ -377,7 +380,8 @@ function sourceEditorTheme(fontSize: number) {
     ".tex-completion-hint": {
       margin: "0.25rem 0 0",
       paddingTop: "0.5rem",
-      borderTop: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
+      borderTop:
+        "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
       fontFamily: "var(--font-sans)",
       fontSize: "0.6875rem",
       color: "var(--muted-foreground)",

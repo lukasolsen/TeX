@@ -26,13 +26,20 @@ const KIND_LABELS: Record<LatexCompletionKind, string> = {
 
 function isEscaped(source: string, position: number): boolean {
   let slashes = 0
-  for (let index = position - 1; index >= 0 && source[index] === "\\"; index -= 1) {
+  for (
+    let index = position - 1;
+    index >= 0 && source[index] === "\\";
+    index -= 1
+  ) {
     slashes += 1
   }
   return slashes % 2 === 1
 }
 
-export function isLatexCompletionContext(source: string, position: number): boolean {
+export function isLatexCompletionContext(
+  source: string,
+  position: number
+): boolean {
   const lineStart = source.lastIndexOf("\n", position - 1) + 1
   for (let index = lineStart; index < position; index += 1) {
     if (source[index] === "%" && !isEscaped(source, index)) return false
@@ -71,22 +78,34 @@ const ICON_SHAPES: Record<
   command: [["path", { d: "M9 5 15 19" }]],
   environment: [
     ["path", { d: "M9 4c-2 0-2 2-2 3.5S6 11 5 11c1 0 2 1 2 3.5S7 20 9 20" }],
-    ["path", { d: "M15 4c2 0 2 2 2 3.5S18 11 19 11c-1 0-2 1-2 3.5S17 20 15 20" }],
+    [
+      "path",
+      { d: "M15 4c2 0 2 2 2 3.5S18 11 19 11c-1 0-2 1-2 3.5S17 20 15 20" },
+    ],
   ],
   snippet: [
     ["path", { d: "M9 8 5 12l4 4" }],
     ["path", { d: "M15 8l4 4-4 4" }],
   ],
   label: [
-    ["path", { d: "M3 7.5A1.5 1.5 0 0 1 4.5 6H12l8 6-8 6H4.5A1.5 1.5 0 0 1 3 16.5z" }],
-    ["circle", { cx: "7", cy: "12", r: "1.4", fill: "currentColor", stroke: "none" }],
+    [
+      "path",
+      { d: "M3 7.5A1.5 1.5 0 0 1 4.5 6H12l8 6-8 6H4.5A1.5 1.5 0 0 1 3 16.5z" },
+    ],
+    [
+      "circle",
+      { cx: "7", cy: "12", r: "1.4", fill: "currentColor", stroke: "none" },
+    ],
   ],
   citation: [
     ["path", { d: "M9 7C6.5 8 5 10 5 13v4h5v-6H7c0-2 1-3 3-3.6z" }],
     ["path", { d: "M19 7c-2.5 1-4 3-4 6v4h5v-6h-3c0-2 1-3 3-3.6z" }],
   ],
   file: [
-    ["path", { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" }],
+    [
+      "path",
+      { d: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" },
+    ],
     ["path", { d: "M14 3v5h5" }],
     ["path", { d: "M9 13h6" }],
     ["path", { d: "M9 16h4" }],
@@ -140,7 +159,9 @@ export function latexCompletionSourceSummary(
     case "core":
       return "Built into LaTeX"
     case "project":
-      return item.source ? `Defined in ${item.source}` : "A file in this project"
+      return item.source
+        ? `Defined in ${item.source}`
+        : "A file in this project"
   }
 }
 

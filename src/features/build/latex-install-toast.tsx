@@ -36,7 +36,7 @@ export function LatexInstallToast({
       className={cn(
         "pointer-events-auto absolute right-3 bottom-3 z-20 flex w-80 max-w-[calc(100%-1.5rem)] items-start gap-2",
         "rounded-lg border bg-popover p-3 text-popover-foreground shadow-lg",
-        "duration-150 animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
+        "animate-in duration-150 fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none"
       )}
       role={notice.tone === "error" ? "alert" : "status"}
     >
@@ -67,7 +67,9 @@ export function LatexInstallToast({
 
 function NoticeIcon({ tone }: { tone: InstallNotice["tone"] }) {
   if (tone === "success")
-    return <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+    return (
+      <CheckCircle2 aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+    )
   if (tone === "warning")
     return (
       <TriangleAlert

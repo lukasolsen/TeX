@@ -9,7 +9,9 @@ import {
 
 describe("opaque IPC identifiers", () => {
   it("normalizes project-relative separators and rejects traversal", () => {
-    expect(projectRelativePath("chapters\\intro.tex")).toBe("chapters/intro.tex")
+    expect(projectRelativePath("chapters\\intro.tex")).toBe(
+      "chapters/intro.tex"
+    )
     expect(() => projectRelativePath("../outside.tex")).toThrow(
       "Project-relative path is invalid"
     )
