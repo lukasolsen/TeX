@@ -55,6 +55,8 @@ import {
 import { lintGutter, nextDiagnostic } from "@codemirror/lint"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
 import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
+import { latexFolding } from "@/features/editor/latex-folding"
+import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import {
   latexCompletionRowBadge,
@@ -591,6 +593,8 @@ export function LatexEditor({
         projectFiles: projectFilePaths(projectTreeRef.current),
       }),
       bracketMatching(),
+      latexDelimiterMatching(),
+      latexFolding(),
       closeBrackets(),
       rectangularSelection(),
       crosshairCursor(),

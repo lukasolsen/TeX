@@ -365,6 +365,50 @@ body {
   text-underline-offset: 0.18em;
 }
 
+.cm-editor .cm-latex-matching-delimiter {
+  background-color: color-mix(in oklch, var(--primary) 18%, transparent);
+  border-radius: 0.15em;
+  outline: 1px solid color-mix(in oklch, var(--primary) 45%, transparent);
+}
+
+.cm-editor .cm-latex-nonmatching-delimiter {
+  background-color: color-mix(in oklch, var(--destructive) 18%, transparent);
+  border-radius: 0.15em;
+  outline: 1px solid color-mix(in oklch, var(--destructive) 55%, transparent);
+}
+
+.cm-editor .cm-latex-fold-marker {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.cm-editor .cm-foldGutter .cm-gutterElement:hover .cm-latex-fold-marker {
+  color: var(--foreground);
+}
+
+.cm-editor .cm-latex-fold-placeholder {
+  margin: 0 0.15em;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background-color: var(--muted);
+  padding: 0 0.4em;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+
+.cm-editor .cm-latex-fold-placeholder:hover {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.cm-editor .cm-latex-fold-placeholder:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+
 @keyframes tex-reference-underline {
   from {
     background-size: 0 1.5px;

@@ -44,6 +44,7 @@ export type LatexSymbolRole =
   | "macro-definition"
   | "environment-definition"
   | "file-reference"
+  | "section"
 
 export type LatexOccurrence = Readonly<{
   role: LatexSymbolRole
@@ -86,6 +87,20 @@ export type LatexDocumentModel = Readonly<{
   /** True when a ceiling stopped the scan, so the model is incomplete. */
   truncated: boolean
 }>
+
+/**
+ * Sectioning commands and their depth, shallowest first. The depth decides
+ * which heading ends another heading's span when folding or outlining.
+ */
+export const SECTION_LEVELS: ReadonlyMap<string, number> = new Map([
+  ["part", 0],
+  ["chapter", 1],
+  ["section", 2],
+  ["subsection", 3],
+  ["subsubsection", 4],
+  ["paragraph", 5],
+  ["subparagraph", 6],
+])
 
 /** Environments whose body is typeset as mathematics. */
 export const MATH_ENVIRONMENTS: ReadonlySet<string> = new Set([
@@ -252,8 +267,23 @@ type OpenMath = {
   depth: number
 }
 
-function isCommandCharacter(character: string | undefined): boolean {
-  return character !== undefined && /[A-Za-z@]/.test(character)
+/**
+ * Character classification runs once per source character on the scan's hot
+ * path, so it compares code points directly rather than invoking a regular
+ * expression per character.
+ */
+function isCommandCharacterAt(source: string, index: number): boolean {
+  const code = source.charCodeAt(index)
+  return (
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    code === 64 /* @ */
+  )
+}
+
+function isWhitespaceAt(source: string, index: number): boolean {
+  const code = source.charCodeAt(index)
+  return code === 32 || code === 9 || code === 10 || code === 13 || code === 12
 }
 
 /**
@@ -266,7 +296,7 @@ function readArguments(source: string, index: number): ArgumentGroup[] {
   let cursor = index
   while (groups.length < MAX_ARGUMENT_GROUPS) {
     let newlines = 0
-    while (cursor < source.length && /\s/.test(source[cursor] ?? "")) {
+    while (cursor < source.length && isWhitespaceAt(source, cursor)) {
       if (source[cursor] === "\n") newlines += 1
       if (newlines > 1) return groups
       cursor += 1
@@ -482,7 +512,9 @@ export function parseLatexDocument(
 
     const commandStart = index
     let nameEnd = index + 1
-    while (isCommandCharacter(source[nameEnd])) nameEnd += 1
+    while (nameEnd < source.length && isCommandCharacterAt(source, nameEnd)) {
+      nameEnd += 1
+    }
 
     if (nameEnd === index + 1) {
       const escaped = source[index + 1]
@@ -723,6 +755,7 @@ function collectOccurrences(
   const isFileCommand = FILE_COMMANDS.has(command)
   if (
     !isFileCommand &&
+    !SECTION_LEVELS.has(command) &&
     command !== "label" &&
     command !== "bibitem" &&
     !LABEL_REFERENCE_COMMANDS.has(command) &&
@@ -737,6 +770,21 @@ function collectOccurrences(
 
   const parsed = readArguments(source, afterName)
   const required = requiredGroups(parsed)
+
+  if (SECTION_LEVELS.has(command)) {
+    const value = required[0] === undefined ? null : singleValue(required[0])
+    if (value !== null) {
+      add({
+        role: "section",
+        name: value.value,
+        from: value.from,
+        to: value.to,
+        command,
+        path: null,
+      })
+    }
+    return
+  }
 
   if (command === "label") {
     const value = required[0] === undefined ? null : singleValue(required[0])
@@ -872,7 +920,7 @@ function definedMacroName(
   }
   if (source[cursor] !== "\\") return null
   let end = cursor + 1
-  while (isCommandCharacter(source[end])) end += 1
+  while (end < source.length && isCommandCharacterAt(source, end)) end += 1
   return end === cursor + 1
     ? null
     : { value: source.slice(cursor + 1, end), from: cursor + 1, to: end }
