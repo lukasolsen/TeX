@@ -56,6 +56,14 @@ import { latexHoverTooltip } from "@/features/editor/latex-hover"
 import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
 import { latexFolding } from "@/features/editor/latex-folding"
 import { latexStreamParser } from "@/features/editor/latex-stream-parser"
+import {
+  navigationTargetAt,
+  unresolvedSymbolMessage,
+  type EditorPosition,
+  type NavigationTarget,
+} from "@/features/editor/latex-navigation"
+import { requestLatexSymbol } from "@/services/latex-analysis-service"
+import { runDetached } from "@/lib/promises"
 import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import {
@@ -81,7 +89,6 @@ import {
   isReadableSource,
   treeContainsPath,
 } from "@/features/projects/project-model"
-import { referencedFileAt } from "@/features/editor/latex-hover"
 
 export type EditorTarget = Readonly<{
   line: number
@@ -103,6 +110,12 @@ function viewerSelectionPosition(
     line.to,
     line.from + Math.max(0, (viewerState?.column ?? 1) - 1)
   )
+}
+
+/** The 1-based line and column of a document position. */
+function positionOf(editor: EditorView, position: number): EditorPosition {
+  const line = editor.state.doc.lineAt(position)
+  return { line: line.number, column: position - line.from + 1 }
 }
 
 const setProjectReference = StateEffect.define<ProjectReference>()
@@ -404,6 +417,7 @@ export function LatexEditor({
   onDiagnosticsChange,
   onOpenReference,
   onOpenFind,
+  onReport,
   onSave,
   onViewerStateChange,
   path,
@@ -423,8 +437,12 @@ export function LatexEditor({
     diagnostics: readonly LatexDiagnosticEntry[],
     projectAnalysisComplete: boolean
   ) => void
-  onOpenReference: (path: ProjectRelativePath) => void
+  onOpenReference: (
+    path: ProjectRelativePath,
+    position: EditorPosition | null
+  ) => void
   onOpenFind: () => void
+  onReport: (message: string) => void
   onSave: () => void
   onViewerStateChange: (
     path: ProjectRelativePath,
@@ -443,6 +461,7 @@ export function LatexEditor({
   const onDiagnosticsChangeRef = useRef(onDiagnosticsChange)
   const onOpenReferenceRef = useRef(onOpenReference)
   const onOpenFindRef = useRef(onOpenFind)
+  const onReportRef = useRef(onReport)
   const onSaveRef = useRef(onSave)
   const onViewerStateChangeRef = useRef(onViewerStateChange)
   const viewerStateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -494,6 +513,7 @@ export function LatexEditor({
     onDiagnosticsChangeRef.current = onDiagnosticsChange
     onOpenReferenceRef.current = onOpenReference
     onOpenFindRef.current = onOpenFind
+    onReportRef.current = onReport
     onSaveRef.current = onSave
     onViewerStateChangeRef.current = onViewerStateChange
   }, [
@@ -502,6 +522,7 @@ export function LatexEditor({
     onDiagnosticsChange,
     onOpenFind,
     onOpenReference,
+    onReport,
     onSave,
     onViewerStateChange,
   ])
@@ -527,26 +548,23 @@ export function LatexEditor({
   useEffect(() => {
     if (host.current === null) return
     let activeReference: ProjectReference = null
-    const referenceAtPointer = (editor: EditorView, event: MouseEvent) => {
+    const fileExists = (candidate: ProjectRelativePath) =>
+      isReadableSource(candidate) &&
+      treeContainsPath(projectTreeRef.current, candidate)
+    const targetAt = (editor: EditorView, position: number) =>
+      navigationTargetAt(
+        editor.state.doc,
+        activePath.current,
+        position,
+        fileExists
+      )
+    const targetAtPointer = (editor: EditorView, event: MouseEvent) => {
       if (!event.ctrlKey && !event.metaKey) return null
       const position = editor.posAtCoords({
         x: event.clientX,
         y: event.clientY,
       })
-      if (position === null) return null
-      const reference = referencedFileAt(
-        editor.state.doc.toString(),
-        activePath.current,
-        position
-      )
-      if (
-        reference === null ||
-        !isReadableSource(reference.path) ||
-        !treeContainsPath(projectTreeRef.current, reference.path)
-      ) {
-        return null
-      }
-      return reference
+      return position === null ? null : targetAt(editor, position)
     }
     const updateReferenceDecoration = (
       editor: EditorView,
@@ -561,20 +579,40 @@ export function LatexEditor({
       activeReference = reference
       editor.dispatch({ effects: setProjectReference.of(reference) })
     }
-    const openReferenceAtSelection = (editor: EditorView) => {
-      const reference = referencedFileAt(
-        editor.state.doc.toString(),
-        activePath.current,
-        editor.state.selection.main.head
-      )
-      if (
-        reference === null ||
-        !isReadableSource(reference.path) ||
-        !treeContainsPath(projectTreeRef.current, reference.path)
-      ) {
-        return false
+    const followTarget = async (
+      editor: EditorView,
+      target: NavigationTarget
+    ) => {
+      if (target.kind === "file") {
+        onOpenReferenceRef.current(target.path, null)
+        return
       }
-      onOpenReferenceRef.current(reference.path)
+      // Only the project index knows where a label or citation is defined, so
+      // the jump is resolved when the user commits to it, not while hovering.
+      try {
+        const symbol = await requestLatexSymbol({
+          projectPath: projectPathRef.current,
+          relativePath: activePath.current,
+          content: editor.state.doc.toString(),
+          ...positionOf(editor, target.from),
+        })
+        const definition = symbol?.definitions[0]
+        if (definition === undefined) {
+          onReportRef.current(unresolvedSymbolMessage(target))
+          return
+        }
+        onOpenReferenceRef.current(definition.path, {
+          line: definition.span.line,
+          column: definition.span.column,
+        })
+      } catch {
+        onReportRef.current("TeX could not look up that reference")
+      }
+    }
+    const openReferenceAtSelection = (editor: EditorView) => {
+      const target = targetAt(editor, editor.state.selection.main.head)
+      if (target === null) return false
+      runDetached(followTarget(editor, target))
       return true
     }
     const editorExtensions: Extension[] = [
@@ -644,7 +682,11 @@ export function LatexEditor({
         },
         mousemove: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
-          updateReferenceDecoration(editor, referenceAtPointer(editor, event))
+          const target = targetAtPointer(editor, event)
+          updateReferenceDecoration(
+            editor,
+            target === null ? null : { from: target.from, to: target.to }
+          )
           return false
         },
         mouseleave: (_event, editor) => {
@@ -657,11 +699,11 @@ export function LatexEditor({
         },
         click: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
-          const reference = referenceAtPointer(editor, event)
-          if (reference === null) return false
+          const target = targetAtPointer(editor, event)
+          if (target === null) return false
           event.preventDefault()
           updateReferenceDecoration(editor, null)
-          onOpenReferenceRef.current(reference.path)
+          runDetached(followTarget(editor, target))
           return true
         },
       }),

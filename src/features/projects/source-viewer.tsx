@@ -47,6 +47,7 @@ import type {
 } from "@/domain/identifiers"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
+import type { EditorPosition } from "@/features/editor/latex-navigation"
 import { shortcutLabel } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
 
@@ -57,6 +58,7 @@ export function SourceViewer({
   onCursorChange,
   onDiagnosticsChange,
   onOpenReference,
+  onReport,
   onResolveConflict,
   onResolveRecovery,
   onSave,
@@ -80,7 +82,11 @@ export function SourceViewer({
     diagnostics: readonly LatexDiagnosticEntry[],
     projectAnalysisComplete: boolean
   ) => void
-  onOpenReference: (path: ProjectRelativePath) => void
+  onOpenReference: (
+    path: ProjectRelativePath,
+    position: EditorPosition | null
+  ) => void
+  onReport: (message: string) => void
   onResolveConflict: (keepMine: boolean) => void
   onResolveRecovery: (restore: boolean) => void
   onSave: () => void
@@ -456,6 +462,7 @@ export function SourceViewer({
         onDiagnosticsChange={onDiagnosticsChange}
         onOpenReference={onOpenReference}
         onOpenFind={() => setFindOpen(true)}
+        onReport={onReport}
         onSave={onSave}
         onViewerStateChange={onViewerStateChange}
         path={state.document.path}

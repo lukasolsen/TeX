@@ -119,6 +119,7 @@ describe("primary workflow accessibility", () => {
           onCursorChange={callback}
           onDiagnosticsChange={callback}
           onOpenReference={callback}
+          onReport={callback}
           onResolveConflict={callback}
           onResolveRecovery={callback}
           onSave={callback}

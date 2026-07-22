@@ -1,5 +1,6 @@
 import type { Text } from "@codemirror/state"
 
+import type { ProjectRelativePath } from "@/domain/identifiers"
 import {
   parseLatexDocument,
   type LatexDocumentModel,
@@ -28,15 +29,28 @@ const EMPTY_MODEL: LatexDocumentModel = {
  * instance means they share one parse, and a superseded version becomes
  * collectable as soon as CodeMirror drops it.
  */
-const models = new WeakMap<Text, LatexDocumentModel>()
+const models = new WeakMap<
+  Text,
+  { sourcePath: ProjectRelativePath | null; model: LatexDocumentModel }
+>()
 
-export function latexModelOf(doc: Text): LatexDocumentModel {
+/**
+ * `sourcePath` is the file the document belongs to, needed to resolve its file
+ * references. A cached parse is reused only for the same path, so switching
+ * documents cannot leave paths resolved against the previous file's directory.
+ */
+export function latexModelOf(
+  doc: Text,
+  sourcePath: ProjectRelativePath | null = null
+): LatexDocumentModel {
   const cached = models.get(doc)
-  if (cached !== undefined) return cached
+  if (cached !== undefined && cached.sourcePath === sourcePath) {
+    return cached.model
+  }
   const model =
     doc.length > MAX_MODELLED_BYTES
       ? EMPTY_MODEL
-      : parseLatexDocument(doc.toString())
-  models.set(doc, model)
+      : parseLatexDocument(doc.toString(), sourcePath)
+  models.set(doc, { sourcePath, model })
   return model
 }

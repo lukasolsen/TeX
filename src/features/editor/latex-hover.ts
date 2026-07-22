@@ -20,6 +20,32 @@ import {
   projectErrorFromUnknown,
   readProjectSource,
 } from "@/services/project-service"
+import { latexOccurrenceAt, parseLatexDocument } from "@/domain/latex-syntax"
+import { latexSymbolDocumentation } from "@/features/editor/latex-symbol-hover"
+import { requestLatexSymbol } from "@/services/latex-analysis-service"
+
+/** Roles whose hover is answered by the project index rather than the catalog. */
+const CROSS_REFERENCE_ROLES = new Set([
+  "label-reference",
+  "label-definition",
+  "citation-reference",
+  "citation-definition",
+])
+
+/** The 1-based line and UTF-16 column of `offset` in `source`. */
+function positionIn(
+  source: string,
+  offset: number
+): { line: number; column: number } {
+  let line = 1
+  let lineStart = 0
+  for (let index = source.indexOf("\n"); index !== -1 && index < offset;) {
+    line += 1
+    lineStart = index + 1
+    index = source.indexOf("\n", index + 1)
+  }
+  return { line, column: offset - lineStart + 1 }
+}
 
 type HoverDocumentation = {
   from: number
@@ -262,6 +288,39 @@ export function latexHoverTooltip(
     position: number
   ): Promise<Tooltip | null> => {
     const source = view.state.doc.toString()
+
+    const occurrence = latexOccurrenceAt(
+      parseLatexDocument(source, sourcePath),
+      position
+    )
+    if (occurrence !== null && CROSS_REFERENCE_ROLES.has(occurrence.role)) {
+      try {
+        const symbol = await requestLatexSymbol({
+          projectPath,
+          relativePath: sourcePath,
+          content: source,
+          ...positionIn(source, occurrence.from),
+        })
+        const documentation =
+          symbol === null ? null : latexSymbolDocumentation(symbol)
+        if (documentation !== null) {
+          return {
+            pos: occurrence.from,
+            end: occurrence.to,
+            create: () => ({
+              dom: renderMarkdownDocumentation(
+                documentation.title,
+                documentation.markdown
+              ),
+            }),
+          }
+        }
+      } catch {
+        // A failed lookup falls through to the local documentation below
+        // rather than replacing a working tooltip with an error.
+      }
+    }
+
     const commands = latexCommands(source)
     const reference = referenceAt(commands, sourcePath, position)
     if (reference !== null) {

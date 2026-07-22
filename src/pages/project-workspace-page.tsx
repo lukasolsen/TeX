@@ -572,7 +572,13 @@ export function ProjectWorkspacePage({
                       : session.workspace.editorViewerStates[selectedFile]
                   }
                   onViewerStateChange={onUpdateEditorViewerState}
-                  onOpenReference={onPinFile}
+                  onOpenReference={(path, position) => {
+                    onPinFile(path)
+                    if (position !== null) {
+                      setTarget({ path, ...position, token: Date.now() })
+                    }
+                  }}
+                  onReport={setBuildOperationMessage}
                   onResolveConflict={onResolveExternalChange}
                   onResolveRecovery={onResolveRecovery}
                   onSave={() => runDetached(onSaveDocument())}
