@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest"
 
 import type { LatexCompletionItem } from "@/domain/latex-completion"
 import {
-  isLatexCompletionContext,
   latexCompletionKindIcon,
   latexCompletionKindLabel,
   latexCompletionOption,
@@ -12,34 +11,6 @@ import {
   latexCompletionSourceSummary,
   latexInsertionPreview,
 } from "@/features/editor/latex-completion"
-
-describe("LaTeX completion source", () => {
-  it("does not request completions while writing prose", () => {
-    expect(isLatexCompletionContext("A normal sentence", 17)).toBe(false)
-  })
-
-  it("recognizes commands and environment names", () => {
-    expect(isLatexCompletionContext("\\beg", 4)).toBe(true)
-    expect(isLatexCompletionContext("\\begin{fig", 10)).toBe(true)
-  })
-
-  it("does not request completions inside a comment", () => {
-    expect(isLatexCompletionContext("% \\section", 10)).toBe(false)
-  })
-
-  it("requests completions inside a mandatory argument", () => {
-    expect(isLatexCompletionContext("\\ref{sec", 8)).toBe(true)
-    expect(isLatexCompletionContext("\\ref{", 5)).toBe(true)
-    expect(isLatexCompletionContext("\\cite{a, b, cu", 14)).toBe(true)
-    expect(
-      isLatexCompletionContext("\\includegraphics[width=5cm]{fi", 30)
-    ).toBe(true)
-  })
-
-  it("does not request completions after an argument closes", () => {
-    expect(isLatexCompletionContext("\\ref{sec} ", 10)).toBe(false)
-  })
-})
 
 describe("LaTeX completion presentation", () => {
   it("names each kind in plain language", () => {

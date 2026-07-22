@@ -104,6 +104,8 @@
   --completion-icon-label: #0e9488;
   --completion-icon-citation: #d6336c;
   --completion-icon-file: #4b7bab;
+  --completion-icon-package: #2f8f6f;
+  --completion-icon-class: #8a5a2b;
   --radius: 0.625rem;
   --home-surface: oklch(0.965 0.003 250);
   --home-document: oklch(0.992 0.002 250);
@@ -185,6 +187,8 @@
   --completion-icon-label: #2dd4bf;
   --completion-icon-citation: #f472a6;
   --completion-icon-file: #8fbce0;
+  --completion-icon-package: #5cc9a4;
+  --completion-icon-class: #d3a26a;
   --home-surface: oklch(0.15 0.004 250);
   --home-document: oklch(0.195 0.007 250);
   --home-nav: oklch(0.18 0.005 250);

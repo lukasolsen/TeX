@@ -54,6 +54,7 @@ import {
 import { lintGutter, nextDiagnostic } from "@codemirror/lint"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
 import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
+import { latexAutoCloseEnvironment } from "@/features/editor/latex-auto-close-environment"
 import { latexFolding } from "@/features/editor/latex-folding"
 import { latexStreamParser } from "@/features/editor/latex-stream-parser"
 import {
@@ -340,6 +341,8 @@ function sourceEditorTheme(fontSize: number) {
       color: "var(--completion-icon-citation)",
     },
     ".tex-completion-icon-file": { color: "var(--completion-icon-file)" },
+    ".tex-completion-icon-package": { color: "var(--completion-icon-package)" },
+    ".tex-completion-icon-class": { color: "var(--completion-icon-class)" },
     ".cm-completionInfo": {
       minWidth: "18rem",
       maxWidth: "24rem",
@@ -634,6 +637,7 @@ export function LatexEditor({
       latexDelimiterMatching(),
       latexFolding(),
       closeBrackets(),
+      latexAutoCloseEnvironment(),
       rectangularSelection(),
       crosshairCursor(),
       highlightActiveLine(),
@@ -717,7 +721,7 @@ export function LatexEditor({
         addToOptions: [latexCompletionRowBadge],
         icons: false,
         activateOnTyping: true,
-        maxRenderedOptions: 12,
+        maxRenderedOptions: 24,
       }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },

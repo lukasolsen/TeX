@@ -5,64 +5,37 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete"
 
+import { latexCompletionContextAt } from "@/domain/latex-completion-context"
+import { isLiteralPosition } from "@/domain/latex-syntax"
+import { latexCatalogOptions } from "@/features/editor/latex-catalog-completion"
+import { latexModelOf } from "@/features/editor/latex-model"
+
 import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
-import type {
-  LatexCompletionItem,
-  LatexCompletionKind,
-} from "@/domain/latex-completion"
+import type { LatexCompletionItem } from "@/domain/latex-completion"
 import { requestLatexCompletions } from "@/services/project-service"
 
-const KIND_LABELS: Record<LatexCompletionKind, string> = {
+/**
+ * Every kind a completion row can carry. The backend supplies the first six;
+ * `package` and `class` come from the bundled catalog, which the project index
+ * knows nothing about.
+ */
+const KIND_LABELS: Record<string, string> = {
   command: "Command",
   environment: "Environment",
   snippet: "Template",
   label: "Label",
   citation: "Citation",
   file: "File",
-}
-
-function isEscaped(source: string, position: number): boolean {
-  let slashes = 0
-  for (
-    let index = position - 1;
-    index >= 0 && source[index] === "\\";
-    index -= 1
-  ) {
-    slashes += 1
-  }
-  return slashes % 2 === 1
-}
-
-export function isLatexCompletionContext(
-  source: string,
-  position: number
-): boolean {
-  const lineStart = source.lastIndexOf("\n", position - 1) + 1
-  for (let index = lineStart; index < position; index += 1) {
-    if (source[index] === "%" && !isEscaped(source, index)) return false
-  }
-  const before = source.slice(lineStart, position)
-  return (
-    // A command prefix being typed, e.g. `\sec`.
-    /\\[A-Za-z@]*$/.test(before) ||
-    // The environment name inside `\begin{…}` / `\end{…}`.
-    /\\(?:begin|end)\{[A-Za-z@]*$/.test(before) ||
-    // The cursor inside a command's mandatory argument (tolerating one optional
-    // `[…]` group), e.g. `\ref{sec`, `\cite{a, b`, `\includegraphics[w]{fi`.
-    // Mirrors the backend's `completion_context` Argument detection so argument
-    // completions actually reach the command.
-    /\\[A-Za-z@]+(?:\[[^\]]*\])?\{[^{}]*$/.test(before)
-  )
+  package: "Package",
+  class: "Document class",
 }
 
 /** Plain-language name for a completion kind, or `null` for an unrecognized value. */
 export function latexCompletionKindLabel(kind: string): string | null {
-  return Object.hasOwn(KIND_LABELS, kind)
-    ? KIND_LABELS[kind as LatexCompletionKind]
-    : null
+  return KIND_LABELS[kind] ?? null
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg"
@@ -72,7 +45,7 @@ const SVG_NS = "http://www.w3.org/2000/svg"
  * colored through the `--completion-icon-*` theme tokens via `currentColor`.
  */
 const ICON_SHAPES: Record<
-  LatexCompletionKind,
+  string,
   ReadonlyArray<readonly [string, Readonly<Record<string, string>>]>
 > = {
   command: [["path", { d: "M9 5 15 19" }]],
@@ -110,6 +83,19 @@ const ICON_SHAPES: Record<
     ["path", { d: "M9 13h6" }],
     ["path", { d: "M9 16h4" }],
   ],
+  package: [
+    ["path", { d: "M12 3 20 7.5v9L12 21l-8-4.5v-9z" }],
+    ["path", { d: "M4 7.5 12 12l8-4.5" }],
+    ["path", { d: "M12 12v9" }],
+  ],
+  class: [
+    [
+      "path",
+      { d: "M4 5.5A1.5 1.5 0 0 1 5.5 4H18a2 2 0 0 1 2 2v13H6a2 2 0 0 1-2-2z" },
+    ],
+    ["path", { d: "M4 17.5A1.5 1.5 0 0 1 5.5 16H20" }],
+    ["path", { d: "M9 8h7" }],
+  ],
 }
 
 /**
@@ -117,8 +103,9 @@ const ICON_SHAPES: Record<
  * value. The glyph is announced to assistive tech with the kind's plain name.
  */
 export function latexCompletionKindIcon(kind: string): SVGSVGElement | null {
-  if (!Object.hasOwn(ICON_SHAPES, kind)) return null
-  const typed = kind as LatexCompletionKind
+  const shapes = ICON_SHAPES[kind]
+  if (shapes === undefined) return null
+  const typed = kind
   const label = latexCompletionKindLabel(typed) ?? typed
   const svg = document.createElementNS(SVG_NS, "svg")
   svg.setAttribute("class", `tex-completion-icon tex-completion-icon-${typed}`)
@@ -133,7 +120,7 @@ export function latexCompletionKindIcon(kind: string): SVGSVGElement | null {
   const title = document.createElementNS(SVG_NS, "title")
   title.textContent = label
   svg.append(title)
-  for (const [tag, attrs] of ICON_SHAPES[typed]) {
+  for (const [tag, attrs] of shapes) {
     const shape = document.createElementNS(SVG_NS, tag)
     for (const [name, value] of Object.entries(attrs)) {
       shape.setAttribute(name, value)
@@ -239,6 +226,14 @@ export const latexCompletionRowBadge = {
   position: 10,
 }
 
+/**
+ * Project suggestions from the backend, merged with the bundled catalog.
+ *
+ * The two sources answer different questions and neither is allowed to block
+ * the other: the backend knows the project's labels, citations, files, and
+ * local macros; the catalog knows LaTeX itself. A failed or slow project
+ * lookup still leaves the catalog, so typing `\\se` always offers something.
+ */
 export function latexCompletionSource(
   projectPath: () => CanonicalProjectPath,
   relativePath: () => ProjectRelativePath
@@ -246,20 +241,43 @@ export function latexCompletionSource(
   return async (context): Promise<CompletionResult | null> => {
     const position = context.pos
     const content = context.state.doc.toString()
-    if (!isLatexCompletionContext(content, position)) return null
-    const response = await requestLatexCompletions({
-      projectPath: projectPath(),
-      relativePath: relativePath(),
-      content,
-      position,
-    })
-    if (context.aborted || response.items.length === 0) return null
-    const first = response.items[0]
-    if (first === undefined) return null
+    const completing = latexCompletionContextAt(content, position)
+    if (completing === null) return null
+    // Suggesting LaTeX inside a listing or a \verb argument would be wrong;
+    // the structural model is what knows the difference.
+    if (isLiteralPosition(latexModelOf(context.state.doc), position))
+      return null
+
+    const catalog = latexCatalogOptions(completing)
+    let project: Completion[] = []
+    let from = completing.from
+    try {
+      const response = await requestLatexCompletions({
+        projectPath: projectPath(),
+        relativePath: relativePath(),
+        content,
+        position,
+      })
+      if (context.aborted) return null
+      project = response.items.map(latexCompletionOption)
+      const first = response.items[0]
+      if (first !== undefined) from = first.from
+    } catch {
+      // The catalog alone is still a useful answer.
+      if (context.aborted) return null
+    }
+
+    if (project.length === 0 && catalog.length === 0) return null
+    // A project symbol and a catalog entry can share a label; the project one
+    // is more specific, so it wins.
+    const claimed = new Set(project.map((option) => option.label))
     return {
-      from: first.from,
-      options: response.items.map(latexCompletionOption),
-      validFor: /[A-Za-z@]*/,
+      from,
+      options: [
+        ...project,
+        ...catalog.filter((option) => !claimed.has(option.label)),
+      ],
+      validFor: /^[A-Za-z@]*$/,
     }
   }
 }
