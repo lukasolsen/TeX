@@ -32,6 +32,10 @@ export type LatexDiagnosticCode =
 /** Which layer produced a diagnostic, so a refreshed layer replaces only its own. */
 export type LatexDiagnosticLayer = "document" | "project"
 
+/** A diagnostic resolved to a place a person can be sent to. */
+export type LatexDiagnosticEntry = LatexDiagnostic &
+  Readonly<{ line: number; column: number }>
+
 export type LatexDiagnostic = Readonly<{
   code: LatexDiagnosticCode
   severity: LatexDiagnosticSeverity

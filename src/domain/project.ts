@@ -59,7 +59,7 @@ export type WorkspaceState = Readonly<{
 
 export type ProjectSidebarTab = "files" | "outline" | "references"
 export type BuildPanelTab = "output" | "problems"
-export type BottomPanelTab = "build" | "terminal"
+export type BottomPanelTab = "build" | "problems" | "terminal"
 export type BuildProfile = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
 export type WorkspaceFocus = "source" | "pdf"
 

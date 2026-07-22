@@ -362,7 +362,12 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
       "output",
       "problems",
     ]),
-    bottomPanelTab: input.bottomPanelTab === "terminal" ? "terminal" : "build",
+    bottomPanelTab:
+      input.bottomPanelTab === "terminal"
+        ? "terminal"
+        : input.bottomPanelTab === "problems"
+          ? "problems"
+          : "build",
     buildProfile: enumValue(input.buildProfile, "build profile", [
       "latexmkPdf",
       "pdfLatex",

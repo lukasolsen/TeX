@@ -1,5 +1,5 @@
 import { useRef, type ReactElement, type ReactNode } from "react"
-import { CircleStop, Hammer, SquareTerminal, X } from "lucide-react"
+import { CircleStop, Hammer, ListChecks, SquareTerminal, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -12,12 +12,14 @@ import {
 } from "@/features/terminal/terminal-view"
 
 /**
- * Hosts the workspace's bottom dock as a two-tab surface: the existing build
- * panel and an integrated terminal. The terminal is kept mounted once started so
+ * Hosts the workspace's bottom dock as a three-tab surface: the build panel,
+ * the source problems the editor found, and an integrated terminal. The terminal is kept mounted once started so
  * its live view and scroll position survive tab switches.
  */
 export function BottomPanel({
   buildPanel,
+  problemCount,
+  problemsPanel,
   onClose,
   onTabChange,
   projectPath,
@@ -25,6 +27,8 @@ export function BottomPanel({
   terminalStarted,
 }: {
   buildPanel: ReactNode
+  problemCount: number
+  problemsPanel: ReactNode
   onClose: () => void
   onTabChange: (tab: BottomPanelTab) => void
   projectPath: CanonicalProjectPath
@@ -50,6 +54,18 @@ export function BottomPanel({
           <TabsTrigger className="flex-none gap-1.5 px-3 text-xs" value="build">
             <Hammer data-icon="inline-start" />
             Build
+          </TabsTrigger>
+          <TabsTrigger
+            className="flex-none gap-1.5 px-3 text-xs"
+            value="problems"
+          >
+            <ListChecks data-icon="inline-start" />
+            Problems
+            {problemCount > 0 ? (
+              <span className="rounded-sm bg-muted px-1 text-micro tabular-nums">
+                {problemCount}
+              </span>
+            ) : null}
           </TabsTrigger>
           <TabsTrigger
             className="flex-none gap-1.5 px-3 text-xs"
@@ -85,6 +101,11 @@ export function BottomPanel({
       <div className="relative min-h-0 flex-1">
         <div className={cn("size-full min-h-0", tab !== "build" && "hidden")}>
           {buildPanel}
+        </div>
+        <div
+          className={cn("size-full min-h-0", tab !== "problems" && "hidden")}
+        >
+          {problemsPanel}
         </div>
         {terminalStarted ? (
           <div

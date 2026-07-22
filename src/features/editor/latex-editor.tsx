@@ -52,7 +52,10 @@ import {
   rectangularSelection,
   tooltips,
 } from "@codemirror/view"
+import { lintGutter, nextDiagnostic } from "@codemirror/lint"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
+import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
+import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import {
   latexCompletionRowBadge,
   latexCompletionSource,
@@ -396,6 +399,7 @@ export function LatexEditor({
   initialViewerState,
   onChange,
   onCursorChange,
+  onDiagnosticsChange,
   onOpenReference,
   onOpenFind,
   onSave,
@@ -412,6 +416,11 @@ export function LatexEditor({
   initialViewerState: EditorViewerState | undefined
   onChange: (change: EditorDocumentChange) => void
   onCursorChange: (line: number, column: number) => void
+  onDiagnosticsChange: (
+    path: ProjectRelativePath,
+    diagnostics: readonly LatexDiagnosticEntry[],
+    projectAnalysisComplete: boolean
+  ) => void
   onOpenReference: (path: ProjectRelativePath) => void
   onOpenFind: () => void
   onSave: () => void
@@ -429,6 +438,7 @@ export function LatexEditor({
   const view = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
   const onCursorChangeRef = useRef(onCursorChange)
+  const onDiagnosticsChangeRef = useRef(onDiagnosticsChange)
   const onOpenReferenceRef = useRef(onOpenReference)
   const onOpenFindRef = useRef(onOpenFind)
   const onSaveRef = useRef(onSave)
@@ -479,6 +489,7 @@ export function LatexEditor({
   useEffect(() => {
     onChangeRef.current = onChange
     onCursorChangeRef.current = onCursorChange
+    onDiagnosticsChangeRef.current = onDiagnosticsChange
     onOpenReferenceRef.current = onOpenReference
     onOpenFindRef.current = onOpenFind
     onSaveRef.current = onSave
@@ -486,6 +497,7 @@ export function LatexEditor({
   }, [
     onChange,
     onCursorChange,
+    onDiagnosticsChange,
     onOpenFind,
     onOpenReference,
     onSave,
@@ -604,6 +616,17 @@ export function LatexEditor({
         { hoverTime: 350, hideOnChange: true }
       ),
       projectReferenceField,
+      lintGutter(),
+      latexDiagnostics({
+        projectPath: () => projectPathRef.current,
+        relativePath: () => activePath.current,
+        onDiagnosticsChange: (diagnostics, complete) =>
+          onDiagnosticsChangeRef.current(
+            activePath.current,
+            diagnostics,
+            complete
+          ),
+      }),
       search({ top: true }),
       EditorView.domEventHandlers({
         compositionend: (_event, editor) => {
@@ -661,6 +684,9 @@ export function LatexEditor({
         { key: "Mod-f", run: () => (onOpenFindRef.current(), true) },
         { key: "Mod-/", run: toggleComment },
         { key: "Mod-Enter", run: openReferenceAtSelection },
+        // F8 already steps through build diagnostics across the workspace, so
+        // stepping through editor diagnostics takes the modified chord.
+        { key: "Alt-F8", run: nextDiagnostic },
         indentWithTab,
         ...closeBracketsKeymap,
         ...completionKeymap,

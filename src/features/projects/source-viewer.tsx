@@ -45,6 +45,7 @@ import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
+import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
 import { shortcutLabel } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
@@ -54,6 +55,7 @@ export function SourceViewer({
   initialViewerState,
   onChange,
   onCursorChange,
+  onDiagnosticsChange,
   onOpenReference,
   onResolveConflict,
   onResolveRecovery,
@@ -72,6 +74,11 @@ export function SourceViewer({
     path: ProjectRelativePath,
     line: number,
     column: number
+  ) => void
+  onDiagnosticsChange: (
+    path: ProjectRelativePath,
+    diagnostics: readonly LatexDiagnosticEntry[],
+    projectAnalysisComplete: boolean
   ) => void
   onOpenReference: (path: ProjectRelativePath) => void
   onResolveConflict: (keepMine: boolean) => void
@@ -446,6 +453,7 @@ export function SourceViewer({
         onCursorChange={(line, column) =>
           onCursorChange(state.document.path, line, column)
         }
+        onDiagnosticsChange={onDiagnosticsChange}
         onOpenReference={onOpenReference}
         onOpenFind={() => setFindOpen(true)}
         onSave={onSave}

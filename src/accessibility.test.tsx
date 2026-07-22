@@ -117,6 +117,7 @@ describe("primary workflow accessibility", () => {
           initialViewerState={undefined}
           onChange={callback}
           onCursorChange={callback}
+          onDiagnosticsChange={callback}
           onOpenReference={callback}
           onResolveConflict={callback}
           onResolveRecovery={callback}

@@ -145,6 +145,7 @@ pub enum BuildPanelTab {
 pub enum BottomPanelTab {
     #[default]
     Build,
+    Problems,
     Terminal,
 }
 

@@ -31,6 +31,8 @@ import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
 import { BottomPanel } from "@/features/workspace/bottom-panel"
+import { ProblemsPanel } from "@/features/workspace/problems-panel"
+import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import { useProjectBuild } from "@/features/build/use-project-build"
 import { useProjectWatch } from "@/features/build/use-project-watch"
 import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
@@ -142,6 +144,14 @@ export function ProjectWorkspacePage({
   const [buildOperationMessage, setBuildOperationMessage] = useState<
     string | null
   >(null)
+  const [sourceProblems, setSourceProblems] = useState<{
+    path: ProjectRelativePath
+    diagnostics: readonly LatexDiagnosticEntry[]
+    complete: boolean
+  } | null>(null)
+  const [sourceProblemIndex, setSourceProblemIndex] = useState<number | null>(
+    null
+  )
   const [sourceLocation, setSourceLocation] = useState<{
     path: ProjectRelativePath
     line: number
@@ -186,6 +196,12 @@ export function ProjectWorkspacePage({
     activeDiagnosticIndex === null
       ? null
       : (diagnostics[activeDiagnosticIndex] ?? null)
+  // Diagnostics belong to the buffer they were computed from; a tab switch
+  // must not show the previous file's problems against the new one.
+  const activeProblems =
+    sourceProblems !== null && sourceProblems.path === selectedFile
+      ? sourceProblems.diagnostics
+      : []
   const watch = useProjectWatch({
     build: build.build,
     buildRunning: running,
@@ -546,6 +562,10 @@ export function ProjectWorkspacePage({
                   onCursorChange={(path, line, column) =>
                     setSourceLocation({ path, line, column })
                   }
+                  onDiagnosticsChange={(path, diagnostics, complete) => {
+                    setSourceProblems({ path, diagnostics, complete })
+                    setSourceProblemIndex(null)
+                  }}
                   initialViewerState={
                     selectedFile === null
                       ? undefined
@@ -645,6 +665,29 @@ export function ProjectWorkspacePage({
                   if (nextTab === "terminal") setTerminalStarted(true)
                   onUpdateWorkspaceView({ bottomPanelTab: nextTab })
                 }}
+                problemCount={activeProblems.length}
+                problemsPanel={
+                  <ProblemsPanel
+                    diagnostics={activeProblems}
+                    onNavigate={(line, column) => {
+                      if (selectedFile === null) return
+                      setTarget({
+                        path: selectedFile,
+                        line,
+                        column,
+                        token: Date.now(),
+                      })
+                    }}
+                    onSelect={setSourceProblemIndex}
+                    path={selectedFile}
+                    projectAnalysisComplete={
+                      sourceProblems?.path === selectedFile
+                        ? sourceProblems.complete
+                        : false
+                    }
+                    selectedIndex={sourceProblemIndex}
+                  />
+                }
                 projectPath={session.project.path}
                 tab={bottomPanelTab}
                 terminalStarted={terminalStarted}
