@@ -8,7 +8,10 @@ export type LatestRequest = Readonly<{
 export function createLatestRequest(): LatestRequest {
   let revision = 0
   return {
-    begin: () => ++revision,
+    begin: () => {
+      revision += 1
+      return revision
+    },
     invalidate: () => {
       revision += 1
     },

@@ -75,38 +75,42 @@ export function parseProjectSummary(value: unknown): ProjectSummary {
   const input = record(value, "project summary")
   const budget = { entries: 0 }
   return {
-    name: nonEmptyString(input.name, "project name", 4_096),
+    name: nonEmptyString(input["name"], "project name", 4_096),
     path: canonicalProjectPath(
-      nonEmptyString(input.path, "project path", PATH_LIMIT)
+      nonEmptyString(input["path"], "project path", PATH_LIMIT)
     ),
-    tree: parseProjectEntry(input.tree, budget, 0),
+    tree: parseProjectEntry(input["tree"], budget, 0),
     rootCandidates: arrayValue(
-      input.rootCandidates,
+      input["rootCandidates"],
       "root candidates",
       2_048,
       (candidate) => {
         const item = record(candidate, "root candidate")
         return {
           path: projectRelativePath(
-            nonEmptyString(item.path, "root path", PATH_LIMIT)
+            nonEmptyString(item["path"], "root path", PATH_LIMIT)
           ),
-          evidence: arrayValue(item.evidence, "root evidence", 3, (evidence) =>
-            enumValue(evidence, "root evidence", [
-              "documentClass",
-              "magicComment",
-              "configured",
-            ])
+          evidence: arrayValue(
+            item["evidence"],
+            "root evidence",
+            3,
+            (evidence) =>
+              enumValue(evidence, "root evidence", [
+                "documentClass",
+                "magicComment",
+                "configured",
+              ])
           ),
         }
       }
     ),
     rootDetectionNote: nullableString(
-      input.rootDetectionNote,
+      input["rootDetectionNote"],
       "root note",
       8_192
     ),
     persistenceNote: nullableString(
-      input.persistenceNote,
+      input["persistenceNote"],
       "persistence note",
       8_192
     ),
@@ -117,35 +121,36 @@ export function parseStartupState(value: unknown): StartupState {
   const input = record(value, "startup state")
   return {
     recentProjects: arrayValue(
-      input.recentProjects,
+      input["recentProjects"],
       "recent projects",
       12,
       (project) => {
         const item = record(project, "recent project")
         return {
-          name: nonEmptyString(item.name, "recent project name", 4_096),
+          name: nonEmptyString(item["name"], "recent project name", 4_096),
           path: canonicalProjectPath(
-            nonEmptyString(item.path, "recent project path", PATH_LIMIT)
+            nonEmptyString(item["path"], "recent project path", PATH_LIMIT)
           ),
           lastOpenedAt: integer(
-            item.lastOpenedAt,
+            item["lastOpenedAt"],
             "recent project time",
             0,
             Number.MAX_SAFE_INTEGER
           ),
-          availability: enumValue(item.availability, "project availability", [
-            "available",
-            "missing",
-          ]),
+          availability: enumValue(
+            item["availability"],
+            "project availability",
+            ["available", "missing"]
+          ),
         }
       }
     ),
     lastWorkspace:
-      input.lastWorkspace === null
+      input["lastWorkspace"] === null
         ? null
-        : parseWorkspaceState(input.lastWorkspace),
+        : parseWorkspaceState(input["lastWorkspace"]),
     restorationNotice: nullableString(
-      input.restorationNotice,
+      input["restorationNotice"],
       "restoration notice",
       16_384
     ),
@@ -183,7 +188,7 @@ export function parseAppPreferences(value: unknown): AppPreferences {
         () =>
           // A pre-3.0 "custom" theme falls back to the default here; the
           // accent it carried is now applied whatever the scheme.
-          enumValue(appearance.colorTheme, "color theme", [
+          enumValue(appearance["colorTheme"], "color theme", [
             "system",
             "light",
             "dark",
@@ -191,13 +196,13 @@ export function parseAppPreferences(value: unknown): AppPreferences {
         defaults.appearance.colorTheme
       ),
       accentColor: preference(() => {
-        const accentColor = stringValue(appearance.accentColor, "accent", 7)
+        const accentColor = stringValue(appearance["accentColor"], "accent", 7)
         if (!isAccentColor(accentColor)) throw new IpcContractError("accent")
         return accentColor
       }, defaults.appearance.accentColor),
       interfaceScale: preference(
         () =>
-          enumValue(appearance.interfaceScale, "interface scale", [
+          enumValue(appearance["interfaceScale"], "interface scale", [
             ...interfaceScales,
           ]),
         defaults.appearance.interfaceScale
@@ -206,7 +211,7 @@ export function parseAppPreferences(value: unknown): AppPreferences {
     editor: {
       fontFamily: preference(() => {
         const family = stringValue(
-          editor.fontFamily,
+          editor["fontFamily"],
           "editor font family",
           MAX_EDITOR_FONT_FAMILY_LENGTH
         )
@@ -216,32 +221,33 @@ export function parseAppPreferences(value: unknown): AppPreferences {
       }, defaults.editor.fontFamily),
       lineHeight: preference(
         () =>
-          enumValue(editor.lineHeight, "editor line height", [
+          enumValue(editor["lineHeight"], "editor line height", [
             ...editorLineHeights,
           ]),
         defaults.editor.lineHeight
       ),
       showLineNumbers: flag(
-        editor.showLineNumbers,
+        editor["showLineNumbers"],
         defaults.editor.showLineNumbers
       ),
       highlightActiveLine: flag(
-        editor.highlightActiveLine,
+        editor["highlightActiveLine"],
         defaults.editor.highlightActiveLine
       ),
       highlightSelectionMatches: flag(
-        editor.highlightSelectionMatches,
+        editor["highlightSelectionMatches"],
         defaults.editor.highlightSelectionMatches
       ),
-      wrapLines: flag(editor.wrapLines, defaults.editor.wrapLines),
+      wrapLines: flag(editor["wrapLines"], defaults.editor.wrapLines),
       indentStyle: preference(
-        () => enumValue(editor.indentStyle, "indent style", [...indentStyles]),
+        () =>
+          enumValue(editor["indentStyle"], "indent style", [...indentStyles]),
         defaults.editor.indentStyle
       ),
       indentWidth: preference(
         () =>
           integer(
-            editor.indentWidth,
+            editor["indentWidth"],
             "indent width",
             MIN_INDENT_WIDTH,
             MAX_INDENT_WIDTH
@@ -249,28 +255,28 @@ export function parseAppPreferences(value: unknown): AppPreferences {
         defaults.editor.indentWidth
       ),
       autoCloseBrackets: flag(
-        editor.autoCloseBrackets,
+        editor["autoCloseBrackets"],
         defaults.editor.autoCloseBrackets
       ),
       autoCloseEnvironments: flag(
-        editor.autoCloseEnvironments,
+        editor["autoCloseEnvironments"],
         defaults.editor.autoCloseEnvironments
       ),
-      spellCheck: flag(editor.spellCheck, defaults.editor.spellCheck),
+      spellCheck: flag(editor["spellCheck"], defaults.editor.spellCheck),
     },
     assistance: {
       completionEnabled: flag(
-        assistance.completionEnabled,
+        assistance["completionEnabled"],
         defaults.assistance.completionEnabled
       ),
       completionOnTyping: flag(
-        assistance.completionOnTyping,
+        assistance["completionOnTyping"],
         defaults.assistance.completionOnTyping
       ),
       completionLimit: preference(
         () =>
           integer(
-            assistance.completionLimit,
+            assistance["completionLimit"],
             "completion limit",
             MIN_COMPLETION_LIMIT,
             MAX_COMPLETION_LIMIT
@@ -278,13 +284,13 @@ export function parseAppPreferences(value: unknown): AppPreferences {
         defaults.assistance.completionLimit
       ),
       hoverDocumentation: flag(
-        assistance.hoverDocumentation,
+        assistance["hoverDocumentation"],
         defaults.assistance.hoverDocumentation
       ),
       hoverDelay: preference(
         () =>
           integer(
-            assistance.hoverDelay,
+            assistance["hoverDelay"],
             "hover delay",
             MIN_HOVER_DELAY,
             MAX_HOVER_DELAY
@@ -292,50 +298,59 @@ export function parseAppPreferences(value: unknown): AppPreferences {
         defaults.assistance.hoverDelay
       ),
       diagnosticsEnabled: flag(
-        assistance.diagnosticsEnabled,
+        assistance["diagnosticsEnabled"],
         defaults.assistance.diagnosticsEnabled
       ),
     },
     build: {
       saveBeforeBuild: flag(
-        build.saveBeforeBuild,
+        build["saveBeforeBuild"],
         defaults.build.saveBeforeBuild
       ),
       openPanelOnFailure: flag(
-        build.openPanelOnFailure,
+        build["openPanelOnFailure"],
         defaults.build.openPanelOnFailure
       ),
       revealProblemsOnFailure: flag(
-        build.revealProblemsOnFailure,
+        build["revealProblemsOnFailure"],
         defaults.build.revealProblemsOnFailure
       ),
     },
     pdf: {
       defaultZoom: preference(
         () =>
-          finiteNumber(pdf.defaultZoom, "pdf zoom", MIN_PDF_ZOOM, MAX_PDF_ZOOM),
+          finiteNumber(
+            pdf["defaultZoom"],
+            "pdf zoom",
+            MIN_PDF_ZOOM,
+            MAX_PDF_ZOOM
+          ),
         defaults.pdf.defaultZoom
       ),
       defaultLayout: preference(
         () =>
-          enumValue(pdf.defaultLayout, "pdf layout", ["continuous", "single"]),
+          enumValue(pdf["defaultLayout"], "pdf layout", [
+            "continuous",
+            "single",
+          ]),
         defaults.pdf.defaultLayout
       ),
       defaultSidebar: preference(
-        () => enumValue(pdf.defaultSidebar, "pdf sidebar", ["none", "outline"]),
+        () =>
+          enumValue(pdf["defaultSidebar"], "pdf sidebar", ["none", "outline"]),
         defaults.pdf.defaultSidebar
       ),
     },
     files: {
       hideFilteredFiles: flag(
-        files.hideFilteredFiles,
+        files["hideFilteredFiles"],
         defaults.files.hideFilteredFiles
       ),
       hiddenFileRules: preference(
         () =>
           normalizeHiddenFileRules(
             arrayValue(
-              files.hiddenFileRules,
+              files["hiddenFileRules"],
               "hidden file rules",
               MAX_HIDDEN_FILE_RULES,
               parseHiddenFileRule
@@ -354,9 +369,12 @@ function flag(value: unknown, fallback: boolean): boolean {
 function parseHiddenFileRule(value: unknown): HiddenFileRule {
   const input = record(value, "hidden file rule")
   return {
-    kind: enumValue(input.kind, "hidden file rule kind", ["extension", "name"]),
+    kind: enumValue(input["kind"], "hidden file rule kind", [
+      "extension",
+      "name",
+    ]),
     value: nonEmptyString(
-      input.value,
+      input["value"],
       "hidden file rule value",
       MAX_HIDDEN_FILE_RULE_LENGTH
     ),
@@ -365,19 +383,19 @@ function parseHiddenFileRule(value: unknown): HiddenFileRule {
 
 export function parseSourceDocument(value: unknown): SourceDocument {
   const input = record(value, "source document")
-  const content = stringValue(input.content, "source content", CONTENT_LIMIT)
+  const content = stringValue(input["content"], "source content", CONTENT_LIMIT)
   const byteLength = integer(
-    input.byteLength,
+    input["byteLength"],
     "source byte length",
     0,
     CONTENT_LIMIT
   )
-  const revision = parseSourceRevision(input.revision)
+  const revision = parseSourceRevision(input["revision"])
   if (revision.byteLength !== byteLength)
     throw new IpcContractError("source revision")
   return {
     path: projectRelativePath(
-      nonEmptyString(input.path, "source path", PATH_LIMIT)
+      nonEmptyString(input["path"], "source path", PATH_LIMIT)
     ),
     content,
     byteLength,
@@ -387,12 +405,12 @@ export function parseSourceDocument(value: unknown): SourceDocument {
 
 function parseSourceRevision(value: unknown): SourceRevision {
   const input = record(value, "source revision")
-  const contentHash = stringValue(input.contentHash, "source hash", 64)
+  const contentHash = stringValue(input["contentHash"], "source hash", 64)
   if (!/^[\dA-Fa-f]{64}$/.test(contentHash))
     throw new IpcContractError("source hash")
   return {
     byteLength: integer(
-      input.byteLength,
+      input["byteLength"],
       "source byte length",
       0,
       CONTENT_LIMIT
@@ -406,15 +424,15 @@ export function parseRecoveryDraft(value: unknown): RecoveryDraft | null {
   const input = record(value, "recovery draft")
   return {
     projectPath: canonicalProjectPath(
-      nonEmptyString(input.projectPath, "recovery project path", PATH_LIMIT)
+      nonEmptyString(input["projectPath"], "recovery project path", PATH_LIMIT)
     ),
     relativePath: projectRelativePath(
-      nonEmptyString(input.relativePath, "recovery source path", PATH_LIMIT)
+      nonEmptyString(input["relativePath"], "recovery source path", PATH_LIMIT)
     ),
-    content: stringValue(input.content, "recovery content", CONTENT_LIMIT),
-    baseRevision: parseSourceRevision(input.baseRevision),
+    content: stringValue(input["content"], "recovery content", CONTENT_LIMIT),
+    baseRevision: parseSourceRevision(input["baseRevision"]),
     savedAt: integer(
-      input.savedAt,
+      input["savedAt"],
       "recovery timestamp",
       0,
       Number.MAX_SAFE_INTEGER
@@ -427,43 +445,43 @@ export function parseProjectSearchResponse(
 ): ProjectSearchResponse {
   const input = record(value, "project search")
   return {
-    results: arrayValue(input.results, "search results", 500, (result) => {
+    results: arrayValue(input["results"], "search results", 500, (result) => {
       const item = record(result, "search result")
       return {
         path: projectRelativePath(
-          nonEmptyString(item.path, "search path", PATH_LIMIT)
+          nonEmptyString(item["path"], "search path", PATH_LIMIT)
         ),
-        line: integer(item.line, "search line", 1, Number.MAX_SAFE_INTEGER),
+        line: integer(item["line"], "search line", 1, Number.MAX_SAFE_INTEGER),
         column: integer(
-          item.column,
+          item["column"],
           "search column",
           1,
           Number.MAX_SAFE_INTEGER
         ),
-        context: stringValue(item.context, "search context", 361),
-        revision: parseSourceRevision(item.revision),
+        context: stringValue(item["context"], "search context", 361),
+        revision: parseSourceRevision(item["revision"]),
       }
     }),
     totalMatches: integer(
-      input.totalMatches,
+      input["totalMatches"],
       "search match count",
       0,
       Number.MAX_SAFE_INTEGER
     ),
     searchedFiles: integer(
-      input.searchedFiles,
+      input["searchedFiles"],
       "searched file count",
       0,
       2_048
     ),
-    truncated: booleanValue(input.truncated, "search truncation"),
+    truncated: booleanValue(input["truncated"], "search truncation"),
   }
 }
 
 export function parseReplaceResponse(value: unknown): ReplaceResponse {
   const input = record(value, "replace response")
   const transactionId = stringValue(
-    input.transactionId,
+    input["transactionId"],
     "replace transaction",
     64
   )
@@ -471,9 +489,9 @@ export function parseReplaceResponse(value: unknown): ReplaceResponse {
     throw new IpcContractError("replace transaction")
   return {
     transactionId,
-    changedFiles: integer(input.changedFiles, "changed file count", 0, 128),
+    changedFiles: integer(input["changedFiles"], "changed file count", 0, 128),
     replacedMatches: integer(
-      input.replacedMatches,
+      input["replacedMatches"],
       "replaced match count",
       0,
       Number.MAX_SAFE_INTEGER
@@ -492,9 +510,9 @@ export function parseForwardSearchResult(value: unknown): {
 } {
   const input = record(value, "forward search")
   return {
-    page: integer(input.page, "SyncTeX page", 1, 1_000_000),
-    x: finiteNumber(input.x, "SyncTeX x coordinate", 0, 1_000_000_000),
-    y: finiteNumber(input.y, "SyncTeX y coordinate", 0, 1_000_000_000),
+    page: integer(input["page"], "SyncTeX page", 1, 1_000_000),
+    x: finiteNumber(input["x"], "SyncTeX x coordinate", 0, 1_000_000_000),
+    y: finiteNumber(input["y"], "SyncTeX y coordinate", 0, 1_000_000_000),
   }
 }
 
@@ -506,10 +524,15 @@ export function parseInverseSearchResult(value: unknown): {
   const input = record(value, "inverse search")
   return {
     path: projectRelativePath(
-      nonEmptyString(input.path, "SyncTeX source path", PATH_LIMIT)
+      nonEmptyString(input["path"], "SyncTeX source path", PATH_LIMIT)
     ),
-    line: integer(input.line, "SyncTeX line", 1, Number.MAX_SAFE_INTEGER),
-    column: integer(input.column, "SyncTeX column", 1, Number.MAX_SAFE_INTEGER),
+    line: integer(input["line"], "SyncTeX line", 1, Number.MAX_SAFE_INTEGER),
+    column: integer(
+      input["column"],
+      "SyncTeX column",
+      1,
+      Number.MAX_SAFE_INTEGER
+    ),
   }
 }
 
@@ -531,10 +554,10 @@ function parseProjectEntry(
     throw new IpcContractError("project tree")
   const input = record(value, "project tree entry")
   return {
-    name: nonEmptyString(input.name, "project entry name", 4_096),
-    kind: enumValue(input.kind, "project entry kind", ["directory", "file"]),
+    name: nonEmptyString(input["name"], "project entry name", 4_096),
+    kind: enumValue(input["kind"], "project entry kind", ["directory", "file"]),
     children: arrayValue(
-      input.children,
+      input["children"],
       "project entry children",
       2_048,
       (child) => parseProjectEntry(child, budget, depth + 1)
@@ -546,59 +569,70 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
   const input = record(value, "workspace state")
   return {
     projectPath: canonicalProjectPath(
-      nonEmptyString(input.projectPath, "workspace project path", PATH_LIMIT)
+      nonEmptyString(input["projectPath"], "workspace project path", PATH_LIMIT)
     ),
     pinnedFiles: arrayValue(
-      input.pinnedFiles,
+      input["pinnedFiles"],
       "pinned files",
       MAX_WORKSPACE_FILES,
       (path) =>
         projectRelativePath(nonEmptyString(path, "pinned file", PATH_LIMIT))
     ),
     selectedRoot: parseNullableRelativePath(
-      input.selectedRoot,
+      input["selectedRoot"],
       "selected root"
     ),
     selectedFile: parseNullableRelativePath(
-      input.selectedFile,
+      input["selectedFile"],
       "selected file"
     ),
-    sidebarWidth: integer(input.sidebarWidth, "sidebar width", 220, 4_096),
-    editorFontSize: integer(input.editorFontSize, "editor font size", 11, 24),
-    pdfPaneOpen: booleanValue(input.pdfPaneOpen, "PDF pane state"),
-    pdfPaneWidth: integer(input.pdfPaneWidth, "PDF pane width", 160, 4_096),
-    buildPanelOpen: booleanValue(input.buildPanelOpen, "build panel state"),
+    sidebarWidth: integer(input["sidebarWidth"], "sidebar width", 220, 4_096),
+    editorFontSize: integer(
+      input["editorFontSize"],
+      "editor font size",
+      11,
+      24
+    ),
+    pdfPaneOpen: booleanValue(input["pdfPaneOpen"], "PDF pane state"),
+    pdfPaneWidth: integer(input["pdfPaneWidth"], "PDF pane width", 160, 4_096),
+    buildPanelOpen: booleanValue(input["buildPanelOpen"], "build panel state"),
     buildPanelHeight: integer(
-      input.buildPanelHeight,
+      input["buildPanelHeight"],
       "build panel height",
       160,
       4_096
     ),
-    sidebarTab: enumValue(input.sidebarTab, "sidebar tab", [
+    sidebarTab: enumValue(input["sidebarTab"], "sidebar tab", [
       "files",
       "outline",
       "references",
     ]),
-    buildPanelTab: enumValue(input.buildPanelTab, "build panel tab", [
+    buildPanelTab: enumValue(input["buildPanelTab"], "build panel tab", [
       "output",
       "problems",
     ]),
     bottomPanelTab:
-      input.bottomPanelTab === "terminal"
+      input["bottomPanelTab"] === "terminal"
         ? "terminal"
-        : input.bottomPanelTab === "problems"
+        : input["bottomPanelTab"] === "problems"
           ? "problems"
           : "build",
-    buildProfile: enumValue(input.buildProfile, "build profile", [
+    buildProfile: enumValue(input["buildProfile"], "build profile", [
       "latexmkPdf",
       "pdfLatex",
       "xeLatex",
       "luaLatex",
     ]),
-    selectedPdf: parseNullableRelativePath(input.selectedPdf, "selected PDF"),
-    pdfViewerStates: parseStateMap(input.pdfViewerStates, parsePdfViewerState),
+    selectedPdf: parseNullableRelativePath(
+      input["selectedPdf"],
+      "selected PDF"
+    ),
+    pdfViewerStates: parseStateMap(
+      input["pdfViewerStates"],
+      parsePdfViewerState
+    ),
     editorViewerStates: parseStateMap(
-      input.editorViewerStates,
+      input["editorViewerStates"],
       parseEditorViewerState
     ),
   }
@@ -627,16 +661,16 @@ function parseStateMap<T>(
 
 function parsePdfViewerState(value: unknown): PdfViewerState {
   const input = record(value, "PDF viewer state")
-  const rotation = integer(input.rotation, "PDF rotation", 0, 270)
+  const rotation = integer(input["rotation"], "PDF rotation", 0, 270)
   if (![0, 90, 180, 270].includes(rotation))
     throw new IpcContractError("PDF rotation")
   return {
-    page: integer(input.page, "PDF page", 1, 1_000_000),
-    position: finiteNumber(input.position, "PDF position", 0, 1),
-    zoom: finiteNumber(input.zoom, "PDF zoom", 0.1, 8),
+    page: integer(input["page"], "PDF page", 1, 1_000_000),
+    position: finiteNumber(input["position"], "PDF position", 0, 1),
+    zoom: finiteNumber(input["zoom"], "PDF zoom", 0.1, 8),
     rotation: parseRotation(rotation),
-    layout: enumValue(input.layout, "PDF layout", ["continuous", "single"]),
-    sidebar: enumValue(input.sidebar, "PDF sidebar", ["none", "outline"]),
+    layout: enumValue(input["layout"], "PDF layout", ["continuous", "single"]),
+    sidebar: enumValue(input["sidebar"], "PDF sidebar", ["none", "outline"]),
   }
 }
 
@@ -649,16 +683,21 @@ function parseRotation(value: number): 0 | 90 | 180 | 270 {
 function parseEditorViewerState(value: unknown): EditorViewerState {
   const input = record(value, "editor viewer state")
   return {
-    line: integer(input.line, "editor line", 1, Number.MAX_SAFE_INTEGER),
-    column: integer(input.column, "editor column", 1, Number.MAX_SAFE_INTEGER),
+    line: integer(input["line"], "editor line", 1, Number.MAX_SAFE_INTEGER),
+    column: integer(
+      input["column"],
+      "editor column",
+      1,
+      Number.MAX_SAFE_INTEGER
+    ),
     scrollTop: finiteNumber(
-      input.scrollTop,
+      input["scrollTop"],
       "editor vertical scroll",
       0,
       Number.MAX_SAFE_INTEGER
     ),
     scrollLeft: finiteNumber(
-      input.scrollLeft,
+      input["scrollLeft"],
       "editor horizontal scroll",
       0,
       Number.MAX_SAFE_INTEGER

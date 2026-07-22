@@ -30,11 +30,12 @@ const invocation: BuildInvocation = {
   custom: false,
 }
 
-const toolUnavailable = {
-  code: "build-tool-unavailable",
-  message:
-    "The selected LaTeX build tool is not installed or is unavailable on PATH.",
-}
+const toolUnavailable = Object.assign(
+  new Error(
+    "The selected LaTeX build tool is not installed or is unavailable on PATH."
+  ),
+  { code: "build-tool-unavailable" }
+)
 
 let profileAvailable = false
 let previewFails = true
@@ -49,7 +50,7 @@ vi.mock("@/services/build-service", () => ({
   getBuildProfiles: () => getBuildProfiles(),
   previewBuild: () => previewBuild(),
   getBuildHistory: () => Promise.resolve([]),
-  listenForBuildEvents: () => Promise.resolve(() => undefined),
+  listenForBuildEvents: () => Promise.resolve(() => {}),
   startBuild: () => Promise.reject(toolUnavailable),
   stopBuild: () => Promise.resolve(),
   loadProjectBuildConfiguration: () =>

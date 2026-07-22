@@ -15,15 +15,15 @@ export type DocumentOutlineItem = Readonly<{
  */
 function visibleTitle(value: string): string {
   return value
-    .replace(
+    .replaceAll(
       /\\(?:texorpdfstring|emph|textbf|textit|texttt)\s*\{([^{}]*)\}(?:\{[^{}]*\})?/g,
       "$1"
     )
-    .replace(/\\[a-zA-Z@]+\*?(?:\[[^\]]*\])?\{([^{}]*)\}/g, "$1")
-    .replace(/\\[a-zA-Z@]+\*?/g, "")
-    .replace(/\\([%#&_{}])/g, "$1")
-    .replace(/[{}]/g, "")
-    .replace(/\s+/g, " ")
+    .replaceAll(/\\[a-zA-Z@]+\*?(?:\[[^\]]*\])?\{([^{}]*)\}/g, "$1")
+    .replaceAll(/\\[a-zA-Z@]+\*?/g, "")
+    .replaceAll(/\\([%#&_{}])/g, "$1")
+    .replaceAll(/[{}]/g, "")
+    .replaceAll(/\s+/g, " ")
     .trim()
 }
 

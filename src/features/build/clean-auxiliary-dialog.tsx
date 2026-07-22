@@ -46,7 +46,8 @@ export function CleanAuxiliaryDialog({
 
   useEffect(() => {
     let active = true
-    const request = ++operation.current
+    operation.current += 1
+    const request = operation.current
     void previewCleanAuxiliaryFiles(projectPath)
       .then((preview) => {
         if (active && request === operation.current)
@@ -69,7 +70,8 @@ export function CleanAuxiliaryDialog({
   const clean = async (preview: CleanPreview): Promise<void> => {
     if (cleaning.current) return
     cleaning.current = true
-    const request = ++operation.current
+    operation.current += 1
+    const request = operation.current
     setState({ status: "cleaning", preview })
     try {
       const count = await cleanAuxiliaryFiles(projectPath, preview.files)

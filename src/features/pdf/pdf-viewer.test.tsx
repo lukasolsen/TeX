@@ -73,10 +73,10 @@ describe("PDF text selection", () => {
       getOutline: () => Promise.resolve(null),
       getPage: () =>
         Promise.resolve({
-          cleanup: () => undefined,
+          cleanup: () => {},
           getViewport: () => viewport,
           render: () => ({
-            cancel: () => undefined,
+            cancel: () => {},
             promise: Promise.resolve(),
           }),
           view: [0, 0, 612, 792],

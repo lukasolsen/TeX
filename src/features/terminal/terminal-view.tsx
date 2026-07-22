@@ -124,7 +124,7 @@ export const TerminalView = forwardRef<
         }
         exitedRef.current = true
         terminal.write(
-          "\r\n\x1b[90m[Process exited — press Enter to start a new shell.]\x1b[0m\r\n"
+          "\r\n\u001B[90m[Process exited — press Enter to start a new shell.]\u001B[0m\r\n"
         )
       })
         .then((cleanup) => {

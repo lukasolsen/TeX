@@ -126,10 +126,9 @@ describe("verbatim", () => {
       false
     )
     expect(
-      tokens.some(
-        (token) =>
-          token.tag === "string" && token.text.includes("not a comment")
-      )
+      tokens
+        .filter((token) => token.tag === "string")
+        .some((token) => token.text.includes("not a comment"))
     ).toBe(true)
     expect(tagOf(lines, "after")).toBeNull()
   })
@@ -139,9 +138,9 @@ describe("verbatim", () => {
     const tokens = tokenize(lines)
 
     expect(
-      tokens.some(
-        (token) => token.tag === "string" && token.text.includes("\\end{other}")
-      )
+      tokens
+        .filter((token) => token.tag === "string")
+        .some((token) => token.text.includes("\\end{other}"))
     ).toBe(true)
   })
 

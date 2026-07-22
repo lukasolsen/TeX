@@ -325,11 +325,11 @@ function PdfPage({
         if (page === null) return
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
-        const viewport = page.getViewport({
+        const clickViewport = page.getViewport({
           scale: pdfViewportScale(scale),
           rotation,
         })
-        const [pdfX, pdfY] = viewport.convertToPdfPoint(
+        const [pdfX, pdfY] = clickViewport.convertToPdfPoint(
           event.clientX - bounds.left,
           event.clientY - bounds.top
         )
@@ -611,10 +611,12 @@ export function PdfViewer({
         const document = await loadingTask.promise
         if (!active || generation !== loadGeneration.current) return
         if (document.numPages > MAX_SUPPORTED_PDF_PAGES) {
-          throw {
-            code: "pdf-page-limit",
-            message: `This PDF has more than ${MAX_SUPPORTED_PDF_PAGES.toLocaleString()} pages and cannot be opened safely.`,
-          }
+          throw Object.assign(
+            new Error(
+              `This PDF has more than ${MAX_SUPPORTED_PDF_PAGES.toLocaleString()} pages and cannot be opened safely.`
+            ),
+            { code: "pdf-page-limit" }
+          )
         }
         const flattenedOutline = flattenPdfOutline(
           normalizePdfOutline(await document.getOutline().catch(() => null))
@@ -727,7 +729,7 @@ export function PdfViewer({
             ? selection.anchorNode
             : selection?.anchorNode?.parentElement
         const page = Number(
-          anchorElement?.closest<HTMLElement>("[data-page]")?.dataset.page
+          anchorElement?.closest<HTMLElement>("[data-page]")?.dataset["page"]
         )
         selectedText.current = Number.isFinite(page)
           ? { page, text: selection?.toString() ?? "" }
@@ -1329,8 +1331,8 @@ export function PdfViewer({
               </p>
             ) : (
               <ul className="flex flex-col gap-0.5">
-                {outline.map(({ depth, item }, index) => (
-                  <li key={`${item.title}-${index}`}>
+                {outline.map(({ depth, item }) => (
+                  <li key={`${depth}::${item.title}`}>
                     <button
                       className="w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       onClick={() => runDetached(navigateOutline(item))}
@@ -1488,7 +1490,7 @@ export function PdfViewer({
                 bounds.top + Math.min(40, bounds.height / 2)
               )
               const visiblePage = target?.closest<HTMLElement>("[data-page]")
-              const pageNumber = Number(visiblePage?.dataset.page)
+              const pageNumber = Number(visiblePage?.dataset["page"])
               const page =
                 Number.isFinite(pageNumber) && visiblePage !== undefined
                   ? visiblePage

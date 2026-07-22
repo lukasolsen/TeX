@@ -171,7 +171,7 @@ export function documentDiagnostics(
     })
   }
 
-  return diagnostics.sort(
+  return diagnostics.toSorted(
     (left, right) => left.from - right.from || left.to - right.to
   )
 }

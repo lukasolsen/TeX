@@ -38,7 +38,7 @@ function renderTree(
         isHidden={isHidden}
         onCreate={async () => false}
         onDelete={vi.fn<(path: ProjectRelativePath) => Promise<void>>(
-          async () => undefined
+          async () => {}
         )}
         onOpenFileSettings={vi.fn<() => void>()}
         onOpenPdf={
@@ -96,7 +96,7 @@ describe("ProjectTree", () => {
   it("omits filtered entries but says how many are missing", () => {
     renderTree(
       vi.fn<() => void>(),
-      (name) => name.endsWith(".log") || name.endsWith(".aux"),
+      (name) => [".log", ".aux"].some((extension) => name.endsWith(extension)),
       projectWithArtifacts
     )
 
@@ -110,7 +110,7 @@ describe("ProjectTree", () => {
     const user = userEvent.setup()
     renderTree(
       vi.fn<() => void>(),
-      (name) => name.endsWith(".log") || name.endsWith(".aux"),
+      (name) => [".log", ".aux"].some((extension) => name.endsWith(extension)),
       projectWithArtifacts
     )
 

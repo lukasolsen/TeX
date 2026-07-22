@@ -7,7 +7,7 @@ import { latexFoldRanges } from "@/features/editor/latex-folding"
 function folds(lines: string[]) {
   const doc = Text.of(lines)
   return [...latexFoldRanges(doc).entries()]
-    .sort(([left], [right]) => left - right)
+    .toSorted(([left], [right]) => left - right)
     .map(([line, range]) => ({
       line,
       kind: range.kind,

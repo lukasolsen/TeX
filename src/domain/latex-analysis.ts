@@ -88,14 +88,14 @@ function parseSpan(
   value: Record<string, unknown>,
   contract: string
 ): LatexSpan {
-  const line = integer(value.line, `${contract} line`, 1, MAX_LINE)
-  const column = integer(value.column, `${contract} column`, 1, MAX_COLUMN)
+  const line = integer(value["line"], `${contract} line`, 1, MAX_LINE)
+  const column = integer(value["column"], `${contract} column`, 1, MAX_COLUMN)
   return {
     line,
     column,
-    endLine: integer(value.endLine, `${contract} end line`, line, MAX_LINE),
+    endLine: integer(value["endLine"], `${contract} end line`, line, MAX_LINE),
     endColumn: integer(
-      value.endColumn,
+      value["endColumn"],
       `${contract} end column`,
       1,
       MAX_COLUMN
@@ -108,26 +108,26 @@ export function parseLatexProjectAnalysis(
 ): LatexProjectAnalysis {
   const input = record(value, "LaTeX analysis response")
   return {
-    complete: booleanValue(input.complete, "LaTeX analysis completeness"),
+    complete: booleanValue(input["complete"], "LaTeX analysis completeness"),
     diagnostics: arrayValue(
-      input.diagnostics,
+      input["diagnostics"],
       "LaTeX analysis diagnostics",
       500,
       (item) => {
         const diagnostic = record(item, "LaTeX analysis diagnostic")
         return {
           code: enumValue(
-            diagnostic.code,
+            diagnostic["code"],
             "LaTeX analysis diagnostic code",
             DIAGNOSTIC_CODES
           ),
           severity: enumValue(
-            diagnostic.severity,
+            diagnostic["severity"],
             "LaTeX analysis diagnostic severity",
             ["error", "warning"] as const
           ),
           message: nonEmptyString(
-            diagnostic.message,
+            diagnostic["message"],
             "LaTeX analysis diagnostic message",
             2_048
           ),
@@ -142,11 +142,11 @@ function parseLocation(value: unknown): LatexSymbolLocation {
   const location = record(value, "LaTeX symbol location")
   return {
     path: projectRelativePath(
-      nonEmptyString(location.path, "LaTeX symbol location path", 4_096)
+      nonEmptyString(location["path"], "LaTeX symbol location path", 4_096)
     ),
     span: parseSpan(location, "LaTeX symbol location"),
     preview: stringValue(
-      location.preview,
+      location["preview"],
       "LaTeX symbol location preview",
       512
     ),
@@ -155,23 +155,23 @@ function parseLocation(value: unknown): LatexSymbolLocation {
 
 export function parseLatexSymbolInfo(value: unknown): LatexSymbolInfo | null {
   const input = record(value, "LaTeX symbol response")
-  if (input.symbol === null || input.symbol === undefined) return null
-  const symbol = record(input.symbol, "LaTeX symbol")
+  if (input["symbol"] === null || input["symbol"] === undefined) return null
+  const symbol = record(input["symbol"], "LaTeX symbol")
   return {
-    name: nonEmptyString(symbol.name, "LaTeX symbol name", 1_024),
-    kind: enumValue(symbol.kind, "LaTeX symbol kind", [
+    name: nonEmptyString(symbol["name"], "LaTeX symbol name", 1_024),
+    kind: enumValue(symbol["kind"], "LaTeX symbol kind", [
       "label",
       "citation",
       "file",
     ] as const),
     definitions: arrayValue(
-      symbol.definitions,
+      symbol["definitions"],
       "LaTeX symbol definitions",
       500,
       parseLocation
     ),
     references: arrayValue(
-      symbol.references,
+      symbol["references"],
       "LaTeX symbol references",
       500,
       parseLocation

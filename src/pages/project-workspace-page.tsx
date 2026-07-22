@@ -484,7 +484,7 @@ export function ProjectWorkspacePage({
       onFocusCapture={(event) => {
         const focus = event.target.closest<HTMLElement>(
           "[data-workspace-focus]"
-        )?.dataset.workspaceFocus
+        )?.dataset["workspaceFocus"]
         if (focus === "source" || focus === "pdf") {
           lastWorkspaceFocus.current = focus
         }
@@ -618,8 +618,16 @@ export function ProjectWorkspacePage({
                   onCursorChange={(path, line, column) =>
                     setSourceLocation({ path, line, column })
                   }
-                  onDiagnosticsChange={(path, diagnostics, complete) => {
-                    setSourceProblems({ path, diagnostics, complete })
+                  onDiagnosticsChange={(
+                    path,
+                    documentDiagnostics,
+                    complete
+                  ) => {
+                    setSourceProblems({
+                      path,
+                      diagnostics: documentDiagnostics,
+                      complete,
+                    })
                     setSourceProblemIndex(null)
                   }}
                   initialViewerState={

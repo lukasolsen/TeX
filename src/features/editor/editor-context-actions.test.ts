@@ -76,7 +76,7 @@ describe("editor context actions", () => {
       foldable: true,
     }).map((action) => action.group)
 
-    expect(groups).toEqual([...groups].sort((a, b) => a - b))
+    expect(groups).toEqual(groups.toSorted((a, b) => a - b))
     expect(new Set(groups).size).toBe(4)
   })
 })

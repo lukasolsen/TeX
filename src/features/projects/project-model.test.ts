@@ -45,8 +45,8 @@ describe("project model", () => {
     ])
     const chapters = rootNodes[0]
     expect(chapters).toBeDefined()
-    if (chapters === undefined) return
-    expect(projectTreeNodes(chapters, chapters.path)[0]?.path).toBe(
+    const chaptersNode = chapters as NonNullable<typeof chapters>
+    expect(projectTreeNodes(chaptersNode, chaptersNode.path)[0]?.path).toBe(
       "chapters/intro.tex"
     )
   })

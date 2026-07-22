@@ -297,7 +297,8 @@ export function useProjectBuild({
     async (
       configuration: ProjectBuildConfiguration
     ): Promise<ProjectBuildConfiguration> => {
-      const revision = ++configurationSaveRevision.current
+      configurationSaveRevision.current += 1
+      const revision = configurationSaveRevision.current
       const saved = await configurationSaveQueue.current.enqueue(() =>
         saveProjectBuildConfiguration(projectPath, configuration)
       )

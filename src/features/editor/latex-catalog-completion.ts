@@ -28,10 +28,10 @@ export function catalogSummary(markdown: string): string {
   const firstParagraph = markdown.split("\n\n")[0] ?? ""
   const sentence = /^(.*?[.!?])(\s|$)/.exec(firstParagraph)?.[1]
   return (sentence ?? firstParagraph)
-    .replace(/`([^`]*)`/g, "$1")
-    .replace(/\*\*?([^*]*)\*\*?/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\s+/g, " ")
+    .replaceAll(/`([^`]*)`/g, "$1")
+    .replaceAll(/\*\*?([^*]*)\*\*?/g, "$1")
+    .replaceAll(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replaceAll(/\s+/g, " ")
     .trim()
 }
 

@@ -1,4 +1,9 @@
-import { useMemo, useState, type FormEvent, type ReactElement } from "react"
+import {
+  useMemo,
+  useState,
+  type ReactElement,
+  type SyntheticEvent,
+} from "react"
 import { EyeOff, FileType, Hash, Plus, RotateCcw, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -92,7 +97,7 @@ export function FileFilterSettings({
     [rules]
   )
 
-  const submit = (event: FormEvent): void => {
+  const submit = (event: SyntheticEvent<HTMLFormElement>): void => {
     event.preventDefault()
     const rule = normalizeHiddenFileRule(kind, draft)
     if (rule === null) {

@@ -126,7 +126,8 @@ export function useProjectWatch({
   }, [build, buildQueued, buildRunning, projectPath, watchActive])
 
   const start = useCallback(async (): Promise<void> => {
-    const revision = ++lifecycleRevision.current
+    lifecycleRevision.current += 1
+    const revision = lifecycleRevision.current
     setState({ status: "starting", message: null })
     try {
       await startProjectWatch(projectPath)
@@ -144,7 +145,8 @@ export function useProjectWatch({
   }, [projectPath])
 
   const stop = useCallback(async (): Promise<void> => {
-    const revision = ++lifecycleRevision.current
+    lifecycleRevision.current += 1
+    const revision = lifecycleRevision.current
     setState({ status: "stopping", message: null })
     try {
       await stopProjectWatch(projectPath)

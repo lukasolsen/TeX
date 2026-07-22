@@ -36,7 +36,7 @@ function previewReplacement(
   replacement: string,
   caseSensitive: boolean
 ): string {
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escaped = query.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")
   return context.replace(
     new RegExp(escaped, caseSensitive ? "g" : "gi"),
     () => replacement
@@ -165,12 +165,13 @@ export function ProjectSearchPanel({
       await undoProjectReplace(result.transactionId)
       if (!requests.isCurrent(operation)) return
       onFilesChanged()
-      const response = await searchProjectSources({
+      const refreshedResponse = await searchProjectSources({
         projectPath,
         query,
         caseSensitive,
       })
-      if (requests.isCurrent(operation)) setState({ status: "ready", response })
+      if (requests.isCurrent(operation))
+        setState({ status: "ready", response: refreshedResponse })
     } catch (error: unknown) {
       if (requests.isCurrent(operation)) {
         setState({ status: "error", error: projectErrorFromUnknown(error) })
@@ -284,10 +285,10 @@ export function ProjectSearchPanel({
             rechecked before writing.
           </p>
           <ul className="flex max-h-36 flex-col gap-2 overflow-y-auto font-mono text-meta">
-            {response.results.slice(0, 5).map((result, index) => (
+            {response.results.slice(0, 5).map((result) => (
               <li
                 className="rounded-md bg-background p-2"
-                key={`${result.path}:${result.line}:${index}`}
+                key={`${result.path}:${result.line}:${result.column}`}
               >
                 <span className="block truncate text-muted-foreground">
                   {result.path}:{result.line}
@@ -379,8 +380,10 @@ export function ProjectSearchPanel({
                     </span>
                   </p>
                   <ol className="p-1">
-                    {results.map((result, index) => (
-                      <li key={`${result.line}:${result.column}:${index}`}>
+                    {results.map((result) => (
+                      <li
+                        key={`${result.path}:${result.line}:${result.column}`}
+                      >
                         <button
                           className="flex w-full min-w-0 items-baseline gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           onClick={() =>

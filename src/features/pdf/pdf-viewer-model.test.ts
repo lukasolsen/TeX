@@ -78,17 +78,18 @@ describe("PDF resource limits", () => {
   it("enforces the pixel budget even when the requested scale is above the budget", () => {
     const scale = boundedPdfOutputScale(3_060, 3_960, 3)
     expect(scale).not.toBeNull()
-    if (scale === null) return
-    const canvasPixels = Math.floor(3_060 * scale) * Math.floor(3_960 * scale)
+    const boundedScale = scale as number
+    const canvasPixels =
+      Math.floor(3_060 * boundedScale) * Math.floor(3_960 * boundedScale)
     expect(canvasPixels).toBeLessThanOrEqual(MAX_PDF_CANVAS_PIXELS)
   })
 
   it("bounds high-density canvas allocation", () => {
     const scale = boundedPdfOutputScale(10_000, 10_000, 3)
     expect(scale).not.toBeNull()
-    if (scale === null) return
-    expect(10_000 * scale).toBeLessThanOrEqual(MAX_PDF_CANVAS_DIMENSION)
-    const canvasDimension = Math.floor(10_000 * scale)
+    const boundedScale = scale as number
+    expect(10_000 * boundedScale).toBeLessThanOrEqual(MAX_PDF_CANVAS_DIMENSION)
+    const canvasDimension = Math.floor(10_000 * boundedScale)
     expect(canvasDimension * canvasDimension).toBeLessThanOrEqual(
       MAX_PDF_CANVAS_PIXELS
     )

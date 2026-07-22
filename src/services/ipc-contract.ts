@@ -92,7 +92,7 @@ export function arrayValue<T>(
 ): T[] {
   if (!Array.isArray(value) || value.length > maximumLength)
     throw new IpcContractError(contract)
-  return value.map(parse)
+  return value.map((item) => parse(item))
 }
 
 export function enumValue<const T extends string>(

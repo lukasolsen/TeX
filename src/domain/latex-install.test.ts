@@ -112,11 +112,16 @@ describe("progress summaries", () => {
   })
 
   it("treats a skipped optional step as resolved", () => {
+    const secondStep = progress.steps[1] as NonNullable<
+      (typeof progress.steps)[number]
+    >
     const withSkip: InstallProgress = {
       ...progress,
-      steps: progress.steps.map((step, index) =>
-        index === 1 ? { ...step, optional: true, status: "skipped" } : step
-      ),
+      steps: progress.steps.with(1, {
+        ...secondStep,
+        optional: true,
+        status: "skipped",
+      }),
     }
 
     expect(completedStepCount(withSkip)).toBe(2)
@@ -126,7 +131,13 @@ describe("progress summaries", () => {
     const finished: InstallProgress = {
       ...progress,
       status: "succeeded",
-      steps: progress.steps.map((step) => ({ ...step, status: "succeeded" })),
+      steps: progress.steps.map((step) => ({
+        title: step.title,
+        command: step.command,
+        optional: step.optional,
+        status: "succeeded",
+        detail: step.detail,
+      })),
     }
 
     expect(installStepSummary(finished)).toBe("Step 3 of 3")

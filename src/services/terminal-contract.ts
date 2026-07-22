@@ -13,31 +13,40 @@ const BASE64_LIMIT = 512 * 1024
 export function parseTerminalDescriptor(value: unknown): TerminalDescriptor {
   const input = record(value, "terminal descriptor")
   return {
-    terminalId: nonEmptyString(input.terminalId, "terminal id", ID_LIMIT),
+    terminalId: nonEmptyString(input["terminalId"], "terminal id", ID_LIMIT),
     base64Snapshot: stringValue(
-      input.base64Snapshot,
+      input["base64Snapshot"],
       "terminal snapshot",
       BASE64_LIMIT
     ),
-    running: input.running === true,
+    running: input["running"] === true,
   }
 }
 
 export function parseTerminalEvent(value: unknown): TerminalEvent {
   const input = record(value, "terminal event")
-  const terminalId = nonEmptyString(input.terminalId, "terminal id", ID_LIMIT)
-  if (input.kind === "data") {
+  const terminalId = nonEmptyString(
+    input["terminalId"],
+    "terminal id",
+    ID_LIMIT
+  )
+  if (input["kind"] === "data") {
     return {
       kind: "data",
       terminalId,
-      base64: stringValue(input.base64, "terminal data", BASE64_LIMIT),
+      base64: stringValue(input["base64"], "terminal data", BASE64_LIMIT),
     }
   }
-  if (input.kind === "exit") {
+  if (input["kind"] === "exit") {
     return {
       kind: "exit",
       terminalId,
-      exitCode: nullableInteger(input.exitCode, "terminal exit code", -1, 255),
+      exitCode: nullableInteger(
+        input["exitCode"],
+        "terminal exit code",
+        -1,
+        255
+      ),
     }
   }
   throw new IpcContractError("terminal event")

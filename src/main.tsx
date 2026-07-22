@@ -5,7 +5,7 @@ import App from "@/app/app"
 
 import "./index.css"
 
-const rootElement = document.getElementById("root")
+const rootElement = document.querySelector("#root")
 
 if (rootElement === null) {
   throw new Error("The application root element is missing.")

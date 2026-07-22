@@ -44,19 +44,24 @@ export function parseLatexCompletionResponse(
 ): LatexCompletionResponse {
   const input = record(value, "LaTeX completion response")
   return {
-    items: arrayValue(input.items, "LaTeX completion items", 64, (value) => {
-      const item = record(value, "LaTeX completion item")
+    items: arrayValue(input["items"], "LaTeX completion items", 64, (entry) => {
+      const item = record(entry, "LaTeX completion item")
       const from = integer(
-        item.from,
+        item["from"],
         "LaTeX completion start",
         0,
         2 * 1024 * 1024
       )
-      const to = integer(item.to, "LaTeX completion end", from, 2 * 1024 * 1024)
+      const to = integer(
+        item["to"],
+        "LaTeX completion end",
+        from,
+        2 * 1024 * 1024
+      )
       return {
-        label: nonEmptyString(item.label, "LaTeX completion label", 512),
-        detail: stringValue(item.detail, "LaTeX completion detail", 4_096),
-        kind: enumValue(item.kind, "LaTeX completion kind", [
+        label: nonEmptyString(item["label"], "LaTeX completion label", 512),
+        detail: stringValue(item["detail"], "LaTeX completion detail", 4_096),
+        kind: enumValue(item["kind"], "LaTeX completion kind", [
           "command",
           "environment",
           "snippet",
@@ -64,26 +69,25 @@ export function parseLatexCompletionResponse(
           "citation",
           "file",
         ]),
-        provenance: enumValue(item.provenance, "LaTeX completion provenance", [
-          "core",
-          "package",
-          "local",
-          "project",
-        ]),
+        provenance: enumValue(
+          item["provenance"],
+          "LaTeX completion provenance",
+          ["core", "package", "local", "project"]
+        ),
         requires: nullableString(
-          item.requires,
+          item["requires"],
           "LaTeX completion requirement",
           128
         ),
         from,
         to,
         insertText: nonEmptyString(
-          item.insertText,
+          item["insertText"],
           "LaTeX completion insertion",
           16_384
         ),
         source: nullableString(
-          item.source ?? null,
+          item["source"] ?? null,
           "LaTeX completion source",
           1_024
         ),

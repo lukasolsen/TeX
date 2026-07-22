@@ -76,6 +76,6 @@ describe("document diagnostics", () => {
       (diagnostic) => diagnostic.from
     )
 
-    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+    expect(positions).toEqual(positions.toSorted((a, b) => a - b))
   })
 })

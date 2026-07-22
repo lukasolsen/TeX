@@ -29,11 +29,9 @@ describe("merging the two diagnostic layers", () => {
     )
 
     expect(merged).toHaveLength(1)
-    const [diagnostic] = merged
-    expect(doc.sliceString(diagnostic?.from ?? 0, diagnostic?.to ?? 0)).toBe(
-      "sec:missing"
-    )
-    expect(diagnostic?.layer).toBe("project")
+    const diagnostic = merged[0] as NonNullable<(typeof merged)[number]>
+    expect(doc.sliceString(diagnostic.from, diagnostic.to)).toBe("sec:missing")
+    expect(diagnostic.layer).toBe("project")
   })
 
   it("maps a span in a line containing astral characters", () => {
@@ -51,7 +49,10 @@ describe("merging the two diagnostic layers", () => {
       ])
     )
 
-    expect(doc.sliceString(merged[0]?.from ?? 0, merged[0]?.to ?? 0)).toBe("😀")
+    const astralDiagnostic = merged[0] as NonNullable<(typeof merged)[number]>
+    expect(doc.sliceString(astralDiagnostic.from, astralDiagnostic.to)).toBe(
+      "😀"
+    )
   })
 
   it("keeps document diagnostics when no project analysis has arrived", () => {

@@ -159,6 +159,9 @@ const projectReferenceField = StateField.define({
             ])
       }
     }
+    // RangeSet.map remaps decoration positions through a ChangeDesc; the
+    // argument is change data, not an array callback.
+    // oxlint-disable-next-line no-array-callback-reference
     return decorations.map(transaction.changes)
   },
   provide: (field) => EditorView.decorations.from(field),
@@ -677,10 +680,10 @@ export function LatexEditor({
     }
     const followTarget = async (
       editor: EditorView,
-      target: NavigationTarget
+      navigationTarget: NavigationTarget
     ) => {
-      if (target.kind === "file") {
-        onOpenReferenceRef.current(target.path, null)
+      if (navigationTarget.kind === "file") {
+        onOpenReferenceRef.current(navigationTarget.path, null)
         return
       }
       // Only the project index knows where a label or citation is defined, so
@@ -690,11 +693,11 @@ export function LatexEditor({
           projectPath: projectPathRef.current,
           relativePath: activePath.current,
           content: editor.state.doc.toString(),
-          ...positionOf(editor, target.from),
+          ...positionOf(editor, navigationTarget.from),
         })
         const definition = symbol?.definitions[0]
         if (definition === undefined) {
-          onReportRef.current(unresolvedSymbolMessage(target))
+          onReportRef.current(unresolvedSymbolMessage(navigationTarget))
           return
         }
         onOpenReferenceRef.current(definition.path, {
@@ -706,9 +709,9 @@ export function LatexEditor({
       }
     }
     const openReferenceAtSelection = (editor: EditorView) => {
-      const target = targetAt(editor, editor.state.selection.main.head)
-      if (target === null) return false
-      runDetached(followTarget(editor, target))
+      const selectionTarget = targetAt(editor, editor.state.selection.main.head)
+      if (selectionTarget === null) return false
+      runDetached(followTarget(editor, selectionTarget))
       return true
     }
     // The right-click menu is prepared from the position under the pointer, so
@@ -869,9 +872,9 @@ export function LatexEditor({
         EditorState.tabSize.of(editor.indentWidth),
         assistance.hoverDocumentation
           ? hoverTooltip(
-              (view, position) =>
+              (hoverView, position) =>
                 latexHoverTooltip(projectPathRef.current, activePath.current)(
-                  view,
+                  hoverView,
                   position
                 ),
               { hoverTime: assistance.hoverDelay, hideOnChange: true }
@@ -955,10 +958,12 @@ export function LatexEditor({
         },
         mousemove: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
-          const target = targetAtPointer(editor, event)
+          const pointerTarget = targetAtPointer(editor, event)
           updateReferenceDecoration(
             editor,
-            target === null ? null : { from: target.from, to: target.to }
+            pointerTarget === null
+              ? null
+              : { from: pointerTarget.from, to: pointerTarget.to }
           )
           return false
         },
@@ -972,11 +977,11 @@ export function LatexEditor({
         },
         click: (event, editor) => {
           if (!(event instanceof MouseEvent)) return false
-          const target = targetAtPointer(editor, event)
-          if (target === null) return false
+          const pointerTarget = targetAtPointer(editor, event)
+          if (pointerTarget === null) return false
           event.preventDefault()
           updateReferenceDecoration(editor, null)
-          runDetached(followTarget(editor, target))
+          runDetached(followTarget(editor, pointerTarget))
           return true
         },
       }),

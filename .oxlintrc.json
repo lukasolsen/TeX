@@ -11,7 +11,10 @@
     "oxc"
   ],
   "categories": {
-    "correctness": "error"
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error"
   },
   "env": {
     "browser": true,
@@ -38,7 +41,39 @@
     "typescript/no-non-null-asserted-optional-chain": "error",
     "typescript/await-thenable": "error",
     "typescript/switch-exhaustiveness-check": "error",
-    "jsx-a11y/prefer-tag-over-role": "off"
+    "jsx-a11y/prefer-tag-over-role": "off",
+
+    "no-plusplus": "error",
+    "no-var": "error",
+    "no-eval": "error",
+    "typescript/prefer-ts-expect-error": "error",
+
+    "react/react-in-jsx-scope": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    "typescript/no-confusing-void-expression": "off",
+    "typescript/strict-boolean-expressions": "off",
+    "typescript/strict-void-return": "off",
+    "typescript/consistent-return": "off",
+    "typescript/no-unsafe-member-access": "off",
+    "typescript/no-unsafe-assignment": "off",
+    "typescript/no-unsafe-argument": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "typescript/no-extraneous-class": "off",
+    "typescript/require-await": "off",
+    "max-lines-per-function": "off",
+    "max-lines": "off",
+    "max-depth": "off",
+    "max-classes-per-file": "off",
+    "no-negated-condition": "off",
+    "unicorn/no-negated-condition": "off",
+    "require-unicode-regexp": "off",
+    "require-await": "off",
+    "no-await-in-loop": "off",
+    "no-inline-comments": "off",
+    "import/max-dependencies": "off",
+    "import/no-unassigned-import": "off",
+    "unicorn/prefer-code-point": "off",
+    "unicorn/no-object-as-default-parameter": "off"
   },
   "overrides": [
     {

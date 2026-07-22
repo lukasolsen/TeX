@@ -88,18 +88,20 @@ export function editorContextActions(
     actions.push({ id: "fold", label: "Fold", shortcut: null, group: 2 })
   }
 
-  actions.push({
-    id: "find-in-file",
-    label: "Find in file",
-    shortcut: ["primary", "f"],
-    group: 3,
-  })
-  actions.push({
-    id: "select-all",
-    label: "Select all",
-    shortcut: null,
-    group: 3,
-  })
+  actions.push(
+    {
+      id: "find-in-file",
+      label: "Find in file",
+      shortcut: ["primary", "f"],
+      group: 3,
+    },
+    {
+      id: "select-all",
+      label: "Select all",
+      shortcut: null,
+      group: 3,
+    }
+  )
 
   return actions
 }

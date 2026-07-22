@@ -8,7 +8,7 @@ export function createSerialTaskQueue(): SerialTaskQueue {
 
   return {
     enqueue(task) {
-      const execution = tail.catch(() => undefined).then(task)
+      const execution = tail.catch(() => {}).then(task)
       tail = execution
       return execution
     },

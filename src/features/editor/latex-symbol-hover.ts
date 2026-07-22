@@ -15,7 +15,7 @@ const MAX_LISTED_REFERENCES = 5
 function escapeInline(text: string): string {
   // The renderer treats backticks and asterisks as markup; a source line is
   // literal text and must not be reinterpreted as emphasis.
-  return text.replace(/([`*[\]])/g, "\\$1")
+  return text.replaceAll(/([`*[\]])/g, "\\$1")
 }
 
 /**

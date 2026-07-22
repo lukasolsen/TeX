@@ -72,7 +72,9 @@ const startedProgress: InstallProgress = {
   method: "homebrew",
   status: "running",
   steps: (support.options[0]?.steps ?? []).map((step) => ({
-    ...step,
+    title: step.title,
+    command: step.command,
+    optional: step.optional,
     status: "pending",
     detail: null,
   })),

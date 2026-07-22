@@ -36,33 +36,35 @@ export function parseBuildInvocation(value: unknown): BuildInvocation {
   const input = record(value, "build invocation")
   return {
     executable: nonEmptyString(
-      input.executable,
+      input["executable"],
       "build executable",
       PATH_LIMIT
     ),
-    arguments: arrayValue(input.arguments, "build arguments", 128, (argument) =>
-      stringValue(argument, "build argument", 4_096)
+    arguments: arrayValue(
+      input["arguments"],
+      "build arguments",
+      128,
+      (argument) => stringValue(argument, "build argument", 4_096)
     ),
     workingDirectory: canonicalProjectPath(
-      nonEmptyString(input.workingDirectory, "build directory", PATH_LIMIT)
+      nonEmptyString(input["workingDirectory"], "build directory", PATH_LIMIT)
     ),
     rootFile: projectRelativePath(
-      nonEmptyString(input.rootFile, "build root", PATH_LIMIT)
+      nonEmptyString(input["rootFile"], "build root", PATH_LIMIT)
     ),
-    engine: parseBuildEngine(input.engine),
+    engine: parseBuildEngine(input["engine"]),
     environment: arrayValue(
-      input.environment,
+      input["environment"],
       "build environment",
       5,
       parseEnvironment
     ),
-    bibliographyTool: enumValue(input.bibliographyTool, "bibliography tool", [
-      "automatic",
-      "biber",
-      "bibtex",
-      "none",
-    ]),
-    custom: booleanValue(input.custom, "custom build state"),
+    bibliographyTool: enumValue(
+      input["bibliographyTool"],
+      "bibliography tool",
+      ["automatic", "biber", "bibtex", "none"]
+    ),
+    custom: booleanValue(input["custom"], "custom build state"),
   }
 }
 
@@ -70,20 +72,23 @@ export function parseBuildProfiles(value: unknown): BuildProfile[] {
   return arrayValue(value, "build profiles", 4, (profile) => {
     const input = record(profile, "build profile")
     return {
-      engine: parseBuildEngine(input.engine),
-      label: nonEmptyString(input.label, "build profile label", 128),
+      engine: parseBuildEngine(input["engine"]),
+      label: nonEmptyString(input["label"], "build profile label", 128),
       description: nonEmptyString(
-        input.description,
+        input["description"],
         "build profile description",
         1_024
       ),
       executable: nonEmptyString(
-        input.executable,
+        input["executable"],
         "build profile executable",
         128
       ),
-      recommended: booleanValue(input.recommended, "recommended build profile"),
-      available: booleanValue(input.available, "available build profile"),
+      recommended: booleanValue(
+        input["recommended"],
+        "recommended build profile"
+      ),
+      available: booleanValue(input["available"], "available build profile"),
     }
   })
 }
@@ -91,38 +96,38 @@ export function parseBuildProfiles(value: unknown): BuildProfile[] {
 export function parseBuildRun(value: unknown): BuildRun {
   const input = record(value, "build run")
   return {
-    id: buildId(nonEmptyString(input.id, "build run ID", 128)),
+    id: buildId(nonEmptyString(input["id"], "build run ID", 128)),
     projectPath: canonicalProjectPath(
-      nonEmptyString(input.projectPath, "build project path", PATH_LIMIT)
+      nonEmptyString(input["projectPath"], "build project path", PATH_LIMIT)
     ),
-    invocation: parseBuildInvocation(input.invocation),
-    status: parseBuildStatus(input.status),
+    invocation: parseBuildInvocation(input["invocation"]),
+    status: parseBuildStatus(input["status"]),
     startedAt: integer(
-      input.startedAt,
+      input["startedAt"],
       "build start time",
       0,
       Number.MAX_SAFE_INTEGER
     ),
     finishedAt: nullableInteger(
-      input.finishedAt,
+      input["finishedAt"],
       "build finish time",
       0,
       Number.MAX_SAFE_INTEGER
     ),
     exitCode: nullableInteger(
-      input.exitCode,
+      input["exitCode"],
       "build exit code",
       -2_147_483_648,
       2_147_483_647
     ),
     entries: arrayValue(
-      input.entries,
+      input["entries"],
       "build log entries",
       500,
       parseBuildLogEntry
     ),
     diagnostics: arrayValue(
-      input.diagnostics,
+      input["diagnostics"],
       "build diagnostics",
       500,
       parseBuildDiagnostic
@@ -136,40 +141,40 @@ export function parseBuildHistory(value: unknown): BuildRun[] {
 
 export function parseBuildEvent(value: unknown): BuildEvent {
   const input = record(value, "build event")
-  const kind = enumValue(input.kind, "build event kind", ["log", "finished"])
+  const kind = enumValue(input["kind"], "build event kind", ["log", "finished"])
   const common = {
     projectPath: canonicalProjectPath(
-      nonEmptyString(input.projectPath, "build event project", PATH_LIMIT)
+      nonEmptyString(input["projectPath"], "build event project", PATH_LIMIT)
     ),
-    runId: buildId(nonEmptyString(input.runId, "build event run ID", 128)),
+    runId: buildId(nonEmptyString(input["runId"], "build event run ID", 128)),
   }
   if (kind === "log") {
     return {
       kind,
       ...common,
-      entry: parseBuildLogEntry(input.entry),
+      entry: parseBuildLogEntry(input["entry"]),
       diagnostic:
-        input.diagnostic === null
+        input["diagnostic"] === null
           ? null
-          : parseBuildDiagnostic(input.diagnostic),
+          : parseBuildDiagnostic(input["diagnostic"]),
     }
   }
   return {
     kind,
     ...common,
-    status: enumValue(input.status, "finished build status", [
+    status: enumValue(input["status"], "finished build status", [
       "succeeded",
       "failed",
       "cancelled",
     ]),
     finishedAt: integer(
-      input.finishedAt,
+      input["finishedAt"],
       "build finish time",
       0,
       Number.MAX_SAFE_INTEGER
     ),
     exitCode: nullableInteger(
-      input.exitCode,
+      input["exitCode"],
       "build exit code",
       -2_147_483_648,
       2_147_483_647
@@ -190,22 +195,25 @@ export function parseWatchStatus(value: unknown): WatchStatus {
 
 export function parseWatchEvent(value: unknown): WatchEvent {
   const input = record(value, "watch event")
-  const kind = enumValue(input.kind, "watch event kind", ["status", "changed"])
+  const kind = enumValue(input["kind"], "watch event kind", [
+    "status",
+    "changed",
+  ])
   const projectPath = canonicalProjectPath(
-    nonEmptyString(input.projectPath, "watch project path", PATH_LIMIT)
+    nonEmptyString(input["projectPath"], "watch project path", PATH_LIMIT)
   )
   if (kind === "status") {
     return {
       kind,
       projectPath,
-      status: parseWatchStatus(input.status),
-      message: nullableString(input.message, "watch message", 8_192),
+      status: parseWatchStatus(input["status"]),
+      message: nullableString(input["message"], "watch message", 8_192),
     }
   }
   return {
     kind,
     projectPath,
-    changes: arrayValue(input.changes, "watch change kinds", 4, (change) =>
+    changes: arrayValue(input["changes"], "watch change kinds", 4, (change) =>
       enumValue(change, "watch change kind", [
         "create",
         "modify",
@@ -213,17 +221,17 @@ export function parseWatchEvent(value: unknown): WatchEvent {
         "rename",
       ])
     ),
-    paths: arrayValue(input.paths, "watch paths", 1_024, (path) =>
+    paths: arrayValue(input["paths"], "watch paths", 1_024, (path) =>
       projectRelativePath(nonEmptyString(path, "watch path", PATH_LIMIT))
     ),
-    truncated: booleanValue(input.truncated, "watch truncation"),
+    truncated: booleanValue(input["truncated"], "watch truncation"),
   }
 }
 
 export function parseProjectFilesEvent(value: unknown): CanonicalProjectPath {
   const input = record(value, "project files event")
   return canonicalProjectPath(
-    nonEmptyString(input.projectPath, "project files path", PATH_LIMIT)
+    nonEmptyString(input["projectPath"], "project files path", PATH_LIMIT)
   )
 }
 
@@ -232,7 +240,7 @@ export function parseBuildConfiguration(
 ): ProjectBuildConfiguration {
   const input = record(value, "build configuration")
   const schemaVersion = integer(
-    input.schemaVersion,
+    input["schemaVersion"],
     "build configuration version",
     1,
     1
@@ -241,51 +249,50 @@ export function parseBuildConfiguration(
     throw new IpcContractError("build configuration version")
   return {
     schemaVersion,
-    rootFile: nullableString(input.rootFile, "configured root", PATH_LIMIT),
+    rootFile: nullableString(input["rootFile"], "configured root", PATH_LIMIT),
     outputDirectory: nullableString(
-      input.outputDirectory,
+      input["outputDirectory"],
       "output directory",
       PATH_LIMIT
     ),
-    bibliographyTool: enumValue(input.bibliographyTool, "bibliography tool", [
-      "automatic",
-      "biber",
-      "bibtex",
-      "none",
-    ]),
+    bibliographyTool: enumValue(
+      input["bibliographyTool"],
+      "bibliography tool",
+      ["automatic", "biber", "bibtex", "none"]
+    ),
     generatedDirectories: arrayValue(
-      input.generatedDirectories,
+      input["generatedDirectories"],
       "generated directories",
       32,
       (directory) =>
         nonEmptyString(directory, "generated directory", PATH_LIMIT)
     ),
     environment: arrayValue(
-      input.environment,
+      input["environment"],
       "build environment",
       5,
       parseEnvironment
     ),
     customCommand:
-      input.customCommand === null
+      input["customCommand"] === null
         ? null
-        : parseCustomCommand(input.customCommand),
+        : parseCustomCommand(input["customCommand"]),
   }
 }
 
 export function parseCleanPreview(value: unknown): CleanPreview {
   const input = record(value, "clean preview")
   return {
-    files: arrayValue(input.files, "clean files", 4_096, (path) =>
+    files: arrayValue(input["files"], "clean files", 4_096, (path) =>
       projectRelativePath(nonEmptyString(path, "clean path", PATH_LIMIT))
     ),
     totalBytes: integer(
-      input.totalBytes,
+      input["totalBytes"],
       "clean byte count",
       0,
       Number.MAX_SAFE_INTEGER
     ),
-    truncated: booleanValue(input.truncated, "clean truncation"),
+    truncated: booleanValue(input["truncated"], "clean truncation"),
   }
 }
 
@@ -314,8 +321,8 @@ function parseBuildStatus(value: unknown) {
 function parseEnvironment(value: unknown) {
   const input = record(value, "environment setting")
   return {
-    name: nonEmptyString(input.name, "environment name", 128),
-    value: stringValue(input.value, "environment value", 4_096),
+    name: nonEmptyString(input["name"], "environment name", 128),
+    value: stringValue(input["value"], "environment value", 4_096),
   }
 }
 
@@ -323,12 +330,12 @@ function parseCustomCommand(value: unknown) {
   const input = record(value, "custom command")
   return {
     executable: nonEmptyString(
-      input.executable,
+      input["executable"],
       "custom executable",
       PATH_LIMIT
     ),
     arguments: arrayValue(
-      input.arguments,
+      input["arguments"],
       "custom arguments",
       128,
       (argument) => stringValue(argument, "custom argument", 4_096)
@@ -340,43 +347,46 @@ function parseBuildLogEntry(value: unknown): BuildLogEntry {
   const input = record(value, "build log entry")
   return {
     sequence: integer(
-      input.sequence,
+      input["sequence"],
       "build log sequence",
       1,
       Number.MAX_SAFE_INTEGER
     ),
     timestamp: integer(
-      input.timestamp,
+      input["timestamp"],
       "build log timestamp",
       0,
       Number.MAX_SAFE_INTEGER
     ),
-    stream: enumValue(input.stream, "build log stream", ["stdout", "stderr"]),
-    text: stringValue(input.text, "build log text", 4_128),
+    stream: enumValue(input["stream"], "build log stream", [
+      "stdout",
+      "stderr",
+    ]),
+    text: stringValue(input["text"], "build log text", 4_128),
   }
 }
 
 function parseBuildDiagnostic(value: unknown): BuildDiagnostic {
   const input = record(value, "build diagnostic")
   return {
-    severity: enumValue(input.severity, "diagnostic severity", [
+    severity: enumValue(input["severity"], "diagnostic severity", [
       "error",
       "warning",
     ]),
-    message: stringValue(input.message, "diagnostic message", 4_128),
-    file: parseNullableRelativePath(input.file, "diagnostic file"),
+    message: stringValue(input["message"], "diagnostic message", 4_128),
+    file: parseNullableRelativePath(input["file"], "diagnostic file"),
     line: nullableInteger(
-      input.line,
+      input["line"],
       "diagnostic line",
       1,
       Number.MAX_SAFE_INTEGER
     ),
     mappingUncertain: booleanValue(
-      input.mappingUncertain,
+      input["mappingUncertain"],
       "diagnostic mapping"
     ),
     logSequence: integer(
-      input.logSequence,
+      input["logSequence"],
       "diagnostic sequence",
       1,
       Number.MAX_SAFE_INTEGER

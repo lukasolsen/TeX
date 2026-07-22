@@ -175,7 +175,7 @@ export function latexFolding(): Extension {
       markerDOM: (open) => {
         const marker = document.createElement("span")
         marker.className = `cm-latex-fold-marker${open ? "" : " cm-latex-fold-marker-closed"}`
-        marker.textContent = open ? "\u25be" : "\u25b8"
+        marker.textContent = open ? "\u25BE" : "\u25B8"
         marker.setAttribute("aria-hidden", "true")
         return marker
       },

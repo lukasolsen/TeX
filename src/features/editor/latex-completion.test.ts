@@ -121,10 +121,11 @@ describe("LaTeX completion presentation", () => {
       source: "intro.tex",
     }
     const info = latexCompletionOption(item, 0).info
-    const node = typeof info === "function" ? info(item as never) : null
-    const card = node instanceof Node ? (node as HTMLElement) : null
-    expect(card?.querySelector(".tex-completion-icon-label")).not.toBeNull()
-    expect(card?.textContent).toContain("Defined in intro.tex")
+    expect(typeof info).toBe("function")
+    const render = info as unknown as (completion: LatexCompletionItem) => Node
+    const card = render(item) as HTMLElement
+    expect(card.querySelector(".tex-completion-icon-label")).not.toBeNull()
+    expect(card.textContent).toContain("Defined in intro.tex")
   })
 
   it("maps a backend item to a boosted, typed option", () => {

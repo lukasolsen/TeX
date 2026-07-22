@@ -89,7 +89,7 @@ export function latexDiagnosticsFor(
       layer: "project",
     })
   }
-  return merged.sort(
+  return merged.toSorted(
     (left, right) => left.from - right.from || left.to - right.to
   )
 }
@@ -193,7 +193,7 @@ export function latexDiagnostics(context: LatexDiagnosticsContext): Extension {
             project.available && (project.analysis?.complete ?? false)
           )
         )
-        return merged.map(toEditorDiagnostic)
+        return merged.map((diagnostic) => toEditorDiagnostic(diagnostic))
       },
       { delay: LINT_DELAY }
     ),

@@ -541,10 +541,18 @@ describe("hover lookup order", () => {
     const source =
       "\\documentclass{article}\\usepackage{amsmath}\\begin{document}\\end{document}\\chapter{x}\\section{x}\\subsection{x}\\title{x}\\author{x}\\date{x}\\maketitle\\label{x}\\ref{x}\\cite{x}\\item\\input{x}\\include{x}\\subfile{x}\\bibliography{x}\\addbibresource{x}\\includegraphics{x}"
 
-    for (let index = 0; index < source.length; index += 1) {
-      if (source[index] !== "\\") continue
-      const command = keywordAt(source, index)
-      if (command === null) continue
+    const indices = Array.from(
+      { length: source.length },
+      (_value, index) => index
+    )
+    const commands = indices
+      .filter((index) => source[index] === "\\")
+      .map((index) => keywordAt(source, index))
+      .filter(
+        (command): command is NonNullable<typeof command> => command !== null
+      )
+
+    for (const command of commands) {
       for (let position = command.from; position <= command.to; position += 1) {
         expect(keywordAt(source, position)?.documentation).toBeDefined()
       }

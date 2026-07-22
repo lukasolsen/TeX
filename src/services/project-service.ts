@@ -128,10 +128,9 @@ export async function readProjectImage(
 ): Promise<ProjectImage> {
   const mediaType = imageMediaType(relativePath)
   if (mediaType === null) {
-    throw {
+    throw Object.assign(new Error("TeX cannot display this image format."), {
       code: "unsupported-image",
-      message: "TeX cannot display this image format.",
-    } satisfies ProjectError
+    })
   }
   const response = await invoke<unknown>("read_project_image", {
     projectPath,

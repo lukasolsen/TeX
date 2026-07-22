@@ -158,7 +158,7 @@ export function latexCompletionSourceSummary(
  */
 export function latexInsertionPreview(insertText: string): string | null {
   if (!insertText.includes("\n") && !insertText.includes("${")) return null
-  return insertText.replace(/\$\{([^}]*)\}/g, "$1")
+  return insertText.replaceAll(/\$\{([^}]*)\}/g, "$1")
 }
 
 function renderInfo(item: LatexCompletionItem): Node {

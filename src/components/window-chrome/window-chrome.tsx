@@ -51,7 +51,7 @@ export function WindowChrome({
     void appWindow
       .isMaximized()
       .then(setMaximized)
-      .catch(() => undefined)
+      .catch(() => {})
   }, [mode])
 
   const startDragging = (event: MouseEvent<HTMLElement>) => {

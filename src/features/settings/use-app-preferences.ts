@@ -120,9 +120,10 @@ export function useAppPreferences(): AppPreferencesController {
     preferencesRef.current = normalized
     setPreferences(normalized)
     setSaveError(null)
-    const revision = ++saveRevision.current
+    saveRevision.current += 1
+    const revision = saveRevision.current
     void saveQueue.current
-      .enqueue(() => saveAppPreferences(normalized).then(() => undefined))
+      .enqueue(() => saveAppPreferences(normalized).then(() => {}))
       .catch(() => {
         if (revision === saveRevision.current) {
           setSaveError(

@@ -391,7 +391,8 @@ export function useProjectSession({
 
   const openProjectAtPath = useCallback(
     async (path: CanonicalProjectPath) => {
-      const request = ++projectRequest.current
+      projectRequest.current += 1
+      const request = projectRequest.current
       documentRequest.current += 1
       setState((current) =>
         withOpenFeedback(current, { status: "opening", path })
@@ -678,37 +679,35 @@ export function useProjectSession({
 
       if (!decision.schedulePersistence) return
 
-      if (recoveryTimer.current === null) {
-        recoveryTimer.current = setTimeout(() => {
-          recoveryTimer.current = null
-          const latest = stateRef.current
-          if (
-            latest.status !== "workspace" ||
-            latest.session.documentState.status !== "ready" ||
-            latest.session.documentState.document.path !== path
-          ) {
-            return
-          }
-          void saveRecoveryDraft({
-            projectPath: project.path,
-            relativePath: path,
-            content: latest.session.documentState.content,
-            baseRevision: latest.session.documentState.document.revision,
-          }).catch(() => {
-            setState((value) =>
-              value.status !== "workspace"
-                ? value
-                : {
-                    ...value,
-                    session: {
-                      ...value.session,
-                      notice: recoveryFailureNotice,
-                    },
-                  }
-            )
-          })
-        }, 150)
-      }
+      recoveryTimer.current ??= setTimeout(() => {
+        recoveryTimer.current = null
+        const latest = stateRef.current
+        if (
+          latest.status !== "workspace" ||
+          latest.session.documentState.status !== "ready" ||
+          latest.session.documentState.document.path !== path
+        ) {
+          return
+        }
+        void saveRecoveryDraft({
+          projectPath: project.path,
+          relativePath: path,
+          content: latest.session.documentState.content,
+          baseRevision: latest.session.documentState.document.revision,
+        }).catch(() => {
+          setState((value) =>
+            value.status !== "workspace"
+              ? value
+              : {
+                  ...value,
+                  session: {
+                    ...value.session,
+                    notice: recoveryFailureNotice,
+                  },
+                }
+          )
+        })
+      }, 150)
       if (saveTimer.current !== null) clearTimeout(saveTimer.current)
       saveTimer.current = setTimeout(() => {
         runDetached(saveActionRef.current())
@@ -962,7 +961,8 @@ export function useProjectSession({
       }
 
       if (!(await saveActiveDocument())) return
-      const request = ++documentRequest.current
+      documentRequest.current += 1
+      const request = documentRequest.current
       setState((current) => {
         if (current.status !== "workspace") return current
         const workspace = openDocument(current.session.workspace, path, pin)
@@ -1036,7 +1036,8 @@ export function useProjectSession({
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
 
-      const request = ++documentRequest.current
+      documentRequest.current += 1
+      const request = documentRequest.current
       const { project, workspace: previousWorkspace } = currentState.session
       const workspace = closeDocument(previousWorkspace, path)
       const closingActiveFile = previousWorkspace.selectedFile === path
@@ -1101,9 +1102,13 @@ export function useProjectSession({
       const currentState = stateRef.current
       if (currentState.status !== "workspace") return
 
-      const request = ++documentRequest.current
+      documentRequest.current += 1
+      const request = documentRequest.current
       const { project, workspace: previousWorkspace } = currentState.session
-      const workspace = paths.reduce(closeDocument, previousWorkspace)
+      const workspace = paths.reduce(
+        (accumulator, path) => closeDocument(accumulator, path),
+        previousWorkspace
+      )
       const activeFileChanged =
         workspace.selectedFile !== previousWorkspace.selectedFile
       const nextFile = workspace.selectedFile
@@ -1374,7 +1379,8 @@ export function useProjectSession({
           relativePath: path,
         })
         const project = await openProjectFolder(projectPath)
-        const request = ++documentRequest.current
+        documentRequest.current += 1
+        const request = documentRequest.current
         const previous = currentState.session.workspace
         const pinnedFiles = previous.pinnedFiles.filter(
           (file) => !isProjectPathWithin(file, path)
@@ -1636,7 +1642,8 @@ export function useProjectSession({
   const refreshProjectFiles = useCallback(async () => {
     const current = stateRef.current
     if (current.status !== "workspace") return
-    const request = ++projectRefreshRequest.current
+    projectRefreshRequest.current += 1
+    const request = projectRefreshRequest.current
     const projectPath = current.session.project.path
 
     try {

@@ -13,7 +13,7 @@ const minZoom = 0.1
 const maxZoom = 8
 
 function nextZoom(zoom: number, direction: 1 | -1): number {
-  const candidates = direction === 1 ? zoomSteps : [...zoomSteps].reverse()
+  const candidates = direction === 1 ? zoomSteps : zoomSteps.toReversed()
   return (
     candidates.find((step) =>
       direction === 1 ? step > zoom + 0.001 : step < zoom - 0.001

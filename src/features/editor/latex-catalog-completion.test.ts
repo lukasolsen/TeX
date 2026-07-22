@@ -65,7 +65,7 @@ describe("catalog completions", () => {
 
   it("ranks below project suggestions", () => {
     for (const option of optionsAtEnd("\\se")) {
-      expect(option.boost ?? 0).toBeLessThan(0)
+      expect(option.boost).toBeLessThan(0)
     }
   })
 

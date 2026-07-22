@@ -161,7 +161,7 @@ export function latexSemanticTokens(
 
   return tokens
     .filter(({ from, to }) => from < to)
-    .sort((left, right) => left.from - right.from || left.to - right.to)
+    .toSorted((left, right) => left.from - right.from || left.to - right.to)
 }
 
 export const setLatexSemanticContext =

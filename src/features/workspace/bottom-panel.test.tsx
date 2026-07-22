@@ -27,29 +27,28 @@ function renderPanel(tab: BottomPanelTab = "build") {
   return { onTabChange }
 }
 
+/** Inactive panes stay mounted and are hidden with a class, not unmounted. */
+function paneHidden(text: string): boolean {
+  const pane = screen.getByText(text).closest("div")
+  return pane?.className.includes("hidden") ?? true
+}
+
 describe("bottom dock", () => {
-  it.each<BottomPanelTab>(["build", "problems", "terminal"])(
-    "reports a switch to the %s tab",
-    async (tab) => {
-      // Every trigger must reach the handler; a value the handler silently
-      // drops makes its tab look broken rather than fail loudly.
-      const { onTabChange } = renderPanel(
-        tab === "build" ? "terminal" : "build"
-      )
+  it.each<[BottomPanelTab, BottomPanelTab]>([
+    ["build", "terminal"],
+    ["problems", "build"],
+    ["terminal", "build"],
+  ])("reports a switch to the %s tab", async (tab, initialTab) => {
+    // Every trigger must reach the handler; a value the handler silently
+    // drops makes its tab look broken rather than fail loudly.
+    const { onTabChange } = renderPanel(initialTab)
 
-      await userEvent.click(
-        screen.getByRole("tab", { name: new RegExp(tab, "i") })
-      )
+    await userEvent.click(
+      screen.getByRole("tab", { name: new RegExp(tab, "i") })
+    )
 
-      expect(onTabChange).toHaveBeenCalledWith(tab)
-    }
-  )
-
-  /** Inactive panes stay mounted and are hidden with a class, not unmounted. */
-  function paneHidden(text: string): boolean {
-    const pane = screen.getByText(text).closest("div")
-    return pane?.className.includes("hidden") ?? true
-  }
+    expect(onTabChange).toHaveBeenCalledWith(tab)
+  })
 
   it("shows the problems panel when its tab is active", () => {
     renderPanel("problems")
