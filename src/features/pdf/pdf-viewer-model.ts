@@ -1,4 +1,5 @@
 import type { PdfViewerState } from "@/domain/project"
+import { clamp } from "@/lib/math"
 
 export const MAX_SUPPORTED_PDF_PAGES = 2_048
 export const MAX_PDF_SEARCH_MATCH_PAGES = 500
@@ -98,7 +99,7 @@ export function stateAfterPdfReplacement(
   state: PdfViewerState,
   pageCount: number
 ): { state: PdfViewerState; pageClamped: boolean } {
-  const page = Math.max(1, Math.min(Math.max(1, pageCount), state.page))
+  const page = clamp(state.page, 1, Math.max(1, pageCount))
   return {
     state: { ...state, page },
     pageClamped: page !== state.page,

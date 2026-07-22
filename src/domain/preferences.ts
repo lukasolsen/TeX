@@ -4,6 +4,7 @@ import {
   defaultHiddenFileRules,
   normalizeHiddenFileRules,
 } from "@/domain/file-visibility"
+import { clamp, clampInt } from "@/lib/math"
 
 /**
  * Application preferences. These are device-local and apply to every project;
@@ -173,16 +174,6 @@ export function isEditorFontFamily(value: string): boolean {
   )
 }
 
-function clampInteger(value: number, minimum: number, maximum: number): number {
-  if (!Number.isFinite(value)) return minimum
-  return Math.min(maximum, Math.max(minimum, Math.round(value)))
-}
-
-function clampNumber(value: number, minimum: number, maximum: number): number {
-  if (!Number.isFinite(value)) return minimum
-  return Math.min(maximum, Math.max(minimum, value))
-}
-
 /**
  * Brings any preference set inside its supported range. Persisted state and IPC
  * payloads are untrusted, and a user can also drive a value to an edge with the
@@ -204,7 +195,7 @@ export function normalizeAppPreferences(
       fontFamily: isEditorFontFamily(preferences.editor.fontFamily)
         ? preferences.editor.fontFamily.trim()
         : "",
-      indentWidth: clampInteger(
+      indentWidth: clampInt(
         preferences.editor.indentWidth,
         MIN_INDENT_WIDTH,
         MAX_INDENT_WIDTH
@@ -212,12 +203,12 @@ export function normalizeAppPreferences(
     },
     assistance: {
       ...preferences.assistance,
-      completionLimit: clampInteger(
+      completionLimit: clampInt(
         preferences.assistance.completionLimit,
         MIN_COMPLETION_LIMIT,
         MAX_COMPLETION_LIMIT
       ),
-      hoverDelay: clampInteger(
+      hoverDelay: clampInt(
         preferences.assistance.hoverDelay,
         MIN_HOVER_DELAY,
         MAX_HOVER_DELAY
@@ -226,7 +217,7 @@ export function normalizeAppPreferences(
     build: { ...preferences.build },
     pdf: {
       ...preferences.pdf,
-      defaultZoom: clampNumber(
+      defaultZoom: clamp(
         preferences.pdf.defaultZoom,
         MIN_PDF_ZOOM,
         MAX_PDF_ZOOM
@@ -273,7 +264,7 @@ export function indentUnitText(
 ): string {
   return indentStyle === "tabs"
     ? "\t"
-    : " ".repeat(clampInteger(indentWidth, MIN_INDENT_WIDTH, MAX_INDENT_WIDTH))
+    : " ".repeat(clampInt(indentWidth, MIN_INDENT_WIDTH, MAX_INDENT_WIDTH))
 }
 
 /** The suggested font families offered as one-click presets in settings. */

@@ -13,6 +13,7 @@ import {
   resizeTerminal,
   writeTerminal,
 } from "@/services/terminal-service"
+import { decodeBase64, encodeUtf8Base64 } from "@/lib/base64"
 import { runDetached } from "@/lib/promises"
 
 const FONT_FAMILY =
@@ -254,20 +255,4 @@ function terminalTheme(): ITheme {
     brightCyan: "#06b6d4",
     brightWhite: "#18181b",
   }
-}
-
-function decodeBase64(value: string): Uint8Array {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index)
-  }
-  return bytes
-}
-
-function encodeUtf8Base64(text: string): string {
-  const bytes = new TextEncoder().encode(text)
-  let binary = ""
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary)
 }

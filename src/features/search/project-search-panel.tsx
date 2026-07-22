@@ -20,6 +20,7 @@ import {
 } from "@/services/project-service"
 import { runDetached } from "@/lib/promises"
 import { createLatestRequest } from "@/lib/latest-request"
+import { escapeRegExp } from "@/lib/regex"
 
 type SearchState =
   | { status: "idle" }
@@ -36,7 +37,7 @@ function previewReplacement(
   replacement: string,
   caseSensitive: boolean
 ): string {
-  const escaped = query.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  const escaped = escapeRegExp(query)
   return context.replace(
     new RegExp(escaped, caseSensitive ? "g" : "gi"),
     () => replacement

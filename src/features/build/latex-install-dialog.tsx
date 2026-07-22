@@ -40,6 +40,7 @@ import {
   type ManualInstruction,
 } from "@/domain/latex-install"
 import type { LatexInstallController } from "@/features/build/use-latex-install"
+import { formatDuration } from "@/lib/format"
 import { useClipboard } from "@/lib/use-clipboard"
 import { runDetached } from "@/lib/promises"
 import { cn } from "@/lib/utils"
@@ -638,12 +639,6 @@ function useElapsedSeconds(active: boolean, startedAt: number): number {
     return () => window.clearInterval(interval)
   }, [active])
   return Math.max(0, now - startedAt)
-}
-
-function formatDuration(seconds: number): string {
-  const minutes = Math.floor(seconds / 60)
-  const remainder = seconds % 60
-  return `${minutes}:${remainder.toString().padStart(2, "0")}`
 }
 
 function stepStatusLabel(status: InstallStepState["status"]): string {

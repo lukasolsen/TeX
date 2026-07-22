@@ -25,6 +25,7 @@ import type {
   ProjectRelativePath,
 } from "@/domain/identifiers"
 import { projectFileKind } from "@/domain/file-kind"
+import { absoluteDisplayPath } from "@/lib/path"
 import { runDetached } from "@/lib/promises"
 import { useClipboard } from "@/lib/use-clipboard"
 
@@ -41,17 +42,6 @@ function TabIcon({ path }: { path: ProjectRelativePath }): ReactElement {
     case "unsupported":
       return <ScrollText data-icon="inline-start" />
   }
-}
-
-function absoluteDisplayPath(
-  projectPath: CanonicalProjectPath,
-  relativePath: ProjectRelativePath
-): string {
-  const windowsPath = projectPath.includes("\\") && !projectPath.includes("/")
-  const separator = windowsPath ? "\\" : "/"
-  const root = projectPath.replace(/[\\/]$/, "")
-  const child = windowsPath ? relativePath.replaceAll("/", "\\") : relativePath
-  return `${root}${separator}${child}`
 }
 
 export function SourceTabs({

@@ -361,3 +361,29 @@ export function formatBuildInvocation(
     .map((part) => (/^[\w./=+-]+$/.test(part) ? part : JSON.stringify(part)))
     .join(" ")
 }
+
+/** Narrows an unknown value to a supported build engine. */
+export function isBuildEngine(value: unknown): value is BuildEngine {
+  return (
+    value === "latexmkPdf" ||
+    value === "pdfLatex" ||
+    value === "xeLatex" ||
+    value === "luaLatex"
+  )
+}
+
+/** Narrows a nullable string to a supported bibliography tool. */
+export function isBibliographyTool(
+  value: string | null
+): value is BibliographyTool {
+  return ["automatic", "biber", "bibtex", "none"].includes(value ?? "")
+}
+
+/** Renders a diagnostic as `file:line: SEVERITY: message` for copy-out. */
+export function formatDiagnostic(diagnostic: BuildDiagnostic): string {
+  const location =
+    diagnostic.file === null
+      ? ""
+      : `${diagnostic.file}${diagnostic.line === null ? "" : `:${diagnostic.line}`}: `
+  return `${location}${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`
+}

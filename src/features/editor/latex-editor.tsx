@@ -76,6 +76,7 @@ import {
   type NavigationTarget,
 } from "@/features/editor/latex-navigation"
 import { requestLatexSymbol } from "@/services/latex-analysis-service"
+import { clamp } from "@/lib/math"
 import { runDetached } from "@/lib/promises"
 import {
   editorContextActions,
@@ -107,12 +108,14 @@ import {
   type EditorPreferences,
 } from "@/domain/preferences"
 import {
-  projectRelativePath,
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
 import { isLatexSource, isOpenableFile } from "@/domain/file-kind"
-import { treeContainsPath } from "@/features/projects/project-model"
+import {
+  projectFilePaths,
+  treeContainsPath,
+} from "@/features/projects/project-model"
 
 export type EditorTarget = Readonly<{
   line: number
@@ -127,9 +130,7 @@ function viewerSelectionPosition(
   viewerState: EditorViewerState | undefined
 ): number {
   const document = EditorState.create({ doc: content }).doc
-  const line = document.line(
-    Math.max(1, Math.min(viewerState?.line ?? 1, document.lines))
-  )
+  const line = document.line(clamp(viewerState?.line ?? 1, 1, document.lines))
   return Math.min(
     line.to,
     line.from + Math.max(0, (viewerState?.column ?? 1) - 1)
@@ -166,21 +167,6 @@ const projectReferenceField = StateField.define({
   },
   provide: (field) => EditorView.decorations.from(field),
 })
-
-function projectFilePaths(
-  entry: ProjectEntry,
-  parentPath: ProjectRelativePath | null = null,
-  paths = new Set<ProjectRelativePath>()
-): Set<ProjectRelativePath> {
-  for (const child of entry.children) {
-    const path = projectRelativePath(
-      parentPath === null ? child.name : `${parentPath}/${child.name}`
-    )
-    if (child.kind === "file") paths.add(path)
-    projectFilePaths(child, path, paths)
-  }
-  return paths
-}
 
 function sourceEditorTheme(fontSize: number, editor: EditorPreferences) {
   return EditorView.theme({

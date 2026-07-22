@@ -25,6 +25,7 @@ import {
   type LatexDiagnosticEntry,
 } from "@/domain/latex-diagnostics"
 import { requestLatexProjectAnalysis } from "@/services/latex-analysis-service"
+import { clamp } from "@/lib/math"
 
 /**
  * How long the editor waits after the last keystroke before analysing. Long
@@ -64,9 +65,9 @@ const projectAnalysisField = StateField.define<ProjectState>({
 
 /** Maps a 1-based line and UTF-16 column span onto document positions. */
 function spanRange(doc: Text, span: LatexSpan): { from: number; to: number } {
-  const startLine = doc.line(Math.min(Math.max(span.line, 1), doc.lines))
+  const startLine = doc.line(clamp(span.line, 1, doc.lines))
   const from = Math.min(startLine.to, startLine.from + span.column - 1)
-  const endLine = doc.line(Math.min(Math.max(span.endLine, 1), doc.lines))
+  const endLine = doc.line(clamp(span.endLine, 1, doc.lines))
   const to = Math.min(endLine.to, endLine.from + span.endColumn - 1)
   return { from, to: Math.max(from, to) }
 }

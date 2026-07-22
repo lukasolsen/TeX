@@ -33,6 +33,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   formatBuildInvocation,
+  isBuildEngine,
   selectedBuildRun,
   type BuildEngine,
   type BuildProfile,
@@ -53,6 +54,7 @@ import { useInstallCompletionNotice } from "@/features/build/use-install-complet
 import { useLatexInstall } from "@/features/build/use-latex-install"
 import type { LatexInstallController } from "@/features/build/use-latex-install"
 import { installStepSummary } from "@/domain/latex-install"
+import { formatClockTime } from "@/lib/format"
 
 export function BuildPanel({
   dispatch,
@@ -446,7 +448,7 @@ function BuildStatus({
   if (issue !== null && run === null) details.push(issue.message)
   if (run !== null && run.status !== "running") {
     details.push(diagnosticSummary(run))
-    if (run.finishedAt !== null) details.push(formatRunTime(run.finishedAt))
+    if (run.finishedAt !== null) details.push(formatClockTime(run.finishedAt))
     if (run.exitCode !== null && run.exitCode !== 0)
       details.push(`exit ${run.exitCode}`)
   }
@@ -887,7 +889,7 @@ function watchLabel(state: ProjectWatchState): string | null {
 }
 
 function runLabel(run: BuildRun, index: number): string {
-  const time = formatRunTime(run.startedAt)
+  const time = formatClockTime(run.startedAt)
   return index === 0
     ? `Latest · ${statusLabel(run.status)}`
     : `${time} · ${statusLabel(run.status)}`
@@ -899,21 +901,4 @@ function diagnosticSummary(run: BuildRun): string {
   ).length
   const warnings = run.diagnostics.length - errors
   return `${errors} ${errors === 1 ? "error" : "errors"}, ${warnings} ${warnings === 1 ? "warning" : "warnings"}`
-}
-
-function formatRunTime(timestamp: number): string {
-  return new Date(timestamp * 1_000).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
-}
-
-function isBuildEngine(value: unknown): value is BuildEngine {
-  return (
-    value === "latexmkPdf" ||
-    value === "pdfLatex" ||
-    value === "xeLatex" ||
-    value === "luaLatex"
-  )
 }

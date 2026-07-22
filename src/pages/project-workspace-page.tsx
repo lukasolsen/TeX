@@ -47,7 +47,7 @@ import { useProjectWatch } from "@/features/build/use-project-watch"
 import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
-import { selectedBuildRun, type BuildDiagnostic } from "@/domain/build"
+import { formatDiagnostic, selectedBuildRun } from "@/domain/build"
 import { revealProjectOutput } from "@/services/build-service"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import { runDetached } from "@/lib/promises"
@@ -964,12 +964,4 @@ function StatusDivider(): ReactElement {
       className="h-3.5 w-px shrink-0 bg-status-foreground/20"
     />
   )
-}
-
-function formatDiagnostic(diagnostic: BuildDiagnostic): string {
-  const location =
-    diagnostic.file === null
-      ? ""
-      : `${diagnostic.file}${diagnostic.line === null ? "" : `:${diagnostic.line}`}: `
-  return `${location}${diagnostic.severity.toUpperCase()}: ${diagnostic.message}`
 }

@@ -22,11 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type {
-  BibliographyTool,
-  ProjectBuildConfiguration,
-} from "@/domain/build"
-import { formatBuildInvocation } from "@/domain/build"
+import type { ProjectBuildConfiguration } from "@/domain/build"
+import { formatBuildInvocation, isBibliographyTool } from "@/domain/build"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import { runDetached } from "@/lib/promises"
 
@@ -313,8 +310,4 @@ function parseEnvironment(
     })
   }
   return environment
-}
-
-function isBibliographyTool(value: string | null): value is BibliographyTool {
-  return ["automatic", "biber", "bibtex", "none"].includes(value ?? "")
 }

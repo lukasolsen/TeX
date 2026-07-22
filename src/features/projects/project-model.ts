@@ -190,3 +190,19 @@ export function formatLastOpened(timestamp: number, now = Date.now()): string {
     dateStyle: "medium",
   }).format(new Date(timestamp))}`
 }
+
+/** Collects the paths of every file (not directory) in a project tree. */
+export function projectFilePaths(
+  entry: ProjectEntry,
+  parentPath: ProjectRelativePath | null = null,
+  paths = new Set<ProjectRelativePath>()
+): Set<ProjectRelativePath> {
+  for (const child of entry.children) {
+    const path = projectRelativePath(
+      parentPath === null ? child.name : `${parentPath}/${child.name}`
+    )
+    if (child.kind === "file") paths.add(path)
+    projectFilePaths(child, path, paths)
+  }
+  return paths
+}
