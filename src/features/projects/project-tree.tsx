@@ -521,9 +521,7 @@ export function ProjectTree({
               className="border-t px-3 py-1.5 text-xs text-muted-foreground"
               role="status"
             >
-              {clipboard.status === "copied"
-                ? "Relative path copied."
-                : "Could not copy the relative path."}
+              Relative path copied.
             </p>
           ) : null}
         </aside>

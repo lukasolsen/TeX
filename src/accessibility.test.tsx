@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event"
 import axe from "axe-core"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { initialProjectBuildState } from "@/domain/build"
 import type { ProjectSession, StartupState } from "@/domain/project"
 import { canonicalProjectPath } from "@/domain/identifiers"
@@ -149,29 +150,31 @@ describe("primary workflow accessibility", () => {
 
   it("exposes build and empty PDF controls without unnamed actions", async () => {
     const { unmount } = render(
-      <BuildPanel
-        activeDiagnosticIndex={null}
-        configurationState={{ status: "loading" }}
-        dispatch={callback}
-        engine="latexmkPdf"
-        logContextSequence={null}
-        onBuild={callback}
-        onClean={callback}
-        onLatexInstalled={callback}
-        onNavigate={callback}
-        onRevealOutput={callback}
-        onSaveConfiguration={asyncCallback}
-        onSelectDiagnostic={callback}
-        onStartWatch={callback}
-        onStop={callback}
-        onStopWatch={callback}
-        onTabChange={callback}
-        profiles={{ status: "loading" }}
-        setEngine={callback}
-        state={initialProjectBuildState}
-        tab="output"
-        watch={{ status: "off", message: null }}
-      />
+      <NotificationProvider>
+        <BuildPanel
+          activeDiagnosticIndex={null}
+          configurationState={{ status: "loading" }}
+          dispatch={callback}
+          engine="latexmkPdf"
+          logContextSequence={null}
+          onBuild={callback}
+          onClean={callback}
+          onLatexInstalled={callback}
+          onNavigate={callback}
+          onRevealOutput={callback}
+          onSaveConfiguration={asyncCallback}
+          onSelectDiagnostic={callback}
+          onStartWatch={callback}
+          onStop={callback}
+          onStopWatch={callback}
+          onTabChange={callback}
+          profiles={{ status: "loading" }}
+          setEngine={callback}
+          state={initialProjectBuildState}
+          tab="output"
+          watch={{ status: "off", message: null }}
+        />
+      </NotificationProvider>
     )
     expect(screen.getByRole("region", { name: "Build" })).toBeTruthy()
     await expectNoAutomatedAccessibilityViolations()

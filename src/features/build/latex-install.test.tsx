@@ -23,6 +23,7 @@ import {
   canonicalProjectPath,
   projectRelativePath,
 } from "@/domain/identifiers"
+import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { BuildPanel } from "@/features/build/build-panel"
 
 const projectPath = canonicalProjectPath("/projects/report")
@@ -134,32 +135,34 @@ function renderPanel(
   overrides: { profiles?: BuildProfile[]; setEngine?: typeof noop } = {}
 ) {
   return render(
-    <BuildPanel
-      activeDiagnosticIndex={null}
-      configurationState={{ status: "loading" }}
-      dispatch={noop}
-      engine="latexmkPdf"
-      logContextSequence={null}
-      onBuild={noop}
-      onClean={noop}
-      onLatexInstalled={noop}
-      onNavigate={noop}
-      onRevealOutput={noop}
-      onSaveConfiguration={asyncNoop}
-      onSelectDiagnostic={noop}
-      onStartWatch={noop}
-      onStop={noop}
-      onStopWatch={noop}
-      onTabChange={noop}
-      profiles={{
-        status: "ready",
-        profiles: overrides.profiles ?? [missing],
-      }}
-      setEngine={overrides.setEngine ?? noop}
-      state={initialProjectBuildState}
-      tab="output"
-      watch={{ status: "off", message: null }}
-    />
+    <NotificationProvider>
+      <BuildPanel
+        activeDiagnosticIndex={null}
+        configurationState={{ status: "loading" }}
+        dispatch={noop}
+        engine="latexmkPdf"
+        logContextSequence={null}
+        onBuild={noop}
+        onClean={noop}
+        onLatexInstalled={noop}
+        onNavigate={noop}
+        onRevealOutput={noop}
+        onSaveConfiguration={asyncNoop}
+        onSelectDiagnostic={noop}
+        onStartWatch={noop}
+        onStop={noop}
+        onStopWatch={noop}
+        onTabChange={noop}
+        profiles={{
+          status: "ready",
+          profiles: overrides.profiles ?? [missing],
+        }}
+        setEngine={overrides.setEngine ?? noop}
+        state={initialProjectBuildState}
+        tab="output"
+        watch={{ status: "off", message: null }}
+      />
+    </NotificationProvider>
   )
 }
 
@@ -242,10 +245,14 @@ describe("completion feedback", () => {
       })
     )
 
-    const notice = await screen.findByRole("status", { name: "" })
-    expect(notice.textContent).toContain("LaTeX installed")
+    const notifications = await screen.findByRole("region", {
+      name: "Notifications",
+    })
+    expect(notifications.textContent).toContain("LaTeX installed")
     await userEvent.click(
-      screen.getByRole("button", { name: "Dismiss installation notice" })
+      screen.getByRole("button", {
+        name: "Dismiss notification: LaTeX installed",
+      })
     )
     expect(screen.queryByText("LaTeX installed")).toBeNull()
   })
@@ -301,36 +308,38 @@ describe("latexmk cached failures", () => {
   it("explains the replayed error and routes to the clean action", async () => {
     const onClean = vi.fn<(...arguments_: unknown[]) => void>()
     render(
-      <BuildPanel
-        activeDiagnosticIndex={null}
-        configurationState={{ status: "loading" }}
-        dispatch={noop}
-        engine="latexmkPdf"
-        logContextSequence={null}
-        onBuild={noop}
-        onClean={onClean}
-        onLatexInstalled={noop}
-        onNavigate={noop}
-        onRevealOutput={noop}
-        onSaveConfiguration={asyncNoop}
-        onSelectDiagnostic={noop}
-        onStartWatch={noop}
-        onStop={noop}
-        onStopWatch={noop}
-        onTabChange={noop}
-        profiles={{
-          status: "ready",
-          profiles: [{ ...missing, available: true }],
-        }}
-        setEngine={noop}
-        state={{
-          ...initialProjectBuildState,
-          runs: [failedRun],
-          selectedRunId: failedRun.id,
-        }}
-        tab="problems"
-        watch={{ status: "off", message: null }}
-      />
+      <NotificationProvider>
+        <BuildPanel
+          activeDiagnosticIndex={null}
+          configurationState={{ status: "loading" }}
+          dispatch={noop}
+          engine="latexmkPdf"
+          logContextSequence={null}
+          onBuild={noop}
+          onClean={onClean}
+          onLatexInstalled={noop}
+          onNavigate={noop}
+          onRevealOutput={noop}
+          onSaveConfiguration={asyncNoop}
+          onSelectDiagnostic={noop}
+          onStartWatch={noop}
+          onStop={noop}
+          onStopWatch={noop}
+          onTabChange={noop}
+          profiles={{
+            status: "ready",
+            profiles: [{ ...missing, available: true }],
+          }}
+          setEngine={noop}
+          state={{
+            ...initialProjectBuildState,
+            runs: [failedRun],
+            selectedRunId: failedRun.id,
+          }}
+          tab="problems"
+          watch={{ status: "off", message: null }}
+        />
+      </NotificationProvider>
     )
 
     const alert = screen.getByRole("alert", {

@@ -619,11 +619,7 @@ function CommandLine({ command }: { command: string }) {
         <Copy aria-hidden="true" />
       </Button>
       <span aria-live="polite" className="sr-only">
-        {clipboard.status === "copied"
-          ? "Command copied"
-          : clipboard.status === "error"
-            ? "Copy failed"
-            : ""}
+        {clipboard.status === "copied" ? "Command copied" : ""}
       </span>
     </span>
   )

@@ -49,7 +49,7 @@ import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
 import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 import { LatexInstallDialog } from "@/features/build/latex-install-dialog"
-import { LatexInstallToast } from "@/features/build/latex-install-toast"
+import { useInstallCompletionNotice } from "@/features/build/use-install-completion-notice"
 import { useLatexInstall } from "@/features/build/use-latex-install"
 import type { LatexInstallController } from "@/features/build/use-latex-install"
 import { installStepSummary } from "@/domain/latex-install"
@@ -104,6 +104,12 @@ export function BuildPanel({
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
   const install = useLatexInstall({ onInstalled: onLatexInstalled })
+  useInstallCompletionNotice({
+    acknowledge: install.acknowledgeNotice,
+    notice: install.notice,
+    onOpenDetails: () => setInstallOpen(true),
+    suppressed: installOpen,
+  })
   const run = selectedBuildRun(state)
   const running = state.runs.some((item) => item.status === "running")
   const pending = state.action.status === "pending"
@@ -320,16 +326,6 @@ export function BuildPanel({
         <p className="sr-only" aria-live="polite">
           {watch.message}
         </p>
-      ) : null}
-      {install.notice !== null && !installOpen ? (
-        <LatexInstallToast
-          notice={install.notice}
-          onDismiss={install.acknowledgeNotice}
-          onOpenDetails={() => {
-            install.acknowledgeNotice()
-            setInstallOpen(true)
-          }}
-        />
       ) : null}
       {installOpen ? (
         <LatexInstallDialog

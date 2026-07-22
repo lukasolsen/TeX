@@ -169,7 +169,7 @@ export function SourceTabs({
           className="pointer-events-none absolute top-2 right-2 rounded bg-popover px-2 py-1 text-[11px] shadow-sm"
           role="status"
         >
-          {clipboard.status === "copied" ? "Path copied" : "Copy failed"}
+          Path copied
         </span>
       ) : null}
     </Tabs>
