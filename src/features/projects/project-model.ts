@@ -5,6 +5,7 @@ import type {
   RootEvidence,
 } from "@/domain/project"
 import { latexCommands, latexFileReferences } from "@/domain/latex"
+import type { HiddenEntryPredicate } from "@/domain/file-visibility"
 import {
   projectRelativePath,
   type ProjectRelativePath,
@@ -40,6 +41,20 @@ export function projectTreeNodes(
       parentPath === null ? child.name : `${parentPath}/${child.name}`
     ),
   }))
+}
+
+/** Counts the entries the configured rules would remove from the tree. */
+export function countHiddenEntries(
+  entry: ProjectEntry,
+  isHidden: HiddenEntryPredicate
+): number {
+  let total = 0
+  for (const child of entry.children) {
+    // A hidden folder counts once; its contents are already unreachable.
+    if (isHidden(child.name)) total += 1
+    else total += countHiddenEntries(child, isHidden)
+  }
+  return total
 }
 
 export function isReadableSource(path: string): boolean {

@@ -204,10 +204,11 @@ fn collect_tree(
     for entry in fs::read_dir(directory).map_err(map_io_error)? {
         let entry = entry.map_err(map_io_error)?;
         let file_type = entry.file_type().map_err(map_io_error)?;
-        if file_type.is_symlink()
-            || ignored_name(entry.file_name().as_os_str())
-            || (file_type.is_file() && ignored_generated_file(&entry.path()))
-        {
+        // Generated files are deliberately *not* filtered here. Which artifacts
+        // are worth showing is a user preference, so the tree carries every
+        // entry and the sidebar applies the configured rules at render time —
+        // that way changing a rule updates the tree without a rescan.
+        if file_type.is_symlink() || ignored_name(entry.file_name().as_os_str()) {
             continue;
         }
         *visited_entries += 1;
@@ -288,27 +289,6 @@ fn ignored_name(name: &std::ffi::OsStr) -> bool {
                 | "_build"
         )
     )
-}
-
-fn ignored_generated_file(path: &Path) -> bool {
-    matches!(
-        path.extension().and_then(|extension| extension.to_str()),
-        Some(
-            "aux"
-                | "bbl"
-                | "bcf"
-                | "blg"
-                | "fdb_latexmk"
-                | "fls"
-                | "log"
-                | "out"
-                | "synctex"
-                | "toc"
-        )
-    ) || path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.ends_with(".synctex.gz") || name.ends_with(".run.xml"))
 }
 
 fn display_name(path: &Path) -> String {
@@ -400,7 +380,9 @@ mod tests {
             .children
             .iter()
             .any(|entry| entry.name == ".git"));
-        assert!(!project
+        // Build artifacts stay in the tree; hiding them is a display preference
+        // applied in the sidebar, not something the scan decides.
+        assert!(project
             .tree
             .children
             .iter()

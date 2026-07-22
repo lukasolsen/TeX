@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeSet, HashMap},
     path::{Component, Path, PathBuf},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc, Arc, Mutex, MutexGuard,
     },
     thread,
@@ -106,6 +106,7 @@ pub struct WatchError {
 pub struct WatchController {
     projects: Arc<Mutex<HashMap<PathBuf, ActiveWatch>>>,
     tree_projects: Arc<Mutex<HashMap<PathBuf, ActiveTreeWatch>>>,
+    next_tree_generation: Arc<AtomicU64>,
 }
 
 struct ActiveWatch {
@@ -114,6 +115,9 @@ struct ActiveWatch {
 }
 
 struct ActiveTreeWatch {
+    /// Distinguishes successive watchers for the same project so a worker that
+    /// is shutting down never evicts the registration of its replacement.
+    generation: u64,
     stop: mpsc::Sender<()>,
 }
 
@@ -135,6 +139,9 @@ pub fn start_project_tree_watch(
         .resolve(&project_path)
         .map_err(|_| watch_unavailable())?;
     let (stop_sender, stop_receiver) = mpsc::channel();
+    let generation = controller
+        .next_tree_generation
+        .fetch_add(1, Ordering::Relaxed);
     {
         let mut projects = controller
             .tree_projects
@@ -146,17 +153,23 @@ pub fn start_project_tree_watch(
         if projects.len() >= MAX_ACTIVE_WATCHES {
             return Err(watch_capacity());
         }
-        projects.insert(root.clone(), ActiveTreeWatch { stop: stop_sender });
+        projects.insert(
+            root.clone(),
+            ActiveTreeWatch {
+                generation,
+                stop: stop_sender,
+            },
+        );
     }
 
     let owned = controller.inner().clone();
     let worker_root = root.clone();
     if thread::Builder::new()
         .name("tex-project-tree-watch".to_owned())
-        .spawn(move || run_tree_watch(app, owned, worker_root, stop_receiver))
+        .spawn(move || run_tree_watch(app, owned, worker_root, generation, stop_receiver))
         .is_err()
     {
-        remove_tree_watch(&controller, &root);
+        remove_tree_watch(&controller, &root, generation);
         return Err(watch_unavailable());
     }
     Ok(())
@@ -171,11 +184,14 @@ pub fn stop_project_tree_watch(
     let root = access
         .resolve(&project_path)
         .map_err(|_| watch_unavailable())?;
-    let projects = controller
+    let mut projects = controller
         .tree_projects
         .lock()
         .map_err(|_| watch_unavailable())?;
-    if let Some(watch) = projects.get(&root) {
+    // Deregister before signalling: the worker only notices the stop on its next
+    // poll, and until then a restart for the same project would be swallowed as
+    // "already watching" and leave the tree with no watcher at all.
+    if let Some(watch) = projects.remove(&root) {
         let _ = watch.stop.send(());
     }
     Ok(())
@@ -368,6 +384,7 @@ fn run_tree_watch(
     app: AppHandle,
     controller: WatchController,
     root: PathBuf,
+    generation: u64,
     stop_receiver: mpsc::Receiver<()>,
 ) {
     let (event_sender, event_receiver) = mpsc::sync_channel(WATCH_CHANNEL_CAPACITY);
@@ -382,11 +399,11 @@ fn run_tree_watch(
         Config::default(),
     );
     let Ok(mut watcher) = watcher else {
-        remove_tree_watch(&controller, &root);
+        remove_tree_watch(&controller, &root, generation);
         return;
     };
     if watcher.watch(&root, RecursiveMode::Recursive).is_err() {
-        remove_tree_watch(&controller, &root);
+        remove_tree_watch(&controller, &root, generation);
         return;
     }
 
@@ -394,7 +411,7 @@ fn run_tree_watch(
     let mut first_event = None;
     loop {
         if stop_receiver.try_recv().is_ok() {
-            remove_tree_watch(&controller, &root);
+            remove_tree_watch(&controller, &root, generation);
             return;
         }
         match event_receiver.recv_timeout(Duration::from_millis(50)) {
@@ -402,7 +419,7 @@ fn run_tree_watch(
                 if classify_event(&event.kind).is_some()
                     && event.paths.iter().any(|path| {
                         path.strip_prefix(&root)
-                            .is_ok_and(|relative| !is_ignored(relative, &[]))
+                            .is_ok_and(|relative| !is_structurally_ignored(relative, &[]))
                     }) =>
             {
                 last_event = Some(Instant::now());
@@ -410,7 +427,7 @@ fn run_tree_watch(
             }
             Ok(Ok(_)) | Err(mpsc::RecvTimeoutError::Timeout) => {}
             Ok(Err(_)) | Err(mpsc::RecvTimeoutError::Disconnected) => {
-                remove_tree_watch(&controller, &root);
+                remove_tree_watch(&controller, &root, generation);
                 return;
             }
         }
@@ -525,13 +542,24 @@ fn classify_event(kind: &EventKind) -> Option<ProjectChangeKind> {
     }
 }
 
-fn is_ignored(path: &Path, excluded_directories: &[String]) -> bool {
+/// Directory-level exclusions only. The project tree uses this rather than
+/// [`is_ignored`] because the tree must refresh when a generated file appears:
+/// whether that file is *shown* is a user preference resolved in the UI, and a
+/// tree that never learned the file exists could not honour it.
+fn is_structurally_ignored(path: &Path, excluded_directories: &[String]) -> bool {
     path.components().any(|component| match component {
         Component::Normal(value) => GENERATED_DIRECTORIES.iter().any(|name| value == *name),
         _ => false,
     }) || excluded_directories
         .iter()
         .any(|directory| path.starts_with(Path::new(directory)))
+}
+
+/// Build-watch exclusions. Generated extensions stay ignored here regardless of
+/// display preferences: a build writes its own `.aux`/`.log`, so reacting to
+/// them would make watch mode rebuild forever.
+fn is_ignored(path: &Path, excluded_directories: &[String]) -> bool {
+    is_structurally_ignored(path, excluded_directories)
         || path
             .extension()
             .and_then(|value| value.to_str())
@@ -575,9 +603,16 @@ fn remove_watch(controller: &WatchController, root: &Path) {
     }
 }
 
-fn remove_tree_watch(controller: &WatchController, root: &Path) {
+/// Deregisters a tree watcher, leaving any newer registration for the same
+/// project untouched so a restart survives the previous worker's shutdown.
+fn remove_tree_watch(controller: &WatchController, root: &Path, generation: u64) {
     if let Ok(mut projects) = controller.tree_projects.lock() {
-        projects.remove(root);
+        if projects
+            .get(root)
+            .is_some_and(|watch| watch.generation == generation)
+        {
+            projects.remove(root);
+        }
     }
 }
 

@@ -10,9 +10,9 @@ import type {
 } from "@/domain/latex-completion"
 import { parseLatexCompletionResponse } from "@/domain/latex-completion"
 
+import type { AppPreferences } from "@/domain/preferences"
 import type {
   ProjectError,
-  AppPreferences,
   ProjectSearchResponse,
   ProjectSummary,
   RecoveryDraft,

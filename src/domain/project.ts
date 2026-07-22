@@ -87,11 +87,20 @@ export type PdfViewerState = Readonly<{
   sidebar: PdfSidebarMode
 }>
 
-export type ColorTheme = "system" | "light" | "dark" | "custom"
+/** The accent colour is applied on top of whichever scheme is in force, so it
+ * is not one of these. */
+export type ColorTheme = "system" | "light" | "dark"
 
-export type AppPreferences = Readonly<{
-  colorTheme: ColorTheme
-  accentColor: string
+/**
+ * `extension` matches any entry whose name ends with `.<value>`, so `synctex.gz`
+ * covers `main.synctex.gz`. `name` matches a whole entry name. Both compare
+ * case-insensitively and apply to files and folders alike.
+ */
+export type HiddenFileRuleKind = "extension" | "name"
+
+export type HiddenFileRule = Readonly<{
+  kind: HiddenFileRuleKind
+  value: string
 }>
 
 export type StartupState = Readonly<{

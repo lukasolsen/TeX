@@ -42,8 +42,10 @@ function renderPanel(
   render(
     <ProblemsPanel
       analysed
+      analysisEnabled
       diagnostics={diagnostics}
       onNavigate={onNavigate}
+      onOpenSettings={vi.fn<() => void>()}
       onSelect={vi.fn<(index: number) => void>()}
       path={path}
       projectAnalysisComplete

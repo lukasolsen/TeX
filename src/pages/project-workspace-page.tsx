@@ -29,6 +29,8 @@ import {
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
+import type { HiddenEntryPredicate } from "@/domain/file-visibility"
+import type { AppPreferences } from "@/domain/preferences"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
 import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
@@ -56,6 +58,7 @@ export function ProjectWorkspacePage({
   onOpenPdf,
   onReturnHome,
   onOpenSettings,
+  isHidden,
   onResizeSidebar,
   onCloseFile,
   onCloseFiles,
@@ -71,18 +74,21 @@ export function ProjectWorkspacePage({
   onSaveDocument,
   onSetEditorFontSize,
   onSelectRoot,
+  preferences,
   onUpdatePdfViewerState,
   onUpdateEditorViewerState,
   onUpdateWorkspaceView,
   restoreFocus,
   restoreFocusToken,
   session,
+  shortcutsEnabled,
 }: {
   feedback: OpenProjectFeedback
   onOpenProject: () => void
   onOpenPdf: (path: ProjectRelativePath) => void
   onReturnHome: () => void
   onOpenSettings: (focus: WorkspaceFocus) => void
+  isHidden: HiddenEntryPredicate
   onResizeSidebar: (width: number, persist: boolean) => void
   onCloseFile: (path: ProjectRelativePath) => void
   onCloseFiles: (paths: ReadonlyArray<ProjectRelativePath>) => void
@@ -107,6 +113,9 @@ export function ProjectWorkspacePage({
   onResolveRecovery: (restore: boolean) => void
   onProjectFilesChanged: () => void
   onSaveDocument: () => Promise<boolean>
+  preferences: AppPreferences
+  /** False while a modal owns the keyboard, such as the settings dialog. */
+  shortcutsEnabled: boolean
   onSetEditorFontSize: (fontSize: number) => void
   onSelectRoot: (path: ProjectRelativePath) => void
   onUpdatePdfViewerState: (
@@ -167,8 +176,15 @@ export function ProjectWorkspacePage({
   const [target, setTarget] = useState<
     (EditorTarget & { path: ProjectRelativePath }) | null
   >(null)
+  const saveBeforeBuild = preferences.build.saveBeforeBuild
+  // With the preference off, a build compiles what is on disk: the save step is
+  // skipped rather than being reported as a blocked build.
+  const beforeBuild = useCallback(
+    () => (saveBeforeBuild ? onSaveDocument() : Promise.resolve(true)),
+    [onSaveDocument, saveBeforeBuild]
+  )
   const build = useProjectBuild({
-    beforeBuild: onSaveDocument,
+    beforeBuild,
     initialEngine: session.workspace.buildProfile,
     onEngineChange: (buildProfile) => onUpdateWorkspaceView({ buildProfile }),
     projectPath: session.project.path,
@@ -325,6 +341,27 @@ export function ProjectWorkspacePage({
     }
   }
 
+  // Each failed run is reacted to once. Without this the panel would reopen
+  // every time the run list is reconciled, fighting a user who just closed it.
+  const failureHandled = useRef<string | null>(null)
+  const { openPanelOnFailure, revealProblemsOnFailure } = preferences.build
+  useEffect(() => {
+    if (latestBuild === null || latestBuild.status !== "failed") return
+    if (failureHandled.current === latestBuild.id) return
+    failureHandled.current = latestBuild.id
+    if (!openPanelOnFailure) return
+    onUpdateWorkspaceView({
+      buildPanelOpen: true,
+      bottomPanelTab: "build",
+      buildPanelTab: revealProblemsOnFailure ? "problems" : "output",
+    })
+  }, [
+    latestBuild,
+    onUpdateWorkspaceView,
+    openPanelOnFailure,
+    revealProblemsOnFailure,
+  ])
+
   useEffect(() => {
     const openCommandPalette = () => setCommandPaletteOpen(true)
     window.addEventListener("tex:open-command-palette", openCommandPalette)
@@ -333,6 +370,7 @@ export function ProjectWorkspacePage({
   }, [])
 
   useEffect(() => {
+    if (!shortcutsEnabled) return
     const runWorkspaceAction = (event: Event) => {
       if (!(event instanceof CustomEvent)) return
       switch (event.detail) {
@@ -369,9 +407,11 @@ export function ProjectWorkspacePage({
     onSaveDocument,
     onUpdateWorkspaceView,
     pdfOpen,
+    shortcutsEnabled,
   ])
 
   useEffect(() => {
+    if (!shortcutsEnabled) return
     const onKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey
       if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
@@ -412,12 +452,13 @@ export function ProjectWorkspacePage({
     onSetEditorFontSize,
     onUpdateWorkspaceView,
     session.workspace.editorFontSize,
+    shortcutsEnabled,
     toggleTerminal,
   ])
 
   useEffect(() => {
     const onDiagnosticKey = (event: KeyboardEvent) => {
-      if (event.key !== "F8") return
+      if (!shortcutsEnabled || event.key !== "F8") return
       event.preventDefault()
       moveDiagnostic(event.shiftKey ? -1 : 1)
     }
@@ -496,6 +537,10 @@ export function ProjectWorkspacePage({
                 />
               ) : (
                 <ProjectSidebar
+                  isHidden={isHidden}
+                  onOpenFileSettings={() =>
+                    onOpenSettings(lastWorkspaceFocus.current)
+                  }
                   activeLine={
                     sourceLocation?.path === selectedFile
                       ? sourceLocation.line
@@ -517,6 +562,7 @@ export function ProjectWorkspacePage({
                   onPinFile={onPinFile}
                   onPreviewFile={onPreviewFile}
                   onCreate={onCreateProjectEntry}
+                  onRefresh={onProjectFilesChanged}
                   onRename={onRenameProjectEntry}
                   onDelete={onDeleteProjectEntry}
                   documentState={session.documentState}
@@ -565,6 +611,7 @@ export function ProjectWorkspacePage({
                 ) : null}
                 <SourceViewer
                   fontSize={session.workspace.editorFontSize}
+                  preferences={preferences}
                   onChange={(path, change) =>
                     onEditDocument(session.project.path, path, change)
                   }
@@ -620,6 +667,7 @@ export function ProjectWorkspacePage({
                   }}
                 >
                   <PdfViewer
+                    defaults={preferences.pdf}
                     key={session.workspace.selectedPdf ?? "empty-pdf-viewer"}
                     initialState={
                       session.workspace.selectedPdf === null
@@ -684,6 +732,10 @@ export function ProjectWorkspacePage({
                 problemsPanel={
                   <ProblemsPanel
                     analysed={problemsAnalysed}
+                    analysisEnabled={preferences.assistance.diagnosticsEnabled}
+                    onOpenSettings={() =>
+                      onOpenSettings(lastWorkspaceFocus.current)
+                    }
                     diagnostics={activeProblems}
                     onNavigate={(line, column) => {
                       if (selectedFile === null) return
@@ -806,11 +858,13 @@ export function ProjectWorkspacePage({
           ) : (
             <ListChecks data-icon="inline-start" />
           )}
-          {!problemsAnalysed
-            ? "Problems"
-            : activeProblems.length === 0
-              ? "No problems"
-              : `${activeProblems.length} ${activeProblems.length === 1 ? "problem" : "problems"}`}
+          {!preferences.assistance.diagnosticsEnabled
+            ? "Problem analysis off"
+            : !problemsAnalysed
+              ? "Problems"
+              : activeProblems.length === 0
+                ? "No problems"
+                : `${activeProblems.length} ${activeProblems.length === 1 ? "problem" : "problems"}`}
         </Button>
         <Button
           className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"

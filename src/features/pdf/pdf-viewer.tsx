@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import type { PdfViewerState, ProjectError } from "@/domain/project"
+import type { PdfPreferences } from "@/domain/preferences"
 import type {
   CanonicalProjectPath,
   ProjectRelativePath,
@@ -79,13 +80,17 @@ GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString()
 
-const defaultViewerState: PdfViewerState = {
-  page: 1,
-  position: 0,
-  zoom: 1,
-  rotation: 0,
-  layout: "continuous",
-  sidebar: "none",
+/** The state a PDF opens in the first time it is viewed. Once a document has a
+ * remembered state, that state wins: a preference change never moves a reader. */
+function initialViewerState(defaults: PdfPreferences): PdfViewerState {
+  return {
+    page: 1,
+    position: 0,
+    zoom: defaults.defaultZoom,
+    rotation: 0,
+    layout: defaults.defaultLayout,
+    sidebar: defaults.defaultSidebar,
+  }
 }
 
 function destroyPdfTask(task: PDFDocumentLoadingTask): void {
@@ -407,6 +412,7 @@ function restorePdfSelection(
 }
 
 export function PdfViewer({
+  defaults,
   initialState,
   onClose,
   onStateChange,
@@ -416,6 +422,7 @@ export function PdfViewer({
   refreshToken,
   sourceLocation,
 }: {
+  defaults: PdfPreferences
   initialState: PdfViewerState | undefined
   onClose: () => void
   onStateChange: (state: PdfViewerState) => void
@@ -433,7 +440,9 @@ export function PdfViewer({
     column: number
   } | null
 }): ReactElement {
-  const [viewer, setViewer] = useState(initialState ?? defaultViewerState)
+  const [viewer, setViewer] = useState(
+    () => initialState ?? initialViewerState(defaults)
+  )
   const [loadState, setLoadState] = useState<PdfLoadState>({
     status: "loading",
   })

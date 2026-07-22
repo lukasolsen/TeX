@@ -25,6 +25,7 @@ import {
   foldCode,
   foldedRanges,
   indentOnInput,
+  indentUnit,
   syntaxHighlighting,
   unfoldCode,
   StreamLanguage,
@@ -98,6 +99,13 @@ import type {
   EditorViewerState,
   ProjectEntry,
 } from "@/domain/project"
+import {
+  editorFontStack,
+  editorLineHeightRatio,
+  indentUnitText,
+  type AppPreferences,
+  type EditorPreferences,
+} from "@/domain/preferences"
 import {
   projectRelativePath,
   type CanonicalProjectPath,
@@ -173,7 +181,7 @@ function projectFilePaths(
   return paths
 }
 
-function sourceEditorTheme(fontSize: number) {
+function sourceEditorTheme(fontSize: number, editor: EditorPreferences) {
   return EditorView.theme({
     "&": {
       height: "100%",
@@ -183,8 +191,8 @@ function sourceEditorTheme(fontSize: number) {
     },
     ".cm-content": {
       caretColor: "var(--source-foreground)",
-      fontFamily:
-        "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      fontFamily: editorFontStack(editor.fontFamily),
+      lineHeight: `${editorLineHeightRatio[editor.lineHeight]}`,
       padding: "1rem 0 4rem",
     },
     ".cm-cursor, .cm-dropCursor": {
@@ -464,10 +472,24 @@ function sourceEditorTheme(fontSize: number) {
   })
 }
 
+/** The editor attributes that carry a preference, kept together so the tab-switch
+ * path and the preference-change path cannot configure them differently. */
+function contentAttributes(
+  label: string,
+  editor: EditorPreferences
+): Extension {
+  return EditorView.contentAttributes.of({
+    "aria-label": label,
+    "aria-multiline": "true",
+    spellcheck: editor.spellCheck ? "true" : "false",
+  })
+}
+
 export function LatexEditor({
   content,
   fontSize,
   label,
+  preferences,
   initialViewerState,
   onChange,
   onCursorChange,
@@ -486,6 +508,7 @@ export function LatexEditor({
   content: string
   fontSize: number
   label: string
+  preferences: AppPreferences
   initialViewerState: EditorViewerState | undefined
   onChange: (change: EditorDocumentChange) => void
   onCursorChange: (line: number, column: number) => void
@@ -534,10 +557,17 @@ export function LatexEditor({
   const contentRef = useRef(content)
   const fontSizeRef = useRef(fontSize)
   const labelRef = useRef(label)
+  const preferencesRef = useRef(preferences)
   const projectPathRef = useRef(projectPath)
   const projectTreeRef = useRef(projectTree)
   const themeCompartment = useRef(new Compartment())
   const attributesCompartment = useRef(new Compartment())
+  const settingsCompartment = useRef(new Compartment())
+  // Assigned when the view is built; the extensions it produces close over the
+  // same refs the rest of the editor uses.
+  const reconfigureSettings = useRef<
+    ((settings: AppPreferences) => StateEffect<unknown>) | null
+  >(null)
   const activePath = useRef(path)
   const extensions = useRef<Extension[]>([])
   const documentStates = useRef(
@@ -805,9 +835,65 @@ export function LatexEditor({
       run: runContextAction,
     }
 
+    // Everything a preference can turn on, off, or resize. Held in one
+    // compartment so a settings change reconfigures the live editor in place
+    // rather than rebuilding it and losing the cursor, scroll, and undo history.
+    const configurableExtensions = (settings: AppPreferences): Extension[] => {
+      const { assistance, editor } = settings
+      return [
+        editor.showLineNumbers
+          ? [lineNumbers(), highlightActiveLineGutter()]
+          : [],
+        editor.highlightActiveLine ? highlightActiveLine() : [],
+        editor.highlightSelectionMatches ? highlightSelectionMatches() : [],
+        editor.wrapLines ? EditorView.lineWrapping : [],
+        editor.autoCloseBrackets ? closeBrackets() : [],
+        editor.autoCloseEnvironments ? latexAutoCloseEnvironment() : [],
+        indentUnit.of(indentUnitText(editor.indentStyle, editor.indentWidth)),
+        EditorState.tabSize.of(editor.indentWidth),
+        assistance.hoverDocumentation
+          ? hoverTooltip(
+              (view, position) =>
+                latexHoverTooltip(projectPathRef.current, activePath.current)(
+                  view,
+                  position
+                ),
+              { hoverTime: assistance.hoverDelay, hideOnChange: true }
+            )
+          : [],
+        assistance.diagnosticsEnabled
+          ? [
+              lintGutter(),
+              latexDiagnostics({
+                projectPath: () => projectPathRef.current,
+                relativePath: () => activePath.current,
+                onDiagnosticsChange: (diagnostics, complete) =>
+                  onDiagnosticsChangeRef.current(
+                    activePath.current,
+                    diagnostics,
+                    complete
+                  ),
+              }),
+            ]
+          : [],
+        assistance.completionEnabled
+          ? autocompletion({
+              override: [
+                latexCompletionSource(
+                  () => projectPathRef.current,
+                  () => activePath.current
+                ),
+              ],
+              addToOptions: [latexCompletionRowBadge],
+              icons: false,
+              activateOnTyping: assistance.completionOnTyping,
+              maxRenderedOptions: assistance.completionLimit,
+            })
+          : [],
+      ]
+    }
+
     const editorExtensions: Extension[] = [
-      lineNumbers(),
-      highlightActiveLineGutter(),
       highlightSpecialChars(),
       history(),
       drawSelection(),
@@ -823,12 +909,11 @@ export function LatexEditor({
       bracketMatching(),
       latexDelimiterMatching(),
       latexFolding(),
-      closeBrackets(),
-      latexAutoCloseEnvironment(),
       rectangularSelection(),
       crosshairCursor(),
-      highlightActiveLine(),
-      highlightSelectionMatches(),
+      settingsCompartment.current.of(
+        configurableExtensions(preferencesRef.current)
+      ),
       tooltips({
         tooltipSpace: (editor) => {
           const bounds = editor.dom.getBoundingClientRect()
@@ -840,26 +925,7 @@ export function LatexEditor({
           }
         },
       }),
-      hoverTooltip(
-        (editor, position) =>
-          latexHoverTooltip(projectPathRef.current, activePath.current)(
-            editor,
-            position
-          ),
-        { hoverTime: 350, hideOnChange: true }
-      ),
       projectReferenceField,
-      lintGutter(),
-      latexDiagnostics({
-        projectPath: () => projectPathRef.current,
-        relativePath: () => activePath.current,
-        onDiagnosticsChange: (diagnostics, complete) =>
-          onDiagnosticsChangeRef.current(
-            activePath.current,
-            diagnostics,
-            complete
-          ),
-      }),
       search({ top: true }),
       EditorView.domEventHandlers({
         compositionend: (_event, editor) => {
@@ -898,18 +964,6 @@ export function LatexEditor({
           return true
         },
       }),
-      autocompletion({
-        override: [
-          latexCompletionSource(
-            () => projectPathRef.current,
-            () => activePath.current
-          ),
-        ],
-        addToOptions: [latexCompletionRowBadge],
-        icons: false,
-        activateOnTyping: true,
-        maxRenderedOptions: 50,
-      }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },
         { key: "Mod-f", run: () => (onOpenFindRef.current(), true) },
@@ -944,15 +998,15 @@ export function LatexEditor({
           scheduleViewerState(update.view)
         }
       }),
-      themeCompartment.current.of(sourceEditorTheme(fontSizeRef.current)),
+      themeCompartment.current.of(
+        sourceEditorTheme(fontSizeRef.current, preferencesRef.current.editor)
+      ),
       attributesCompartment.current.of(
-        EditorView.contentAttributes.of({
-          "aria-label": labelRef.current,
-          "aria-multiline": "true",
-          spellcheck: "false",
-        })
+        contentAttributes(labelRef.current, preferencesRef.current.editor)
       ),
     ]
+    reconfigureSettings.current = (settings) =>
+      settingsCompartment.current.reconfigure(configurableExtensions(settings))
     extensions.current = editorExtensions
     const initialPosition = viewerSelectionPosition(
       contentRef.current,
@@ -1059,22 +1113,35 @@ export function LatexEditor({
 
   useEffect(() => {
     fontSizeRef.current = fontSize
-    view.current?.dispatch({
-      effects: themeCompartment.current.reconfigure(
-        sourceEditorTheme(fontSize)
-      ),
+    preferencesRef.current = preferences
+    const editor = view.current
+    if (editor === null) return
+    const settingsEffect = reconfigureSettings.current?.(preferences)
+    editor.dispatch({
+      effects: [
+        themeCompartment.current.reconfigure(
+          sourceEditorTheme(fontSize, preferences.editor)
+        ),
+        attributesCompartment.current.reconfigure(
+          contentAttributes(labelRef.current, preferences.editor)
+        ),
+        ...(settingsEffect === undefined ? [] : [settingsEffect]),
+      ],
     })
-  }, [fontSize])
+  }, [fontSize, preferences])
+
+  // A turned-off analysis leaves the previous result on screen otherwise, which
+  // would claim the file has problems TeX is no longer checking for.
+  useEffect(() => {
+    if (preferences.assistance.diagnosticsEnabled) return
+    onDiagnosticsChangeRef.current(activePath.current, [], true)
+  }, [preferences.assistance.diagnosticsEnabled])
 
   useEffect(() => {
     labelRef.current = label
     view.current?.dispatch({
       effects: attributesCompartment.current.reconfigure(
-        EditorView.contentAttributes.of({
-          "aria-label": label,
-          "aria-multiline": "true",
-          spellcheck: "false",
-        })
+        contentAttributes(label, preferencesRef.current.editor)
       ),
     })
   }, [label])
@@ -1116,18 +1183,18 @@ export function LatexEditor({
       }).state
     }
     editor.setState(nextState)
+    // A restored or newly created state carries the configuration captured when
+    // the extension list was built, so every compartment is re-applied here.
+    const settingsEffect = reconfigureSettings.current?.(preferencesRef.current)
     editor.dispatch({
       effects: [
         themeCompartment.current.reconfigure(
-          sourceEditorTheme(fontSizeRef.current)
+          sourceEditorTheme(fontSizeRef.current, preferencesRef.current.editor)
         ),
         attributesCompartment.current.reconfigure(
-          EditorView.contentAttributes.of({
-            "aria-label": labelRef.current,
-            "aria-multiline": "true",
-            spellcheck: "false",
-          })
+          contentAttributes(labelRef.current, preferencesRef.current.editor)
         ),
+        ...(settingsEffect === undefined ? [] : [settingsEffect]),
       ],
     })
     editor.scrollDOM.scrollTop =

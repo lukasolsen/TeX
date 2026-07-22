@@ -17,6 +17,7 @@ import type {
   ProjectEntry,
   ProjectSidebarTab,
 } from "@/domain/project"
+import type { HiddenEntryPredicate } from "@/domain/file-visibility"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import { ProjectTree } from "@/features/projects/project-tree"
 import { DocumentOutlinePanel } from "@/features/projects/document-outline-panel"
@@ -190,11 +191,14 @@ function DirectReferencesPanel({
 export function ProjectSidebar({
   activeLine,
   documentState,
+  isHidden,
   onCreate,
   onDelete,
   onPinFile,
   onPreviewFile,
   onOpenPdf,
+  onOpenFileSettings,
+  onRefresh,
   onRename,
   onNavigateOutline,
   rootFiles,
@@ -208,6 +212,7 @@ export function ProjectSidebar({
 }: {
   activeLine: number | null
   documentState: AsyncDocumentState
+  isHidden: HiddenEntryPredicate
   onCreate: (
     parentPath: ProjectRelativePath | null,
     name: string,
@@ -217,6 +222,8 @@ export function ProjectSidebar({
   onPinFile: (path: ProjectRelativePath) => void
   onPreviewFile: (path: ProjectRelativePath) => void
   onOpenPdf: (path: ProjectRelativePath) => void
+  onOpenFileSettings: () => void
+  onRefresh: () => void
   onRename: (path: ProjectRelativePath, name: string) => Promise<boolean>
   onNavigateOutline: (line: number) => void
   rootFiles: ProjectRelativePath[]
@@ -274,11 +281,14 @@ export function ProjectSidebar({
       </TabsList>
       <TabsContent className="flex min-h-0 flex-1 flex-col" value="files">
         <ProjectTree
+          isHidden={isHidden}
+          onOpenFileSettings={onOpenFileSettings}
           onCreate={onCreate}
           onDelete={onDelete}
           onPinFile={onPinFile}
           onPreviewFile={onPreviewFile}
           onOpenPdf={onOpenPdf}
+          onRefresh={onRefresh}
           onRename={onRename}
           rootFiles={rootFiles}
           selectedFile={selectedFile}

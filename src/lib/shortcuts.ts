@@ -6,6 +6,7 @@ export type ShortcutKey =
   | "alt"
   | "enter"
   | "backspace"
+  | "space"
   | "b"
   | "f"
   | "j"
@@ -33,6 +34,7 @@ export function shortcutLabel(
     if (key === "alt") return platform === "macos" ? "⌥" : "Alt"
     if (key === "enter") return platform === "macos" ? "↩" : "Enter"
     if (key === "backspace") return platform === "macos" ? "⌫" : "Backspace"
+    if (key === "space") return "Space"
     return key.toUpperCase()
   })
   return platform === "macos" ? labels.join(" ") : labels.join(" + ")

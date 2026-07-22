@@ -42,6 +42,10 @@ export function useProjectWatch({
   const lifecycleRevision = useRef(0)
   const activeProject = useRef(projectPath)
   activeProject.current = projectPath
+  // Read through a ref so an inline callback cannot tear down and re-register
+  // the event listener on every render, which drops events in between.
+  const onFilesChangedRef = useRef(onFilesChanged)
+  onFilesChangedRef.current = onFilesChanged
 
   useEffect(() => {
     lifecycleRevision.current += 1
@@ -72,7 +76,7 @@ export function useProjectWatch({
       if (!active || event.projectPath !== projectPath) return
       statusEventRevision += 1
       if (event.kind === "changed") {
-        onFilesChanged()
+        onFilesChangedRef.current()
         return
       }
       if (event.status === "buildQueued") setBuildQueued(true)
@@ -94,7 +98,7 @@ export function useProjectWatch({
       active = false
       unlisten?.()
     }
-  }, [onFilesChanged, projectPath])
+  }, [projectPath])
 
   const watchActive = !["off", "error", "pausedUnsafe"].includes(state.status)
 

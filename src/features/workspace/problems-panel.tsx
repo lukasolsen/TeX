@@ -1,12 +1,14 @@
 import {
   CircleAlert,
   CircleCheck,
+  EyeOff,
   FileCode2,
   LoaderCircle,
   TriangleAlert,
 } from "lucide-react"
 import type { ReactElement } from "react"
 
+import { Button } from "@/components/ui/button"
 import {
   Empty,
   EmptyDescription,
@@ -32,8 +34,10 @@ const SEVERITY_LABEL = {
  */
 export function ProblemsPanel({
   analysed,
+  analysisEnabled,
   diagnostics,
   onNavigate,
+  onOpenSettings,
   path,
   projectAnalysisComplete,
   selectedIndex,
@@ -41,6 +45,9 @@ export function ProblemsPanel({
 }: {
   /** False until the editor has reported a result for `path`. */
   analysed: boolean
+  /** False when the user turned problem analysis off in settings. */
+  analysisEnabled: boolean
+  onOpenSettings: () => void
   diagnostics: readonly LatexDiagnosticEntry[]
   onNavigate: (line: number, column: number) => void
   path: ProjectRelativePath | null
@@ -59,6 +66,31 @@ export function ProblemsPanel({
           <EmptyDescription className="text-xs">
             Open a LaTeX source file to see the problems TeX finds in it.
           </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  if (!analysisEnabled) {
+    return (
+      <Empty className="h-full p-5">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <EyeOff aria-hidden="true" />
+          </EmptyMedia>
+          <EmptyTitle className="text-sm">Problem analysis is off</EmptyTitle>
+          <EmptyDescription className="text-xs">
+            TeX is not checking this file as you type. Build diagnostics still
+            appear in the Build tab.
+          </EmptyDescription>
+          <Button
+            className="mt-2"
+            onClick={onOpenSettings}
+            size="sm"
+            variant="outline"
+          >
+            Turn it back on
+          </Button>
         </EmptyHeader>
       </Empty>
     )

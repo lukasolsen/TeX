@@ -1,55 +1,97 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { AppPreferences, ColorTheme } from "@/domain/project"
+import type { HiddenFileRule } from "@/domain/project"
+import {
+  defaultAppPreferences,
+  interfaceScaleFactor,
+  normalizeAppPreferences,
+  resetPreferenceSection,
+  type AppPreferences,
+  type AppearancePreferences,
+  type InterfaceScale,
+  type PreferenceSection,
+} from "@/domain/preferences"
+import {
+  createHiddenEntryPredicate,
+  hiddenFileRuleKey,
+  MAX_HIDDEN_FILE_RULES,
+  normalizeHiddenFileRules,
+  type HiddenEntryPredicate,
+} from "@/domain/file-visibility"
 import {
   loadAppPreferences,
   saveAppPreferences,
 } from "@/services/project-service"
 import { createSerialTaskQueue } from "@/lib/serial-task-queue"
 
-const defaultPreferences: AppPreferences = {
-  colorTheme: "system",
-  accentColor: "#2563eb",
+export type AddHiddenFileRuleResult = "added" | "duplicate" | "full"
+
+/** A patch for one preference group; the other groups are untouched. */
+export type PreferencePatch = {
+  [Section in PreferenceSection]?: Partial<AppPreferences[Section]>
 }
 
 export type AppPreferencesController = Readonly<{
   preferences: AppPreferences
+  isHidden: HiddenEntryPredicate
   saveError: string | null
-  setAccentColor: (accentColor: string) => void
-  setColorTheme: (colorTheme: ColorTheme) => void
+  update: (patch: PreferencePatch) => void
+  resetSection: (section: PreferenceSection) => void
+  addHiddenFileRule: (rule: HiddenFileRule) => AddHiddenFileRuleResult
+  removeHiddenFileRule: (rule: HiddenFileRule) => void
 }>
 
-function useResolvedTheme(theme: ColorTheme, accentColor: string): void {
+/**
+ * Applies the appearance preferences to the document. The colour scheme follows
+ * the system when asked to, the accent applies on top of whichever scheme is in
+ * force, and the interface scale moves the root font size so every rem-based
+ * control resizes together rather than one surface at a time.
+ */
+function useAppliedAppearance(appearance: AppearancePreferences): void {
+  const { accentColor, colorTheme, interfaceScale } = appearance
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)")
-    const applyTheme = () => {
-      const dark = theme === "dark" || (theme === "system" && media.matches)
+    const applyScheme = () => {
+      const dark =
+        colorTheme === "dark" || (colorTheme === "system" && media.matches)
       document.documentElement.classList.toggle("dark", dark)
-      document.documentElement.style.setProperty(
-        "--primary",
-        theme === "custom" ? accentColor : ""
-      )
-      document.documentElement.style.setProperty(
-        "--ring",
-        theme === "custom" ? accentColor : ""
-      )
     }
-    applyTheme()
-    media.addEventListener("change", applyTheme)
-    return () => media.removeEventListener("change", applyTheme)
-  }, [accentColor, theme])
+    applyScheme()
+    media.addEventListener("change", applyScheme)
+    return () => media.removeEventListener("change", applyScheme)
+  }, [colorTheme])
+
+  useEffect(() => {
+    const custom = accentColor !== defaultAppPreferences.appearance.accentColor
+    document.documentElement.style.setProperty(
+      "--primary",
+      custom ? accentColor : ""
+    )
+    document.documentElement.style.setProperty(
+      "--ring",
+      custom ? accentColor : ""
+    )
+  }, [accentColor])
+
+  useEffect(() => {
+    document.documentElement.style.fontSize =
+      interfaceScale === "default"
+        ? ""
+        : `${16 * interfaceScaleFactor[interfaceScale satisfies InterfaceScale]}px`
+  }, [interfaceScale])
 }
 
-/** Coordinates persisted visual preferences and applies their document-level effect. */
+/** Coordinates persisted application preferences and their document-level effect. */
 export function useAppPreferences(): AppPreferencesController {
-  const [preferences, setPreferences] =
-    useState<AppPreferences>(defaultPreferences)
+  const [preferences, setPreferences] = useState<AppPreferences>(
+    defaultAppPreferences
+  )
   const [saveError, setSaveError] = useState<string | null>(null)
   const preferencesRef = useRef(preferences)
   const saveRevision = useRef(0)
   const saveQueue = useRef(createSerialTaskQueue())
 
-  useResolvedTheme(preferences.colorTheme, preferences.accentColor)
+  useAppliedAppearance(preferences.appearance)
 
   useEffect(() => {
     let active = true
@@ -63,7 +105,9 @@ export function useAppPreferences(): AppPreferencesController {
       })
       .catch(() => {
         if (active) {
-          setSaveError("TeX could not load your appearance preference.")
+          setSaveError(
+            "TeX could not load your saved settings and is using defaults."
+          )
         }
       })
     return () => {
@@ -71,39 +115,93 @@ export function useAppPreferences(): AppPreferencesController {
     }
   }, [])
 
-  const updatePreferences = useCallback((next: AppPreferences): void => {
-    preferencesRef.current = next
-    setPreferences(next)
+  const commit = useCallback((next: AppPreferences): void => {
+    const normalized = normalizeAppPreferences(next)
+    preferencesRef.current = normalized
+    setPreferences(normalized)
     setSaveError(null)
     const revision = ++saveRevision.current
     void saveQueue.current
-      .enqueue(() => saveAppPreferences(next).then(() => undefined))
+      .enqueue(() => saveAppPreferences(normalized).then(() => undefined))
       .catch(() => {
         if (revision === saveRevision.current) {
           setSaveError(
-            "TeX could not save this preference. It may reset on restart."
+            "TeX could not save this setting. It may reset on restart."
           )
         }
       })
   }, [])
 
-  const setColorTheme = useCallback(
-    (colorTheme: ColorTheme): void => {
-      updatePreferences({ ...preferencesRef.current, colorTheme })
+  const update = useCallback(
+    (patch: PreferencePatch): void => {
+      const current = preferencesRef.current
+      const next = { ...current }
+      for (const section of Object.keys(patch) as PreferenceSection[]) {
+        Object.assign(next, {
+          [section]: { ...current[section], ...patch[section] },
+        })
+      }
+      commit(next)
     },
-    [updatePreferences]
+    [commit]
   )
 
-  const setAccentColor = useCallback(
-    (accentColor: string): void => {
-      updatePreferences({
-        ...preferencesRef.current,
-        accentColor,
-        colorTheme: "custom",
+  const resetSection = useCallback(
+    (section: PreferenceSection): void => {
+      commit(resetPreferenceSection(preferencesRef.current, section))
+    },
+    [commit]
+  )
+
+  const addHiddenFileRule = useCallback(
+    (rule: HiddenFileRule): AddHiddenFileRuleResult => {
+      const current = preferencesRef.current.files.hiddenFileRules
+      if (current.length >= MAX_HIDDEN_FILE_RULES) return "full"
+      const key = hiddenFileRuleKey(rule)
+      if (current.some((existing) => hiddenFileRuleKey(existing) === key))
+        return "duplicate"
+      update({
+        files: {
+          hiddenFileRules: normalizeHiddenFileRules([...current, rule]),
+        },
+      })
+      return "added"
+    },
+    [update]
+  )
+
+  const removeHiddenFileRule = useCallback(
+    (rule: HiddenFileRule): void => {
+      const key = hiddenFileRuleKey(rule)
+      update({
+        files: {
+          hiddenFileRules: preferencesRef.current.files.hiddenFileRules.filter(
+            (existing) => hiddenFileRuleKey(existing) !== key
+          ),
+        },
       })
     },
-    [updatePreferences]
+    [update]
   )
 
-  return { preferences, saveError, setAccentColor, setColorTheme }
+  // Memoised on the two inputs that define it so the project tree does not
+  // recount hidden entries on every unrelated preference change.
+  const isHidden = useMemo(
+    () =>
+      createHiddenEntryPredicate(
+        preferences.files.hiddenFileRules,
+        preferences.files.hideFilteredFiles
+      ),
+    [preferences.files.hiddenFileRules, preferences.files.hideFilteredFiles]
+  )
+
+  return {
+    preferences,
+    isHidden,
+    saveError,
+    update,
+    resetSection,
+    addHiddenFileRule,
+    removeHiddenFileRule,
+  }
 }

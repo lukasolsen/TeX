@@ -26,6 +26,15 @@ const MAX_PANE_SIZE: u16 = 4096;
 const MAX_RECENT_PROJECTS: usize = 12;
 const MAX_STATE_BYTES: u64 = 4 * 1024 * 1024;
 const MAX_WORKSPACE_FILES: usize = 256;
+const MIN_INDENT_WIDTH: u8 = 2;
+const MAX_INDENT_WIDTH: u8 = 8;
+const MIN_COMPLETION_LIMIT: u8 = 5;
+const MAX_COMPLETION_LIMIT: u8 = 100;
+const MIN_HOVER_DELAY: u16 = 100;
+const MAX_HOVER_DELAY: u16 = 2_000;
+const MIN_PDF_ZOOM: f64 = 0.25;
+const MAX_PDF_ZOOM: f64 = 5.0;
+const MAX_FONT_FAMILY_LENGTH: usize = 120;
 
 /// Serializes read-modify-write access to the single on-disk state file. Atomic
 /// writes keep each file whole, but without this a mutation in one window could
@@ -46,29 +55,308 @@ pub struct StartupState {
     pub restoration_notice: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+/// Device-local application preferences.
+///
+/// Unknown fields are ignored rather than rejected: preferences are grouped and
+/// grow over time, and a state file written by a newer TeX must not make an
+/// older one discard the user's recent projects along with it. The legacy flat
+/// fields below are the pre-grouping layout and are folded into the groups on
+/// read, then dropped from the next write.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppPreferences {
-    pub color_theme: ColorTheme,
-    #[serde(default = "default_accent_color")]
-    pub accent_color: String,
+    #[serde(default)]
+    pub appearance: AppearancePreferences,
+    #[serde(default)]
+    pub editor: EditorPreferences,
+    #[serde(default)]
+    pub assistance: AssistancePreferences,
+    #[serde(default)]
+    pub build: BuildPreferences,
+    #[serde(default)]
+    pub pdf: PdfPreferences,
+    #[serde(default)]
+    pub files: FilePreferences,
+    #[serde(default, skip_serializing)]
+    color_theme: Option<ColorTheme>,
+    #[serde(default, skip_serializing)]
+    accent_color: Option<String>,
+    #[serde(default, skip_serializing)]
+    hide_filtered_files: Option<bool>,
+    #[serde(default, skip_serializing)]
+    hidden_file_rules: Option<Vec<HiddenFileRule>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppearancePreferences {
+    #[serde(default)]
+    pub color_theme: ColorTheme,
+    #[serde(default = "default_accent_color")]
+    pub accent_color: String,
+    #[serde(default)]
+    pub interface_scale: InterfaceScale,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorPreferences {
+    #[serde(default)]
+    pub font_family: String,
+    #[serde(default)]
+    pub line_height: EditorLineHeight,
+    #[serde(default = "default_true")]
+    pub show_line_numbers: bool,
+    #[serde(default = "default_true")]
+    pub highlight_active_line: bool,
+    #[serde(default = "default_true")]
+    pub highlight_selection_matches: bool,
+    #[serde(default)]
+    pub wrap_lines: bool,
+    #[serde(default)]
+    pub indent_style: IndentStyle,
+    #[serde(default = "default_indent_width")]
+    pub indent_width: u8,
+    #[serde(default = "default_true")]
+    pub auto_close_brackets: bool,
+    #[serde(default = "default_true")]
+    pub auto_close_environments: bool,
+    #[serde(default)]
+    pub spell_check: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssistancePreferences {
+    #[serde(default = "default_true")]
+    pub completion_enabled: bool,
+    #[serde(default = "default_true")]
+    pub completion_on_typing: bool,
+    #[serde(default = "default_completion_limit")]
+    pub completion_limit: u8,
+    #[serde(default = "default_true")]
+    pub hover_documentation: bool,
+    #[serde(default = "default_hover_delay")]
+    pub hover_delay: u16,
+    #[serde(default = "default_true")]
+    pub diagnostics_enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildPreferences {
+    #[serde(default = "default_true")]
+    pub save_before_build: bool,
+    #[serde(default = "default_true")]
+    pub open_panel_on_failure: bool,
+    #[serde(default)]
+    pub reveal_problems_on_failure: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfPreferences {
+    #[serde(default = "default_pdf_zoom")]
+    pub default_zoom: f64,
+    #[serde(default)]
+    pub default_layout: PdfLayoutMode,
+    #[serde(default)]
+    pub default_sidebar: PdfSidebarMode,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FilePreferences {
+    #[serde(default = "default_true")]
+    pub hide_filtered_files: bool,
+    #[serde(default = "default_hidden_file_rules")]
+    pub hidden_file_rules: Vec<HiddenFileRule>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ColorTheme {
+    #[default]
     System,
     Light,
     Dark,
+    /// Written by TeX before the accent colour became independent of the colour
+    /// scheme. Kept so an existing state file still parses; `migrated` maps it
+    /// to `System` and it is never written again.
     Custom,
 }
 
-impl Default for AppPreferences {
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InterfaceScale {
+    Compact,
+    #[default]
+    Default,
+    Comfortable,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EditorLineHeight {
+    Compact,
+    #[default]
+    Normal,
+    Relaxed,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum IndentStyle {
+    #[default]
+    Spaces,
+    Tabs,
+}
+
+/// A project-tree visibility rule. This never affects what is on disk or what a
+/// build reads; it only decides what the file explorer lists.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct HiddenFileRule {
+    pub kind: HiddenFileRuleKind,
+    pub value: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum HiddenFileRuleKind {
+    Extension,
+    Name,
+}
+
+impl Default for AppearancePreferences {
     fn default() -> Self {
         Self {
             color_theme: ColorTheme::System,
             accent_color: default_accent_color(),
+            interface_scale: InterfaceScale::Default,
         }
+    }
+}
+
+impl Default for EditorPreferences {
+    fn default() -> Self {
+        Self {
+            font_family: String::new(),
+            line_height: EditorLineHeight::Normal,
+            show_line_numbers: true,
+            highlight_active_line: true,
+            highlight_selection_matches: true,
+            wrap_lines: false,
+            indent_style: IndentStyle::Spaces,
+            indent_width: default_indent_width(),
+            auto_close_brackets: true,
+            auto_close_environments: true,
+            spell_check: false,
+        }
+    }
+}
+
+impl Default for AssistancePreferences {
+    fn default() -> Self {
+        Self {
+            completion_enabled: true,
+            completion_on_typing: true,
+            completion_limit: default_completion_limit(),
+            hover_documentation: true,
+            hover_delay: default_hover_delay(),
+            diagnostics_enabled: true,
+        }
+    }
+}
+
+impl Default for BuildPreferences {
+    fn default() -> Self {
+        Self {
+            save_before_build: true,
+            open_panel_on_failure: true,
+            reveal_problems_on_failure: false,
+        }
+    }
+}
+
+impl Default for PdfPreferences {
+    fn default() -> Self {
+        Self {
+            default_zoom: default_pdf_zoom(),
+            default_layout: PdfLayoutMode::Continuous,
+            default_sidebar: PdfSidebarMode::None,
+        }
+    }
+}
+
+impl Default for FilePreferences {
+    fn default() -> Self {
+        Self {
+            hide_filtered_files: true,
+            hidden_file_rules: default_hidden_file_rules(),
+        }
+    }
+}
+
+impl AppPreferences {
+    /// Folds the pre-grouping flat fields into their groups and clears them, so
+    /// a state file written before the grouped model keeps the user's theme,
+    /// accent, and file rules instead of silently reverting to defaults.
+    fn migrated(mut self) -> Self {
+        if let Some(color_theme) = self.color_theme.take() {
+            self.appearance.color_theme = color_theme;
+        }
+        if matches!(self.appearance.color_theme, ColorTheme::Custom) {
+            self.appearance.color_theme = ColorTheme::System;
+        }
+        if let Some(accent_color) = self.accent_color.take() {
+            self.appearance.accent_color = accent_color;
+        }
+        if let Some(hide_filtered_files) = self.hide_filtered_files.take() {
+            self.files.hide_filtered_files = hide_filtered_files;
+        }
+        if let Some(hidden_file_rules) = self.hidden_file_rules.take() {
+            self.files.hidden_file_rules = hidden_file_rules;
+        }
+        self
+    }
+
+    /// Rejects a preference set that no control can produce. Ranges match
+    /// `src/domain/preferences.ts`; both sides validate because the state file
+    /// and the IPC payload are separate trust boundaries.
+    fn validate(&self) -> Result<(), PersistenceError> {
+        let invalid = |message: &'static str| PersistenceError {
+            code: "invalid-preference",
+            message,
+        };
+        if !is_hex_color(&self.appearance.accent_color) {
+            return Err(invalid("The selected accent color is not valid."));
+        }
+        if !is_font_family(&self.editor.font_family) {
+            return Err(invalid("The selected editor font is not a font name."));
+        }
+        if !(MIN_INDENT_WIDTH..=MAX_INDENT_WIDTH).contains(&self.editor.indent_width) {
+            return Err(invalid("The indent width is outside the supported range."));
+        }
+        if !(MIN_COMPLETION_LIMIT..=MAX_COMPLETION_LIMIT)
+            .contains(&self.assistance.completion_limit)
+        {
+            return Err(invalid(
+                "The suggestion limit is outside the supported range.",
+            ));
+        }
+        if !(MIN_HOVER_DELAY..=MAX_HOVER_DELAY).contains(&self.assistance.hover_delay) {
+            return Err(invalid("The hover delay is outside the supported range."));
+        }
+        if !self.pdf.default_zoom.is_finite()
+            || !(MIN_PDF_ZOOM..=MAX_PDF_ZOOM).contains(&self.pdf.default_zoom)
+        {
+            return Err(invalid("The PDF zoom is outside the supported range."));
+        }
+        if !are_hidden_file_rules_valid(&self.files.hidden_file_rules) {
+            return Err(invalid("One of the hidden file rules is not valid."));
+        }
+        Ok(())
     }
 }
 
@@ -179,16 +467,18 @@ pub struct PdfViewerState {
     pub sidebar: PdfSidebarMode,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PdfLayoutMode {
+    #[default]
     Continuous,
     Single,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PdfSidebarMode {
+    #[default]
     None,
     Outline,
 }
@@ -256,12 +546,8 @@ pub fn save_app_preferences(
     app: AppHandle,
     preferences: AppPreferences,
 ) -> Result<(), PersistenceError> {
-    if !is_hex_color(&preferences.accent_color) {
-        return Err(PersistenceError {
-            code: "invalid-preference",
-            message: "The selected accent color is not valid.",
-        });
-    }
+    let preferences = preferences.migrated();
+    preferences.validate()?;
     let path = state_path(&app)?;
     let _state_guard = lock_state_writes();
     let mut state = read_state(&path)?;
@@ -271,6 +557,54 @@ pub fn save_app_preferences(
 
 fn default_accent_color() -> String {
     "#2563eb".to_owned()
+}
+
+/// Mirrors `defaultHiddenFileRules` in `src/domain/file-visibility.ts`: the LaTeX
+/// build artifacts a new install hides until the user says otherwise.
+fn default_hidden_file_rules() -> Vec<HiddenFileRule> {
+    [
+        "aux",
+        "bbl",
+        "bcf",
+        "blg",
+        "fdb_latexmk",
+        "fls",
+        "glg",
+        "glo",
+        "gls",
+        "idx",
+        "ilg",
+        "ind",
+        "lof",
+        "log",
+        "lot",
+        "nav",
+        "out",
+        "run.xml",
+        "snm",
+        "synctex",
+        "synctex.gz",
+        "toc",
+    ]
+    .into_iter()
+    .map(|value| HiddenFileRule {
+        kind: HiddenFileRuleKind::Extension,
+        value: value.to_owned(),
+    })
+    .collect()
+}
+
+const MAX_HIDDEN_FILE_RULES: usize = 128;
+const MAX_HIDDEN_FILE_RULE_LENGTH: usize = 64;
+
+fn are_hidden_file_rules_valid(rules: &[HiddenFileRule]) -> bool {
+    rules.len() <= MAX_HIDDEN_FILE_RULES
+        && rules.iter().all(|rule| {
+            !rule.value.is_empty()
+                && rule.value.len() <= MAX_HIDDEN_FILE_RULE_LENGTH
+                && !rule.value.contains(['/', '\\'])
+                && rule.value.trim() == rule.value
+        })
 }
 
 fn is_hex_color(value: &str) -> bool {
@@ -613,6 +947,7 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
                 Err(_) => return Ok(corrupt_and_default(path)),
             };
             state.version = STATE_VERSION;
+            state.preferences = state.preferences.migrated();
             Ok(ReadState {
                 state,
                 restoration_notice: Some(
@@ -624,10 +959,11 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
             })
         }
         current if current == u64::from(STATE_VERSION) => {
-            let state = match serde_json::from_value(value) {
+            let mut state: PersistedState = match serde_json::from_value(value) {
                 Ok(state) => state,
                 Err(_) => return Ok(corrupt_and_default(path)),
             };
+            state.preferences = state.preferences.migrated();
             Ok(ReadState {
                 state,
                 restoration_notice: None,
@@ -786,6 +1122,32 @@ const fn default_editor_font_size() -> u8 {
     14
 }
 
+const fn default_indent_width() -> u8 {
+    2
+}
+
+const fn default_completion_limit() -> u8 {
+    50
+}
+
+const fn default_hover_delay() -> u16 {
+    350
+}
+
+const fn default_pdf_zoom() -> f64 {
+    1.0
+}
+
+/// A font family is interpolated into a CSS declaration in the renderer, so only
+/// the characters a family name needs are accepted. An empty value means the
+/// platform monospace stack.
+fn is_font_family(value: &str) -> bool {
+    value.len() <= MAX_FONT_FAMILY_LENGTH
+        && value
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || " ,._-".contains(character))
+}
+
 const fn default_true() -> bool {
     true
 }
@@ -815,10 +1177,12 @@ mod tests {
     };
 
     use super::{
-        load_startup_state_from_path, read_state, write_state, AppPreferences, BottomPanelTab,
-        BuildPanelTab, BuildProfile, EditorViewerState, PdfLayoutMode, PdfSidebarMode,
-        PdfViewerState, PersistedRecentProject, PersistedState, ProjectAvailability,
-        ProjectSidebarTab, WorkspaceState, STATE_VERSION,
+        are_hidden_file_rules_valid, default_hidden_file_rules, load_startup_state_from_path,
+        read_state, write_state, AppPreferences, BottomPanelTab, BuildPanelTab, BuildProfile,
+        ColorTheme, EditorViewerState, HiddenFileRule, HiddenFileRuleKind, PdfLayoutMode,
+        PdfSidebarMode, PdfViewerState, PersistedRecentProject, PersistedState,
+        ProjectAvailability, ProjectSidebarTab, WorkspaceState, MAX_HIDDEN_FILE_RULES,
+        MAX_HIDDEN_FILE_RULE_LENGTH, STATE_VERSION,
     };
 
     #[test]
@@ -916,8 +1280,72 @@ mod tests {
         let migrated: serde_json::Value = serde_json::from_slice(&fs::read(&state_path)?)?;
         assert_eq!(migrated["version"], STATE_VERSION);
 
+        // A state file written before file filtering existed must come back with
+        // the shipped defaults rather than an empty rule list, so upgrading does
+        // not suddenly fill everyone's sidebar with build artifacts.
+        let preferences = read_state(&state_path)?.preferences;
+        assert!(preferences.files.hide_filtered_files);
+        assert_eq!(
+            preferences.files.hidden_file_rules.len(),
+            default_hidden_file_rules().len()
+        );
+        // The flat pre-grouping fields are folded into their groups on read.
+        assert!(matches!(
+            preferences.appearance.color_theme,
+            ColorTheme::System
+        ));
+        assert_eq!(preferences.appearance.accent_color, "#2563eb");
+
         fs::remove_dir_all(directory)?;
         Ok(())
+    }
+
+    #[test]
+    fn rejects_hidden_file_rules_that_are_not_single_entry_names() {
+        let rule = |value: &str| HiddenFileRule {
+            kind: HiddenFileRuleKind::Name,
+            value: value.to_owned(),
+        };
+
+        assert!(are_hidden_file_rules_valid(&default_hidden_file_rules()));
+        assert!(are_hidden_file_rules_valid(&[rule("Makefile")]));
+        assert!(!are_hidden_file_rules_valid(&[rule("")]));
+        assert!(!are_hidden_file_rules_valid(&[rule("build/out.log")]));
+        assert!(!are_hidden_file_rules_valid(&[rule("build\\out.log")]));
+        assert!(!are_hidden_file_rules_valid(&[rule(" padded ")]));
+        assert!(!are_hidden_file_rules_valid(&[rule(
+            &"x".repeat(MAX_HIDDEN_FILE_RULE_LENGTH + 1)
+        )]));
+        assert!(!are_hidden_file_rules_valid(
+            &std::iter::repeat_with(|| rule("a"))
+                .take(MAX_HIDDEN_FILE_RULES + 1)
+                .collect::<Vec<_>>()
+        ));
+    }
+
+    #[test]
+    fn rejects_preferences_outside_their_supported_range() {
+        assert!(AppPreferences::default().validate().is_ok());
+
+        let mut preferences = AppPreferences::default();
+        preferences.editor.font_family = "Menlo; content: url(x)".to_owned();
+        assert!(preferences.validate().is_err());
+
+        let mut preferences = AppPreferences::default();
+        preferences.editor.indent_width = 40;
+        assert!(preferences.validate().is_err());
+
+        let mut preferences = AppPreferences::default();
+        preferences.assistance.hover_delay = 10;
+        assert!(preferences.validate().is_err());
+
+        let mut preferences = AppPreferences::default();
+        preferences.pdf.default_zoom = f64::NAN;
+        assert!(preferences.validate().is_err());
+
+        let mut preferences = AppPreferences::default();
+        preferences.appearance.accent_color = "blue".to_owned();
+        assert!(preferences.validate().is_err());
     }
 
     #[test]

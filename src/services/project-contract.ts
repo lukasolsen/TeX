@@ -1,6 +1,6 @@
 import type {
-  AppPreferences,
   EditorViewerState,
+  HiddenFileRule,
   PdfViewerState,
   ProjectEntry,
   ProjectSearchResponse,
@@ -17,6 +17,30 @@ import {
   projectRelativePath,
   revisionHash,
 } from "@/domain/identifiers"
+import {
+  MAX_HIDDEN_FILE_RULES,
+  MAX_HIDDEN_FILE_RULE_LENGTH,
+  normalizeHiddenFileRules,
+} from "@/domain/file-visibility"
+import {
+  defaultAppPreferences,
+  editorLineHeights,
+  indentStyles,
+  interfaceScales,
+  isAccentColor,
+  isEditorFontFamily,
+  MAX_COMPLETION_LIMIT,
+  MAX_EDITOR_FONT_FAMILY_LENGTH,
+  MAX_HOVER_DELAY,
+  MAX_INDENT_WIDTH,
+  MAX_PDF_ZOOM,
+  MIN_COMPLETION_LIMIT,
+  MIN_HOVER_DELAY,
+  MIN_INDENT_WIDTH,
+  MIN_PDF_ZOOM,
+  normalizeAppPreferences,
+  type AppPreferences,
+} from "@/domain/preferences"
 import type {
   CanonicalProjectPath,
   ProjectRelativePath,
@@ -128,19 +152,214 @@ export function parseStartupState(value: unknown): StartupState {
   }
 }
 
+/**
+ * Reads a preference, falling back to its default when the stored value is
+ * missing or outside its contract. Preferences are comfort settings spread over
+ * six groups: one unreadable field must not cost the user every other choice,
+ * and an out-of-range value is still never accepted.
+ */
+function preference<T>(read: () => T, fallback: T): T {
+  try {
+    return read()
+  } catch {
+    return fallback
+  }
+}
+
 export function parseAppPreferences(value: unknown): AppPreferences {
   const input = record(value, "application preferences")
-  const accentColor = stringValue(input.accentColor, "accent color", 7)
-  if (!/^#[dA-Fa-f]{6}$/.test(accentColor))
-    throw new IpcContractError("accent color")
+  const group = (name: keyof AppPreferences): Record<string, unknown> =>
+    preference(() => record(input[name], `${name} preferences`), {})
+  const appearance = group("appearance")
+  const editor = group("editor")
+  const assistance = group("assistance")
+  const build = group("build")
+  const pdf = group("pdf")
+  const files = group("files")
+  const defaults = defaultAppPreferences
+  return normalizeAppPreferences({
+    appearance: {
+      colorTheme: preference(
+        () =>
+          // A pre-3.0 "custom" theme falls back to the default here; the
+          // accent it carried is now applied whatever the scheme.
+          enumValue(appearance.colorTheme, "color theme", [
+            "system",
+            "light",
+            "dark",
+          ]),
+        defaults.appearance.colorTheme
+      ),
+      accentColor: preference(() => {
+        const accentColor = stringValue(appearance.accentColor, "accent", 7)
+        if (!isAccentColor(accentColor)) throw new IpcContractError("accent")
+        return accentColor
+      }, defaults.appearance.accentColor),
+      interfaceScale: preference(
+        () =>
+          enumValue(appearance.interfaceScale, "interface scale", [
+            ...interfaceScales,
+          ]),
+        defaults.appearance.interfaceScale
+      ),
+    },
+    editor: {
+      fontFamily: preference(() => {
+        const family = stringValue(
+          editor.fontFamily,
+          "editor font family",
+          MAX_EDITOR_FONT_FAMILY_LENGTH
+        )
+        if (!isEditorFontFamily(family))
+          throw new IpcContractError("editor font family")
+        return family
+      }, defaults.editor.fontFamily),
+      lineHeight: preference(
+        () =>
+          enumValue(editor.lineHeight, "editor line height", [
+            ...editorLineHeights,
+          ]),
+        defaults.editor.lineHeight
+      ),
+      showLineNumbers: flag(
+        editor.showLineNumbers,
+        defaults.editor.showLineNumbers
+      ),
+      highlightActiveLine: flag(
+        editor.highlightActiveLine,
+        defaults.editor.highlightActiveLine
+      ),
+      highlightSelectionMatches: flag(
+        editor.highlightSelectionMatches,
+        defaults.editor.highlightSelectionMatches
+      ),
+      wrapLines: flag(editor.wrapLines, defaults.editor.wrapLines),
+      indentStyle: preference(
+        () => enumValue(editor.indentStyle, "indent style", [...indentStyles]),
+        defaults.editor.indentStyle
+      ),
+      indentWidth: preference(
+        () =>
+          integer(
+            editor.indentWidth,
+            "indent width",
+            MIN_INDENT_WIDTH,
+            MAX_INDENT_WIDTH
+          ),
+        defaults.editor.indentWidth
+      ),
+      autoCloseBrackets: flag(
+        editor.autoCloseBrackets,
+        defaults.editor.autoCloseBrackets
+      ),
+      autoCloseEnvironments: flag(
+        editor.autoCloseEnvironments,
+        defaults.editor.autoCloseEnvironments
+      ),
+      spellCheck: flag(editor.spellCheck, defaults.editor.spellCheck),
+    },
+    assistance: {
+      completionEnabled: flag(
+        assistance.completionEnabled,
+        defaults.assistance.completionEnabled
+      ),
+      completionOnTyping: flag(
+        assistance.completionOnTyping,
+        defaults.assistance.completionOnTyping
+      ),
+      completionLimit: preference(
+        () =>
+          integer(
+            assistance.completionLimit,
+            "completion limit",
+            MIN_COMPLETION_LIMIT,
+            MAX_COMPLETION_LIMIT
+          ),
+        defaults.assistance.completionLimit
+      ),
+      hoverDocumentation: flag(
+        assistance.hoverDocumentation,
+        defaults.assistance.hoverDocumentation
+      ),
+      hoverDelay: preference(
+        () =>
+          integer(
+            assistance.hoverDelay,
+            "hover delay",
+            MIN_HOVER_DELAY,
+            MAX_HOVER_DELAY
+          ),
+        defaults.assistance.hoverDelay
+      ),
+      diagnosticsEnabled: flag(
+        assistance.diagnosticsEnabled,
+        defaults.assistance.diagnosticsEnabled
+      ),
+    },
+    build: {
+      saveBeforeBuild: flag(
+        build.saveBeforeBuild,
+        defaults.build.saveBeforeBuild
+      ),
+      openPanelOnFailure: flag(
+        build.openPanelOnFailure,
+        defaults.build.openPanelOnFailure
+      ),
+      revealProblemsOnFailure: flag(
+        build.revealProblemsOnFailure,
+        defaults.build.revealProblemsOnFailure
+      ),
+    },
+    pdf: {
+      defaultZoom: preference(
+        () =>
+          finiteNumber(pdf.defaultZoom, "pdf zoom", MIN_PDF_ZOOM, MAX_PDF_ZOOM),
+        defaults.pdf.defaultZoom
+      ),
+      defaultLayout: preference(
+        () =>
+          enumValue(pdf.defaultLayout, "pdf layout", ["continuous", "single"]),
+        defaults.pdf.defaultLayout
+      ),
+      defaultSidebar: preference(
+        () => enumValue(pdf.defaultSidebar, "pdf sidebar", ["none", "outline"]),
+        defaults.pdf.defaultSidebar
+      ),
+    },
+    files: {
+      hideFilteredFiles: flag(
+        files.hideFilteredFiles,
+        defaults.files.hideFilteredFiles
+      ),
+      hiddenFileRules: preference(
+        () =>
+          normalizeHiddenFileRules(
+            arrayValue(
+              files.hiddenFileRules,
+              "hidden file rules",
+              MAX_HIDDEN_FILE_RULES,
+              parseHiddenFileRule
+            )
+          ),
+        defaults.files.hiddenFileRules
+      ),
+    },
+  })
+}
+
+function flag(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback
+}
+
+function parseHiddenFileRule(value: unknown): HiddenFileRule {
+  const input = record(value, "hidden file rule")
   return {
-    colorTheme: enumValue(input.colorTheme, "color theme", [
-      "system",
-      "light",
-      "dark",
-      "custom",
-    ]),
-    accentColor,
+    kind: enumValue(input.kind, "hidden file rule kind", ["extension", "name"]),
+    value: nonEmptyString(
+      input.value,
+      "hidden file rule value",
+      MAX_HIDDEN_FILE_RULE_LENGTH
+    ),
   }
 }
 

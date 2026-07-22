@@ -41,6 +41,7 @@ import type {
   EditorViewerState,
 } from "@/domain/project"
 import type { ProjectEntry } from "@/domain/project"
+import type { AppPreferences } from "@/domain/preferences"
 import type {
   CanonicalProjectPath,
   ProjectRelativePath,
@@ -53,6 +54,7 @@ import { cn } from "@/lib/utils"
 
 export function SourceViewer({
   fontSize,
+  preferences,
   initialViewerState,
   onChange,
   onCursorChange,
@@ -70,6 +72,7 @@ export function SourceViewer({
   target,
 }: {
   fontSize: number
+  preferences: AppPreferences
   initialViewerState: EditorViewerState | undefined
   onChange: (path: ProjectRelativePath, change: EditorDocumentChange) => void
   onCursorChange: (
@@ -453,6 +456,7 @@ export function SourceViewer({
       <LatexEditor
         content={state.content}
         fontSize={fontSize}
+        preferences={preferences}
         initialViewerState={initialViewerState}
         label={`Edit ${state.document.path}`}
         onChange={(change) => onChange(state.document.path, change)}

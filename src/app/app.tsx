@@ -1,4 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react"
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import type { ReactElement } from "react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import type { WorkspaceFocus } from "@/domain/project"
@@ -7,12 +14,13 @@ import { ProjectHomePage } from "@/pages/project-home-page"
 import { useProjectSession } from "@/features/projects/use-project-session"
 import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { StartupScreen } from "@/components/feedback/startup-screen"
-import { SettingsPage } from "@/pages/settings-page"
+import { SettingsDialog } from "@/features/settings/settings-dialog"
 import { useAppPreferences } from "@/features/settings/use-app-preferences"
 import { runDetached } from "@/lib/promises"
 import { WindowChrome } from "@/components/window-chrome/window-chrome"
 import { shouldRestoreStartupWorkspace } from "@/components/window-chrome/window-chrome-model"
 import { createNewWindow } from "@/services/project-service"
+import { countHiddenEntries } from "@/features/projects/project-model"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -24,8 +32,15 @@ export default function App(): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>("source")
   const [focusRestoreToken, setFocusRestoreToken] = useState(0)
-  const { preferences, saveError, setAccentColor, setColorTheme } =
-    useAppPreferences()
+  const {
+    addHiddenFileRule,
+    isHidden,
+    preferences,
+    removeHiddenFileRule,
+    resetSection,
+    saveError,
+    update,
+  } = useAppPreferences()
   const restoreStartupWorkspace = shouldRestoreStartupWorkspace(
     getCurrentWindow().label
   )
@@ -59,8 +74,13 @@ export default function App(): ReactElement {
   const openNewWindow = useCallback(() => {
     runDetached(createNewWindow())
   }, [])
+  const onProjectFilesChanged = useCallback(() => {
+    runDetached(refreshProjectFiles())
+  }, [refreshProjectFiles])
 
   useEffect(() => {
+    // Window-level chords stay out of the way while a modal owns the keyboard.
+    if (settingsOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (
         (event.ctrlKey || event.metaKey) &&
@@ -73,35 +93,32 @@ export default function App(): ReactElement {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [openNewWindow])
+  }, [openNewWindow, settingsOpen])
+
+  // Settings shows this so the rule list can be judged against a real project
+  // rather than in the abstract; null simply means no project is open.
+  const projectTree =
+    state.status === "workspace" ? state.session.project.tree : null
+  const hiddenInProject = useMemo(
+    () =>
+      projectTree === null ? null : countHiddenEntries(projectTree, isHidden),
+    [isHidden, projectTree]
+  )
+
+  const workspace =
+    state.status === "workspace" ? state.session.workspace : null
+  // Settings is a modal over the workspace, so closing it hands the caret back
+  // to the surface the user was editing rather than to the chrome button.
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false)
+    setFocusRestoreToken((token) => token + 1)
+  }, [])
 
   let content: ReactElement
   let onReturnHome: (() => void) | null = null
 
   if (state.status === "starting") {
     content = <StartupScreen />
-  } else if (settingsOpen) {
-    const workspace =
-      state.status === "workspace" ? state.session.workspace : null
-    onReturnHome = () => {
-      setSettingsOpen(false)
-      if (workspace !== null) {
-        setFocusRestoreToken((token) => token + 1)
-      }
-    }
-    content = (
-      <SettingsPage
-        accentColor={preferences.accentColor}
-        colorTheme={preferences.colorTheme}
-        onClose={onReturnHome}
-        onSetColorTheme={setColorTheme}
-        onSetAccentColor={setAccentColor}
-        onSetEditorFontSize={setEditorFontSize}
-        onSetSidebarWidth={(width) => resizeSidebar(width, true)}
-        saveError={saveError}
-        workspace={workspace}
-      />
-    )
   } else if (state.status === "workspace") {
     onReturnHome = () => runDetached(returnHome())
     content = (
@@ -111,6 +128,9 @@ export default function App(): ReactElement {
           key={state.session.project.path}
           onOpenProject={() => runDetached(chooseAndOpenProject())}
           onOpenPdf={openPdf}
+          isHidden={isHidden}
+          preferences={preferences}
+          shortcutsEnabled={!settingsOpen}
           onOpenSettings={(focus) => {
             setWorkspaceFocus(focus)
             setSettingsOpen(true)
@@ -129,7 +149,7 @@ export default function App(): ReactElement {
             runDetached(resolveExternalChange(keepMine))
           }
           onResolveRecovery={(restore) => runDetached(resolveRecovery(restore))}
-          onProjectFilesChanged={() => runDetached(refreshProjectFiles())}
+          onProjectFilesChanged={onProjectFilesChanged}
           onSaveDocument={saveActiveDocument}
           onSelectRoot={selectRoot}
           onSetEditorFontSize={setEditorFontSize}
@@ -183,6 +203,22 @@ export default function App(): ReactElement {
           onReturnHome={onReturnHome}
         />
         <div className="min-h-0 flex-1">{content}</div>
+        <SettingsDialog
+          hiddenInProject={hiddenInProject}
+          onAddHiddenFileRule={addHiddenFileRule}
+          onOpenChange={(next) =>
+            next ? setSettingsOpen(true) : closeSettings()
+          }
+          onRemoveHiddenFileRule={removeHiddenFileRule}
+          onResetSection={resetSection}
+          onSetEditorFontSize={setEditorFontSize}
+          onSetSidebarWidth={(width) => resizeSidebar(width, true)}
+          onUpdate={update}
+          open={settingsOpen}
+          preferences={preferences}
+          saveError={saveError}
+          workspace={workspace}
+        />
       </div>
     </NotificationProvider>
   )

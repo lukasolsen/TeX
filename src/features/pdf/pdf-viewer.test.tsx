@@ -3,6 +3,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { defaultAppPreferences } from "@/domain/preferences"
 import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 
@@ -90,6 +91,7 @@ describe("PDF text selection", () => {
 
     render(
       <PdfViewer
+        defaults={defaultAppPreferences.pdf}
         initialState={undefined}
         onClose={callback}
         onNavigateSource={callback}

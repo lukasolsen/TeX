@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { initialProjectBuildState } from "@/domain/build"
+import { defaultAppPreferences } from "@/domain/preferences"
 import type { ProjectSession, StartupState } from "@/domain/project"
 import { canonicalProjectPath } from "@/domain/identifiers"
 import { BuildPanel } from "@/features/build/build-panel"
@@ -15,7 +16,7 @@ import { WorkspaceToolbar } from "@/features/projects/workspace-toolbar"
 import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 import { ProjectHomePage } from "@/pages/project-home-page"
-import { SettingsPage } from "@/pages/settings-page"
+import { SettingsDialog } from "@/features/settings/settings-dialog"
 
 vi.mock("pdfjs-dist", () => ({
   getDocument: () => {
@@ -114,6 +115,7 @@ describe("primary workflow accessibility", () => {
       <main>
         <SourceViewer
           fontSize={14}
+          preferences={defaultAppPreferences}
           initialViewerState={undefined}
           onChange={callback}
           onCursorChange={callback}
@@ -184,6 +186,7 @@ describe("primary workflow accessibility", () => {
 
     render(
       <PdfViewer
+        defaults={defaultAppPreferences.pdf}
         initialState={undefined}
         onClose={callback}
         onNavigateSource={callback}
@@ -198,23 +201,51 @@ describe("primary workflow accessibility", () => {
     await expectNoAutomatedAccessibilityViolations()
   })
 
-  it("keeps settings controls named and operable", async () => {
-    const onSetColorTheme = vi.fn<(theme: string) => void>()
+  function renderSettings(onUpdate = vi.fn<(patch: unknown) => void>()) {
     render(
-      <SettingsPage
-        accentColor="#2563eb"
-        colorTheme="system"
-        onClose={callback}
-        onSetAccentColor={callback}
-        onSetColorTheme={onSetColorTheme}
+      <SettingsDialog
+        hiddenInProject={3}
+        onAddHiddenFileRule={() => "added"}
+        onOpenChange={callback}
+        onRemoveHiddenFileRule={callback}
+        onResetSection={callback}
         onSetEditorFontSize={callback}
         onSetSidebarWidth={callback}
+        onUpdate={onUpdate}
+        open
+        preferences={defaultAppPreferences}
         saveError={null}
         workspace={session.workspace}
       />
     )
-    await userEvent.click(screen.getByRole("button", { name: /dark/i }))
-    expect(onSetColorTheme).toHaveBeenCalledWith("dark")
+    return { onUpdate }
+  }
+
+  it("keeps settings controls named and operable", async () => {
+    const { onUpdate } = renderSettings()
+
+    await userEvent.click(screen.getByRole("button", { name: "Dark" }))
+    expect(onUpdate).toHaveBeenCalledWith({
+      appearance: { colorTheme: "dark" },
+    })
+    await expectNoAutomatedAccessibilityViolations()
+  })
+
+  it("navigates to the section holding a searched setting", async () => {
+    renderSettings()
+    // "Close brackets" lives in Editor while Appearance is the open section.
+    expect(screen.queryByText("Close brackets")).toBeNull()
+
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "Search settings" }),
+      "brackets"
+    )
+    const option = screen.getByRole("option", { name: /Editor/ })
+    expect(option.textContent).toContain("Close brackets")
+
+    await userEvent.click(option)
+    expect(screen.getByText("Close brackets")).toBeTruthy()
+    expect(screen.queryByText("Accent colour")).toBeNull()
     await expectNoAutomatedAccessibilityViolations()
   })
 })

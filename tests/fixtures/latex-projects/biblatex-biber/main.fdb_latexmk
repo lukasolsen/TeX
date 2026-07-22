@@ -1,7 +1,14 @@
 # Fdb version 4
-["pdflatex"] 1784718482.29729 "./main.tex" "main.pdf" "main" 1784718482.30193 2
-  "./main.tex" 1784705531.04072 249 82f050e5efb4d0935fadef8a1ef30a98 ""
-  "main.aux" 1784718474.2969 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+["pdflatex"] 1784751939.36853 "./main.tex" "main.pdf" "main" 1784751939.4272 2
+  "./main.tex" 1784751061.28365 249 82f050e5efb4d0935fadef8a1ef30a98 ""
+  "/usr/local/texlive/2026basic/texmf-dist/tex/latex/base/article.cls" 1748806692 20144 b966087dda3b194755eb460d32e2ef75 ""
+  "/usr/local/texlive/2026basic/texmf-dist/tex/latex/base/size10.clo" 1748806692 8448 686612a86f0e04f41ea577f5ec7e83d8 ""
+  "/usr/local/texlive/2026basic/texmf-dist/web2c/texmf.cnf" 1770478701 43630 e9fa012910491fe5ae08a72c3c2997a7 ""
+  "/usr/local/texlive/2026basic/texmf-var/web2c/pdftex/pdflatex.fmt" 1784713856 2966193 fa08e528165915fcbe91124c29aac701 ""
+  "/usr/local/texlive/2026basic/texmf.cnf" 1772405582 628 bbc09d6d38872d53c11bb48dc9b14e88 ""
+  "biblatex.sty" 0 -1 0 ""
+  "main.aux" 1784751931.36816 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "main.tex" 1784751061.28365 249 82f050e5efb4d0935fadef8a1ef30a98 ""
   (generated)
   "main.aux"
   "main.log"

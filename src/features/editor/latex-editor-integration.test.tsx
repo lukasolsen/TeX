@@ -9,6 +9,10 @@ import { cleanup, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import {
+  defaultAppPreferences,
+  type AppPreferences,
+} from "@/domain/preferences"
 import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
 import { LatexEditor } from "@/features/editor/latex-editor"
 
@@ -131,9 +135,13 @@ describe("editor wiring", () => {
 describe("the mounted editor", () => {
   const noop = vi.fn<(...args: unknown[]) => void>()
 
-  function renderEditor(content: string) {
+  function renderEditor(
+    content: string,
+    preferences: AppPreferences = defaultAppPreferences
+  ) {
     render(
       <LatexEditor
+        preferences={preferences}
         content={content}
         fontSize={14}
         initialViewerState={undefined}
@@ -154,6 +162,33 @@ describe("the mounted editor", () => {
       />
     )
   }
+
+  it("drops line numbers, wraps lines, and enables spell checking on request", () => {
+    renderEditor("\\section{One}", {
+      ...defaultAppPreferences,
+      editor: {
+        ...defaultAppPreferences.editor,
+        showLineNumbers: false,
+        wrapLines: true,
+        spellCheck: true,
+      },
+    })
+
+    expect(document.querySelector(".cm-lineNumbers")).toBeNull()
+    expect(document.querySelector(".cm-lineWrapping")).not.toBeNull()
+    expect(
+      document.querySelector(".cm-content")?.getAttribute("spellcheck")
+    ).toBe("true")
+  })
+
+  it("keeps line numbers and disables spell checking by default", () => {
+    renderEditor("\\section{One}")
+
+    expect(document.querySelector(".cm-lineNumbers")).not.toBeNull()
+    expect(
+      document.querySelector(".cm-content")?.getAttribute("spellcheck")
+    ).toBe("false")
+  })
 
   it("renders the document and keeps the focus region addressable", () => {
     renderEditor("\\section{One}")
