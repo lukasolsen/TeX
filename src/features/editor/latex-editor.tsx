@@ -217,7 +217,10 @@ function sourceEditorTheme(fontSize: number) {
       animation:
         "tex-reference-underline 160ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards",
     },
-    ".cm-tooltip:has(.tex-hover-card)": {
+    // Scoped away from the completion info panel, which also renders a hover
+    // card: styling it as a floating tooltip made the completion widget read
+    // as two separate dialogs.
+    ".cm-tooltip:not(.cm-completionInfo):has(.tex-hover-card)": {
       border: "1px solid var(--border)",
       borderRadius: "0.75rem",
       backgroundColor: "var(--popover)",
@@ -362,17 +365,45 @@ function sourceEditorTheme(fontSize: number) {
     ".tex-completion-icon-file": { color: "var(--completion-icon-file)" },
     ".tex-completion-icon-package": { color: "var(--completion-icon-package)" },
     ".tex-completion-icon-class": { color: "var(--completion-icon-class)" },
-    ".cm-completionInfo": {
-      minWidth: "16rem",
+    // CodeMirror styles this element as `.cm-tooltip.cm-completionInfo`, so
+    // matching that specificity is what makes these rules apply at all.
+    ".cm-tooltip.cm-completionInfo": {
+      width: "max-content",
+      minWidth: "14rem",
       maxWidth: "22rem",
       maxHeight: "16.5rem",
       overflowY: "auto",
+      padding: "0",
+      whiteSpace: "normal",
       border: "1px solid var(--border)",
-      borderRadius: "calc(var(--radius) * 0.8)",
+      borderRadius: "0",
       backgroundColor: "var(--popover)",
       color: "var(--popover-foreground)",
-      boxShadow: "var(--elevation-popover)",
-      padding: "0",
+      boxShadow: "none",
+    },
+    // Docked against the list, the panel shares its edge and rounds only the
+    // outer corners, so the pair reads as one widget rather than two.
+    ".cm-tooltip.cm-completionInfo.cm-completionInfo-right": {
+      borderLeft: "none",
+      borderRadius: "0 calc(var(--radius) * 0.8) calc(var(--radius) * 0.8) 0",
+    },
+    ".cm-tooltip.cm-completionInfo.cm-completionInfo-left": {
+      borderRight: "none",
+      borderRadius: "calc(var(--radius) * 0.8) 0 0 calc(var(--radius) * 0.8)",
+    },
+    // The narrow variants float free of the list, so they keep a full outline.
+    ".cm-tooltip.cm-completionInfo.cm-completionInfo-right-narrow, .cm-tooltip.cm-completionInfo.cm-completionInfo-left-narrow":
+      {
+        border: "1px solid var(--border)",
+        borderRadius: "calc(var(--radius) * 0.8)",
+        boxShadow: "var(--elevation-popover)",
+      },
+    // The card is already inside the panel's scroll container; a second one
+    // would trap the wheel.
+    ".cm-completionInfo .tex-hover-card": {
+      maxHeight: "none",
+      overflowY: "visible",
+      padding: "0.5rem 0.625rem",
     },
     ".tex-completion-info": {
       display: "flex",

@@ -2,6 +2,7 @@ import {
   CircleAlert,
   CircleCheck,
   FileCode2,
+  LoaderCircle,
   TriangleAlert,
 } from "lucide-react"
 import type { ReactElement } from "react"
@@ -30,6 +31,7 @@ const SEVERITY_LABEL = {
  * a build that happened rather than the text as it stands.
  */
 export function ProblemsPanel({
+  analysed,
   diagnostics,
   onNavigate,
   path,
@@ -37,6 +39,8 @@ export function ProblemsPanel({
   selectedIndex,
   onSelect,
 }: {
+  /** False until the editor has reported a result for `path`. */
+  analysed: boolean
   diagnostics: readonly LatexDiagnosticEntry[]
   onNavigate: (line: number, column: number) => void
   path: ProjectRelativePath | null
@@ -54,6 +58,27 @@ export function ProblemsPanel({
           <EmptyTitle className="text-sm">No source file open</EmptyTitle>
           <EmptyDescription className="text-xs">
             Open a LaTeX source file to see the problems TeX finds in it.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  if (!analysed) {
+    // Saying a file is clean before it has been read would be a claim TeX
+    // cannot yet make.
+    return (
+      <Empty className="h-full p-5" role="status">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <LoaderCircle
+              aria-hidden="true"
+              className="motion-safe:animate-spin"
+            />
+          </EmptyMedia>
+          <EmptyTitle className="text-sm">Checking {path}</EmptyTitle>
+          <EmptyDescription className="text-xs">
+            TeX is reading this file and the project it belongs to.
           </EmptyDescription>
         </EmptyHeader>
       </Empty>

@@ -13,8 +13,9 @@ import {
 
 /**
  * Hosts the workspace's bottom dock as a three-tab surface: the build panel,
- * the source problems the editor found, and an integrated terminal. The terminal is kept mounted once started so
- * its live view and scroll position survive tab switches.
+ * the source problems the editor found, and an integrated terminal. The
+ * terminal is kept mounted once started so its live view and scroll position
+ * survive tab switches.
  */
 export function BottomPanel({
   buildPanel,
@@ -42,7 +43,9 @@ export function BottomPanel({
       aria-label="Workspace panel"
       className="size-full min-h-0 gap-0 bg-workspace-chrome"
       onValueChange={(value) => {
-        if (value === "build" || value === "terminal") onTabChange(value)
+        if (value === "build" || value === "problems" || value === "terminal") {
+          onTabChange(value)
+        }
       }}
       value={tab}
     >

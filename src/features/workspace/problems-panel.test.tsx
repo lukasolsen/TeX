@@ -41,6 +41,7 @@ function renderPanel(
   const onNavigate = vi.fn<(line: number, column: number) => void>()
   render(
     <ProblemsPanel
+      analysed
       diagnostics={diagnostics}
       onNavigate={onNavigate}
       onSelect={vi.fn<(index: number) => void>()}
@@ -69,6 +70,13 @@ describe("problems panel", () => {
     expect(
       screen.getByText(/could not read every file in this project/)
     ).toBeTruthy()
+  })
+
+  it("says it is still checking rather than claiming the file is clean", () => {
+    renderPanel([], { analysed: false })
+
+    expect(screen.getByText("Checking main.tex")).toBeTruthy()
+    expect(screen.queryByText(/No problems/)).toBeNull()
   })
 
   it("explains that no file is open rather than reporting zero problems", () => {

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ReactElement } from "react"
-import { FileText, Hammer, LockKeyhole, MapPin } from "lucide-react"
+import {
+  CircleAlert,
+  FileText,
+  Hammer,
+  ListChecks,
+  LockKeyhole,
+  MapPin,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -198,10 +205,12 @@ export function ProjectWorkspacePage({
       : (diagnostics[activeDiagnosticIndex] ?? null)
   // Diagnostics belong to the buffer they were computed from; a tab switch
   // must not show the previous file's problems against the new one.
-  const activeProblems =
+  const problemsAnalysed =
     sourceProblems !== null && sourceProblems.path === selectedFile
-      ? sourceProblems.diagnostics
-      : []
+  const activeProblems = problemsAnalysed ? sourceProblems.diagnostics : []
+  const activeProblemErrors = activeProblems.filter(
+    (diagnostic) => diagnostic.severity === "error"
+  ).length
   const watch = useProjectWatch({
     build: build.build,
     buildRunning: running,
@@ -674,6 +683,7 @@ export function ProjectWorkspacePage({
                 problemCount={activeProblems.length}
                 problemsPanel={
                   <ProblemsPanel
+                    analysed={problemsAnalysed}
                     diagnostics={activeProblems}
                     onNavigate={(line, column) => {
                       if (selectedFile === null) return
@@ -687,9 +697,7 @@ export function ProjectWorkspacePage({
                     onSelect={setSourceProblemIndex}
                     path={selectedFile}
                     projectAnalysisComplete={
-                      sourceProblems?.path === selectedFile
-                        ? sourceProblems.complete
-                        : false
+                      problemsAnalysed ? sourceProblems.complete : false
                     }
                     selectedIndex={sourceProblemIndex}
                   />
@@ -781,6 +789,28 @@ export function ProjectWorkspacePage({
             : latestBuild.status === "running"
               ? "Building"
               : `Build ${latestBuild.status}`}
+        </Button>
+        <Button
+          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
+          onClick={() =>
+            onUpdateWorkspaceView({
+              buildPanelOpen: true,
+              bottomPanelTab: "problems",
+            })
+          }
+          size="xs"
+          variant="ghost"
+        >
+          {activeProblemErrors > 0 ? (
+            <CircleAlert data-icon="inline-start" />
+          ) : (
+            <ListChecks data-icon="inline-start" />
+          )}
+          {!problemsAnalysed
+            ? "Problems"
+            : activeProblems.length === 0
+              ? "No problems"
+              : `${activeProblems.length} ${activeProblems.length === 1 ? "problem" : "problems"}`}
         </Button>
         <Button
           className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
