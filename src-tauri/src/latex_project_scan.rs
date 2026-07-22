@@ -14,6 +14,10 @@ const MAX_SCAN_DEPTH: usize = 32;
 pub(crate) struct ProjectSources {
     pub files: Vec<PathBuf>,
     pub texts: Vec<(PathBuf, String)>,
+    /// True when a scan ceiling was reached or a text source could not be read,
+    /// so the project view is incomplete. Analyses that conclude a symbol is
+    /// undefined must stay silent in that case rather than guess.
+    pub complete: bool,
 }
 
 /// Caches parsed-from-disk source text per project root so repeated completion
@@ -47,12 +51,16 @@ pub(crate) fn scan_project_cached(
     let mut files = Vec::new();
     let mut entries = 0_usize;
     collect(root, 0, &mut entries, &mut files);
+    let mut complete = files.len() < MAX_SCAN_FILES && entries <= MAX_SCAN_ENTRIES;
 
     if valid_relative_path(active_relative) && !files.iter().any(|path| path == active_relative) {
         files.push(active_relative.to_path_buf());
     }
 
-    let mut roots = cache.roots.lock().unwrap_or_else(|error| error.into_inner());
+    let mut roots = cache
+        .roots
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let store = roots.entry(root.to_path_buf()).or_default();
 
     let mut texts = Vec::new();
@@ -65,7 +73,10 @@ pub(crate) fn scan_project_cached(
         } else {
             match cached_content(store, root, relative) {
                 Some(content) => content,
-                None => continue,
+                None => {
+                    complete = false;
+                    continue;
+                }
             }
         };
         texts.push((relative.clone(), content));
@@ -76,7 +87,11 @@ pub(crate) fn scan_project_cached(
     let present: HashSet<&PathBuf> = files.iter().collect();
     store.retain(|key, _| present.contains(key));
 
-    ProjectSources { files, texts }
+    ProjectSources {
+        files,
+        texts,
+        complete,
+    }
 }
 
 /// Returns the source text for `relative`, serving a cached copy when the file's
@@ -181,8 +196,12 @@ mod tests {
     fn overlays_the_active_buffer_over_stale_disk() -> Result<(), Box<dyn std::error::Error>> {
         let root = temp_root("overlay")?;
         fs::write(root.join("main.tex"), "\\label{old}")?;
-        let sources =
-            scan_project_cached(&ScanCache::default(), &root, Path::new("main.tex"), "\\label{new}");
+        let sources = scan_project_cached(
+            &ScanCache::default(),
+            &root,
+            Path::new("main.tex"),
+            "\\label{new}",
+        );
         let text = sources
             .texts
             .iter()
