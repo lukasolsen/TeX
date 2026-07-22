@@ -18,7 +18,6 @@ import {
   syntaxHighlighting,
   StreamLanguage,
 } from "@codemirror/language"
-import { stex } from "@codemirror/legacy-modes/mode/stex"
 import {
   highlightSelectionMatches,
   findNext,
@@ -56,6 +55,7 @@ import { lintGutter, nextDiagnostic } from "@codemirror/lint"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
 import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
 import { latexFolding } from "@/features/editor/latex-folding"
+import { latexStreamParser } from "@/features/editor/latex-stream-parser"
 import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import {
@@ -586,7 +586,7 @@ export function LatexEditor({
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      StreamLanguage.define(stex),
+      StreamLanguage.define(latexStreamParser),
       syntaxHighlighting(latexHighlightStyle),
       latexSemanticHighlighting({
         sourcePath: activePath.current,
@@ -665,12 +665,6 @@ export function LatexEditor({
           return true
         },
       }),
-      EditorState.languageData.of(() => [
-        {
-          commentTokens: { line: "%" },
-          closeBrackets: { brackets: ["(", "[", "{"] },
-        },
-      ]),
       autocompletion({
         override: [
           latexCompletionSource(

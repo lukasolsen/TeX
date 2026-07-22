@@ -365,6 +365,15 @@ body {
   text-underline-offset: 0.18em;
 }
 
+.cm-editor .cm-latex-escape {
+  color: var(--editor-delimiter);
+}
+
+.cm-editor .cm-latex-parameter {
+  color: var(--editor-number);
+  font-weight: 600;
+}
+
 .cm-editor .cm-latex-matching-delimiter {
   background-color: color-mix(in oklch, var(--primary) 18%, transparent);
   border-radius: 0.15em;

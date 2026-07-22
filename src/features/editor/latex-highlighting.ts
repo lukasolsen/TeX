@@ -10,5 +10,7 @@ export const latexHighlightStyle = HighlightStyle.define([
   { tag: tags.string, class: "cm-latex-string" },
   { tag: [tags.number, tags.bool], class: "cm-latex-number" },
   { tag: tags.bracket, class: "cm-latex-bracket" },
+  { tag: tags.escape, class: "cm-latex-escape" },
+  { tag: tags.meta, class: "cm-latex-parameter" },
   { tag: tags.invalid, class: "cm-latex-invalid" },
 ])
