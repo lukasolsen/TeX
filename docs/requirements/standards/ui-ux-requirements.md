@@ -34,6 +34,14 @@ Modern means reduced friction and clear feedback. It does not mean novelty, deco
 - Failures preserve the surrounding work and explain: what failed, what remains safe, the next useful action, and where detailed evidence is available. Never replace useful editor/PDF content with a generic error surface.
 - Status changes must not steal focus, scroll the user, close a panel, or move the PDF unless the user explicitly requested navigation.
 
+### Actions reconcile the state they change
+
+- An action that alters the environment, the project, or an external tool must, within the same interaction, re-derive every piece of state it invalidated. Detection results, capability checks, file listings, and available profiles are stale the moment the action succeeds; re-read them rather than waiting for the user to reopen the surface.
+- Controls that were unavailable because of the condition the action resolved must become available immediately, and controls that the action made invalid must become unavailable. A user must never have to reopen a panel, reselect a project, or restart the application to pick up the result of something they just did.
+- Report the outcome through the channel selected by the feedback table in `design-manual.md`. Every deliberate action ends in one of: a visible change in the surface the user is looking at, a status-bar state, a notification, or a dialog. Silence is not an outcome.
+- Failure reconciles too. A failed action restores the controls it disabled and leaves the previously known-good state intact and labelled.
+- `src/features/build/use-latex-install.ts` is the reference implementation: a finished installation re-detects installation support, notifies its consumer so dependent build profiles refresh, and raises exactly one completion notice regardless of which signal observed the completion first.
+
 ### User control and work safety
 
 - Treat source text, reading position, cursor/selection, pane sizes, active tab, PDF zoom/page/layout, and open panels as user-owned context. Automatic updates preserve them unless the user chooses otherwise.

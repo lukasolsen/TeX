@@ -1,6 +1,6 @@
 # Engineering instructions
 
-Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md) and [docs/requirements/standards/ui-ux-requirements.md](docs/requirements/standards/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines. The full review authority is [docs/requirements/standards/engineering-standard.md](docs/requirements/standards/engineering-standard.md); repository, privacy, and support policy live in [docs/requirements/policies/](docs/requirements/policies/).
+Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md) and [docs/requirements/standards/ui-ux-requirements.md](docs/requirements/standards/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines. Also read [docs/requirements/standards/design-manual.md](docs/requirements/standards/design-manual.md) before writing or restyling any user-facing code; it fixes the visual vocabulary — surfaces, type scale, density, elevation, motion, tabs, menus, and feedback channels — and its rules are checkable, not advisory. The full review authority is [docs/requirements/standards/engineering-standard.md](docs/requirements/standards/engineering-standard.md); repository, privacy, and support policy live in [docs/requirements/policies/](docs/requirements/policies/).
 
 ## Product constraints
 
@@ -13,7 +13,7 @@ Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/c
 
 - `src/`: React/TypeScript presentation layer. It does not directly access the filesystem or execute build commands.
 - `src-tauri/`: Rust application boundary. It owns filesystem access, process execution, persistence, and validation.
-- `docs/requirements/standards/`: required implementation, review, and product-experience rules.
+- `docs/requirements/standards/`: required implementation, review, product-experience, and visual-design rules.
 - `docs/requirements/policies/`: repository, privacy, and support policy.
 
 ## Required verification
