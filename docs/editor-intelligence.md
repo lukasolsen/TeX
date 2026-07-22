@@ -68,6 +68,17 @@ The recurring theme is the last row: five separate approximate parsers
 none understood math mode, verbatim, or nesting. That is the root cause, and it
 is what the architecture below replaces.
 
+### What is in place now
+
+| Requirement | Now | Where |
+| --- | --- | --- |
+| Semantic autocomplete | Project symbols from the backend merged with the full bundled catalog — 401 commands, 210 packages, 28 document classes — matched by CodeMirror rather than by prefix, so `\bfsr` finds `\bfseries`. Package and class arguments complete. Suggestions are suppressed in verbatim and comments. Typing `\begin{x}` closing brace writes the `\end{x}`. | `latex-catalog-completion.ts`, `latex-completion.ts`, `latex-completion-context.ts`, `latex-auto-close-environment.ts` |
+| Cross-reference intelligence | Ctrl/⌘-click and Ctrl/⌘-Enter jump from `\ref`/`\cite` to the defining file and line; hover states where a symbol is defined, whether it is defined twice, and where else it is used; an unresolvable jump says why. | `latex-navigation.ts`, `latex-symbol-hover.ts`, `latex_analysis.rs` |
+| Undefined and duplicate symbols | Undefined `\ref` and `\cite`, labels and bibliography keys defined twice, and `\input`-style references to absent files, all guarded so uncertainty stays silent. Shown in the gutter, as underlines, and in a Problems tab. | `latex_analysis.rs`, `latex-diagnostics.ts`, `problems-panel.tsx` |
+| LaTeX-aware highlighting | A tokenizer that tracks verbatim environments, inline `\verb`, math delimiters, and math environments across lines, on top of the existing semantic decoration overlay. | `latex-stream-parser.ts` |
+| Matching and folding | `\begin`/`\end` pair highlighting, marked unmatched when unclosed; folding of sections, environments, display math, comment runs, and the preamble, with keyboard-operable placeholders. | `latex-matching.ts`, `latex-folding.ts` |
+| General editor understanding | One structural model. The outline, folding, matching, navigation, completion gating, and document diagnostics all read it, so `domain/latex.ts`'s scanner and `document-outline.ts`'s line scanner are no longer separate sources of truth. | `domain/latex-syntax.ts`, `latex-model.ts` |
+
 ## 3. Architecture
 
 ### 3.1 One structural model, many consumers

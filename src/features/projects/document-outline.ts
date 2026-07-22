@@ -1,3 +1,5 @@
+import { parseLatexDocument, SECTION_LEVELS } from "@/domain/latex-syntax"
+
 export type DocumentOutlineItem = Readonly<{
   command: string
   level: number
@@ -5,16 +7,12 @@ export type DocumentOutlineItem = Readonly<{
   title: string
 }>
 
-const sectionLevels: Record<string, number> = {
-  part: 0,
-  chapter: 1,
-  section: 2,
-  subsection: 3,
-  subsubsection: 4,
-  paragraph: 5,
-  subparagraph: 6,
-}
-
+/**
+ * Reduces a heading's LaTeX source to the text a reader would see, so the
+ * outline shows `An important result` rather than `An \textbf{important}
+ * result`. Markup that carries no visible text is dropped; nothing is
+ * interpreted, because an outline entry is a label, not a rendering.
+ */
 function visibleTitle(value: string): string {
   return value
     .replace(
@@ -29,43 +27,40 @@ function visibleTitle(value: string): string {
     .trim()
 }
 
-function contentBeforeComment(line: string): string {
-  for (let index = 0; index < line.length; index += 1) {
-    if (line[index] !== "%") continue
-    let escapes = 0
-    for (
-      let cursor = index - 1;
-      cursor >= 0 && line[cursor] === "\\";
-      cursor -= 1
-    )
-      escapes += 1
-    if (escapes % 2 === 0) return line.slice(0, index)
-  }
-  return line
-}
-
-/** Extracts navigable LaTeX section commands without claiming full TeX semantics. */
+/**
+ * The navigable sectioning commands of a document, in source order.
+ *
+ * Headings come from the shared structural model, so the outline agrees with
+ * folding about where a section begins, and neither is fooled by a heading
+ * written inside a comment, a listing, or a `\verb` argument.
+ */
 export function documentOutline(content: string): DocumentOutlineItem[] {
+  const model = parseLatexDocument(content)
+  const lineStarts = [0]
+  for (let index = content.indexOf("\n"); index !== -1;) {
+    lineStarts.push(index + 1)
+    index = content.indexOf("\n", index + 1)
+  }
+
   const items: DocumentOutlineItem[] = []
-  const commandPattern =
-    /\\(part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?(?:\s*\[[^\]]*\])?\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g
-
-  content.split(/\r?\n/).forEach((rawLine, index) => {
-    const line = contentBeforeComment(rawLine)
-    for (const match of line.matchAll(commandPattern)) {
-      const command = match[1]
-      const rawTitle = match[2]
-      if (command === undefined || rawTitle === undefined) continue
-      const title = visibleTitle(rawTitle)
-      if (title === "") continue
-      items.push({
-        command,
-        level: sectionLevels[command] ?? 2,
-        line: index + 1,
-        title,
-      })
+  let line = 1
+  for (const occurrence of model.occurrences) {
+    if (occurrence.role !== "section") continue
+    // Occurrences are ordered by position, so the line scan never rewinds.
+    while (
+      line < lineStarts.length &&
+      (lineStarts[line] ?? Number.POSITIVE_INFINITY) <= occurrence.from
+    ) {
+      line += 1
     }
-  })
-
+    const title = visibleTitle(occurrence.name)
+    if (title === "") continue
+    items.push({
+      command: occurrence.command,
+      level: SECTION_LEVELS.get(occurrence.command) ?? 2,
+      line,
+      title,
+    })
+  }
   return items
 }
