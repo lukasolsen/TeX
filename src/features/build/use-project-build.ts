@@ -41,6 +41,7 @@ export type ProjectBuildController = Readonly<{
   engine: BuildEngine
   setEngine: (engine: BuildEngine) => void
   build: () => Promise<void>
+  refreshProfiles: () => void
   stop: () => Promise<void>
   dispatch: Dispatch<ProjectBuildAction>
   configurationState: ProjectBuildConfigurationState
@@ -107,6 +108,11 @@ export function useProjectBuild({
     }
   }, [projectPath])
 
+  // Bumped when the LaTeX tools change on disk underneath a running TeX. Both
+  // the installed-profile list and the build preview are derived from the same
+  // detection, so they must be re-resolved together or the panel keeps showing
+  // a preview error for a tool that now exists.
+  const [toolsRevision, setToolsRevision] = useState(0)
   useEffect(() => {
     let active = true
     void getBuildProfiles()
@@ -123,6 +129,12 @@ export function useProjectBuild({
     return () => {
       active = false
     }
+  }, [toolsRevision])
+
+  /** Re-detects the installed tools after the environment changes underneath TeX. */
+  const refreshProfiles = useCallback((): void => {
+    dispatch({ type: "actionCleared" })
+    setToolsRevision((revision) => revision + 1)
   }, [])
 
   const setEngine = useCallback(
@@ -241,7 +253,7 @@ export function useProjectBuild({
     return () => {
       active = false
     }
-  }, [configurationState, engine, projectPath, rootFile])
+  }, [configurationState, engine, projectPath, rootFile, toolsRevision])
 
   const build = useCallback(async (): Promise<void> => {
     if (buildInFlight.current) return
@@ -324,6 +336,7 @@ export function useProjectBuild({
     engine,
     setEngine,
     build,
+    refreshProfiles,
     stop,
     dispatch,
     configurationState,

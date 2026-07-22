@@ -1,0 +1,9 @@
+# Fdb version 4
+["pdflatex"] 1784718482.29729 "./main.tex" "main.pdf" "main" 1784718482.30193 2
+  "./main.tex" 1784705531.04072 249 82f050e5efb4d0935fadef8a1ef30a98 ""
+  "main.aux" 1784718474.2969 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  (generated)
+  "main.aux"
+  "main.log"
+  "main.pdf"
+  (rewritten before read)

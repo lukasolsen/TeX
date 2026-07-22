@@ -640,9 +640,7 @@ export function ProjectWorkspacePage({
               }}
             >
               <BottomPanel
-                onClose={() =>
-                  onUpdateWorkspaceView({ buildPanelOpen: false })
-                }
+                onClose={() => onUpdateWorkspaceView({ buildPanelOpen: false })}
                 onTabChange={(nextTab) => {
                   if (nextTab === "terminal") setTerminalStarted(true)
                   onUpdateWorkspaceView({ bottomPanelTab: nextTab })
@@ -659,9 +657,7 @@ export function ProjectWorkspacePage({
                     logContextSequence={logContextSequence}
                     onBuild={() => runDetached(build.build())}
                     onClean={() => setCleanOpen(true)}
-                    onClose={() =>
-                      onUpdateWorkspaceView({ buildPanelOpen: false })
-                    }
+                    onLatexInstalled={build.refreshProfiles}
                     onNavigate={(path, line) => {
                       setTarget({ path, line, column: 1, token: Date.now() })
                       onPinFile(path)

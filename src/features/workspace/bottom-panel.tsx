@@ -43,7 +43,10 @@ export function BottomPanel({
       value={tab}
     >
       <div className="flex h-9 shrink-0 items-center gap-1 border-b pr-1.5 pl-2">
-        <TabsList className="h-full gap-1 border-0 bg-transparent p-0" variant="line">
+        <TabsList
+          className="h-full gap-1 border-0 bg-transparent p-0"
+          variant="line"
+        >
           <TabsTrigger className="flex-none gap-1.5 px-2" value="build">
             <Hammer data-icon="inline-start" />
             Build
@@ -53,12 +56,28 @@ export function BottomPanel({
             Terminal
           </TabsTrigger>
         </TabsList>
-        {tab === "terminal" ? (
-          <PanelActions
-            onClose={onClose}
-            onKill={() => terminalRef.current?.kill()}
-          />
-        ) : null}
+        <div className="ml-auto flex items-center gap-0.5">
+          {tab === "terminal" ? (
+            <Button
+              aria-label="Terminate the shell"
+              onClick={() => terminalRef.current?.kill()}
+              size="icon-sm"
+              title="Terminate the shell"
+              variant="ghost"
+            >
+              <CircleStop aria-hidden="true" />
+            </Button>
+          ) : null}
+          <Button
+            aria-label="Close panel"
+            onClick={onClose}
+            size="icon-sm"
+            title="Close panel"
+            variant="ghost"
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
       </div>
       <div className="relative min-h-0 flex-1">
         <div className={cn("size-full min-h-0", tab !== "build" && "hidden")}>
@@ -77,36 +96,5 @@ export function BottomPanel({
         ) : null}
       </div>
     </Tabs>
-  )
-}
-
-function PanelActions({
-  onClose,
-  onKill,
-}: {
-  onClose: () => void
-  onKill: () => void
-}): ReactElement {
-  return (
-    <div className="ml-auto flex items-center gap-0.5">
-      <Button
-        aria-label="Terminate the shell"
-        onClick={onKill}
-        size="icon-sm"
-        title="Terminate the shell"
-        variant="ghost"
-      >
-        <CircleStop aria-hidden="true" />
-      </Button>
-      <Button
-        aria-label="Close panel"
-        onClick={onClose}
-        size="icon-sm"
-        title="Close panel"
-        variant="ghost"
-      >
-        <X aria-hidden="true" />
-      </Button>
-    </div>
   )
 }

@@ -6,6 +6,7 @@ mod build_system;
 mod latex_completion;
 #[cfg(test)]
 mod latex_fixtures;
+mod latex_install;
 mod latex_project_scan;
 mod latex_symbols;
 mod pdf_read;
@@ -36,6 +37,7 @@ use tauri_plugin_log::{Target, TargetKind};
 pub fn run() {
     tauri::Builder::default()
         .manage(build_system::BuildController::default())
+        .manage(latex_install::LatexInstallController::default())
         .manage(project_access::ProjectAccess::default())
         .manage(latex_project_scan::ScanCache::default())
         .manage(source_edit::SourceWriteLocks::default())
@@ -82,6 +84,10 @@ pub fn run() {
             build_system::start_build,
             build_system::stop_build,
             build_system::get_build_history,
+            latex_install::get_latex_installation_support,
+            latex_install::get_latex_installation_progress,
+            latex_install::start_latex_installation,
+            latex_install::stop_latex_installation,
             build_operations::preview_clean_auxiliary_files,
             build_operations::clean_auxiliary_files,
             build_operations::reveal_project_output,

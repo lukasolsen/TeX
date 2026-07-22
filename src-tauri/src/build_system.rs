@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     env,
+    ffi::OsString,
     io::{BufRead, BufReader, Read},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -506,7 +507,53 @@ fn executable_available(executable: &str) -> bool {
 }
 
 pub(crate) fn resolve_executable(executable: &str) -> Option<PathBuf> {
-    env::var_os("PATH").and_then(|path| resolve_executable_in(executable, env::split_paths(&path)))
+    resolve_executable_in(executable, search_directories().into_iter())
+}
+
+/// `PATH` first, then the fixed locations a platform TeX distribution installs
+/// into. A desktop application launched from the dock inherits a minimal `PATH`
+/// that omits them, so without this a freshly installed distribution would look
+/// missing until the session was restarted.
+fn search_directories() -> Vec<PathBuf> {
+    let mut directories: Vec<PathBuf> = env::var_os("PATH")
+        .map(|path| env::split_paths(&path).collect())
+        .unwrap_or_default();
+    for candidate in distribution_directories() {
+        if !directories.contains(&candidate) {
+            directories.push(candidate);
+        }
+    }
+    directories
+}
+
+#[cfg(target_os = "macos")]
+fn distribution_directories() -> Vec<PathBuf> {
+    vec![PathBuf::from("/Library/TeX/texbin")]
+}
+
+#[cfg(windows)]
+fn distribution_directories() -> Vec<PathBuf> {
+    // MiKTeX installs per user under `Programs` and machine-wide directly
+    // under `Program Files`.
+    [("LOCALAPPDATA", true), ("ProgramFiles", false)]
+        .iter()
+        .filter_map(|(variable, per_user)| {
+            env::var_os(variable).map(|root| {
+                let base = Path::new(&root);
+                let base = if *per_user {
+                    base.join("Programs")
+                } else {
+                    base.to_path_buf()
+                };
+                base.join("MiKTeX").join("miktex").join("bin").join("x64")
+            })
+        })
+        .collect()
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn distribution_directories() -> Vec<PathBuf> {
+    Vec::new()
 }
 
 fn resolve_executable_in(
@@ -569,10 +616,29 @@ fn command_for(invocation: &BuildInvocation) -> Command {
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    if let Some(path) = sibling_tool_path(Path::new(&invocation.executable)) {
+        command.env("PATH", path);
+    }
+    // Project settings are applied last so an explicit PATH override wins.
     for setting in &invocation.environment {
         command.env(&setting.name, &setting.value);
     }
     command
+}
+
+/// A TeX distribution's tools invoke each other by bare name: `latexmk` spawns
+/// `pdflatex`, `biber`, and `bibtex`. When the engine was resolved from a
+/// directory the inherited `PATH` does not contain, that directory has to be on
+/// the child's `PATH` or the build fails looking for its own siblings. Only the
+/// directory of the executable already chosen is added.
+fn sibling_tool_path(executable: &Path) -> Option<OsString> {
+    let directory = executable.parent()?;
+    let inherited = env::var_os("PATH").unwrap_or_default();
+    if env::split_paths(&inherited).any(|entry| entry == directory) {
+        return None;
+    }
+    let entries = std::iter::once(directory.to_path_buf()).chain(env::split_paths(&inherited));
+    env::join_paths(entries).ok()
 }
 
 fn supervise_build(
@@ -697,7 +763,9 @@ fn spawn_output_reader<R: Read + Send + 'static>(
         })
 }
 
-fn read_bounded_line(reader: &mut impl BufRead) -> std::io::Result<Option<(Vec<u8>, bool)>> {
+pub(crate) fn read_bounded_line(
+    reader: &mut impl BufRead,
+) -> std::io::Result<Option<(Vec<u8>, bool)>> {
     let mut bytes = Vec::new();
     let mut observed = false;
     let mut truncated = false;
@@ -948,13 +1016,50 @@ mod tests {
 
     use super::{
         executable_available_in, file_line_message, parse_diagnostic, read_bounded_line,
-        resolve_executable_in, validate_build, validate_build_with_resolver, BuildEngine,
-        BuildEvent, BuildLogEntry, BuildLogStream, BuildRequest, BuildStatus, DiagnosticSeverity,
+        resolve_executable_in, sibling_tool_path, validate_build, validate_build_with_resolver,
+        BuildEngine, BuildEvent, BuildLogEntry, BuildLogStream, BuildRequest, BuildStatus,
+        DiagnosticSeverity,
     };
     use crate::project_config::{CustomCommand, ProjectBuildConfiguration};
 
     fn fixture_root() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/fixtures/root-detection")
+    }
+
+    /// `latexmk` resolved outside `PATH` still has to find `pdflatex` beside
+    /// it, so its directory is prepended for the child process.
+    #[test]
+    fn engine_directory_joins_the_child_search_path() -> Result<(), Box<dyn std::error::Error>> {
+        let inherited = std::env::var_os("PATH").unwrap_or_default();
+        let unlisted = std::env::split_paths(&inherited).next().map_or_else(
+            || "/tex/bin".to_owned(),
+            |entry| format!("{}-tex-distribution", entry.to_string_lossy()),
+        );
+
+        let Some(joined) = sibling_tool_path(Path::new(&unlisted).join("latexmk").as_path()) else {
+            return Err("an unlisted engine directory must extend PATH".into());
+        };
+        let mut entries = std::env::split_paths(&joined);
+
+        assert_eq!(entries.next(), Some(Path::new(&unlisted).to_path_buf()));
+        assert_eq!(
+            entries.count(),
+            std::env::split_paths(&inherited).count(),
+            "the inherited PATH is preserved after the engine directory"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn a_listed_engine_directory_leaves_the_search_path_untouched() {
+        let Some(listed) = std::env::var_os("PATH")
+            .map(|path| std::env::split_paths(&path).next())
+            .unwrap_or_default()
+        else {
+            return;
+        };
+
+        assert!(sibling_tool_path(listed.join("latexmk").as_path()).is_none());
     }
 
     #[test]

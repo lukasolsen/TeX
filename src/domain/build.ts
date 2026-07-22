@@ -166,6 +166,7 @@ export type ProjectBuildAction =
   | { type: "historyError"; error: ProjectError }
   | { type: "actionPending" }
   | { type: "actionError"; error: ProjectError }
+  | { type: "actionCleared" }
   | { type: "runStarted"; run: BuildRun }
   | { type: "eventReceived"; event: BuildEvent }
   | { type: "selectRun"; runId: BuildId }
@@ -221,6 +222,12 @@ export function projectBuildReducer(
       return { ...state, action: { status: "error", error: action.error } }
     case "actionPending":
       return { ...state, action: { status: "pending" } }
+    case "actionCleared":
+      // A retained failure describes an environment that no longer applies;
+      // the retained runs and their logs are left untouched.
+      return state.action.status === "error"
+        ? { ...state, action: { status: "idle" } }
+        : state
     case "runStarted":
       return applyPendingEvents({
         ...state,
