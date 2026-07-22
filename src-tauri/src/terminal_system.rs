@@ -106,19 +106,18 @@ pub fn open_terminal(
     controller: State<'_, TerminalController>,
     access: State<'_, ProjectAccess>,
 ) -> Result<TerminalDescriptor, TerminalError> {
-    let project_root = access.resolve(&request.project_path).map_err(|_| unavailable())?;
+    let project_root = access
+        .resolve(&request.project_path)
+        .map_err(|_| unavailable())?;
     let cols = clamp_dimension(request.cols);
     let rows = clamp_dimension(request.rows);
 
     let mut sessions = lock_sessions(&controller)?;
     // A session whose shell has exited but has not yet been reaped must not be
     // handed back (it is a dead descriptor) nor counted against capacity.
-    if let Some((terminal_id, session)) = sessions
-        .iter()
-        .find(|(_, session)| {
-            session.project_root == project_root && session.running.load(Ordering::Acquire)
-        })
-    {
+    if let Some((terminal_id, session)) = sessions.iter().find(|(_, session)| {
+        session.project_root == project_root && session.running.load(Ordering::Acquire)
+    }) {
         return Ok(TerminalDescriptor {
             terminal_id: terminal_id.clone(),
             base64_snapshot: snapshot(&session.scrollback),
@@ -137,7 +136,10 @@ pub fn open_terminal(
         });
     }
 
-    let terminal_id = format!("terminal-{}", NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed));
+    let terminal_id = format!(
+        "terminal-{}",
+        NEXT_TERMINAL_ID.fetch_add(1, Ordering::Relaxed)
+    );
     let session = spawn_session(
         &app,
         controller.inner(),
@@ -164,10 +166,17 @@ pub fn write_terminal(
     if request.base64.len() > WRITE_LIMIT_BYTES {
         return Err(write_failed());
     }
-    let bytes = STANDARD.decode(request.base64.as_bytes()).map_err(|_| write_failed())?;
+    let bytes = STANDARD
+        .decode(request.base64.as_bytes())
+        .map_err(|_| write_failed())?;
     let mut sessions = lock_sessions(&controller)?;
-    let session = sessions.get_mut(&request.terminal_id).ok_or_else(not_found)?;
-    session.writer.write_all(&bytes).map_err(|_| write_failed())?;
+    let session = sessions
+        .get_mut(&request.terminal_id)
+        .ok_or_else(not_found)?;
+    session
+        .writer
+        .write_all(&bytes)
+        .map_err(|_| write_failed())?;
     session.writer.flush().map_err(|_| write_failed())?;
     Ok(())
 }
@@ -230,7 +239,10 @@ fn spawn_session(
     command.cwd(project_root);
     command.env("TERM", "xterm-256color");
 
-    let child = pair.slave.spawn_command(command).map_err(|_| spawn_failed())?;
+    let child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|_| spawn_failed())?;
     // Dropping the slave releases the child's controlling handle from this process;
     // the child retains its own end through the spawned session.
     drop(pair.slave);
@@ -477,7 +489,10 @@ mod tests {
 
         if let Ok(value) = data {
             assert_eq!(value.get("kind"), Some(&serde_json::json!("data")));
-            assert_eq!(value.get("terminalId"), Some(&serde_json::json!("terminal-1")));
+            assert_eq!(
+                value.get("terminalId"),
+                Some(&serde_json::json!("terminal-1"))
+            );
             assert_eq!(value.get("base64"), Some(&serde_json::json!("aGk=")));
         } else {
             assert!(data.is_ok());

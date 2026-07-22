@@ -92,8 +92,7 @@ fn enclosing_brace(source: &str, line_start: usize, position: usize) -> Option<u
 /// backslash-prefixed name precedes the group.
 fn owning_command(source: &str, line_start: usize, brace_open: usize) -> Option<String> {
     let mut name_end = brace_open;
-    if source[line_start..name_end].ends_with(']')
-        && !is_escaped(source, name_end - ']'.len_utf8())
+    if source[line_start..name_end].ends_with(']') && !is_escaped(source, name_end - ']'.len_utf8())
     {
         name_end = matching_bracket(source, line_start, name_end)?;
     }
@@ -738,8 +737,12 @@ fn symbol_items(
     let Some(target) = classify_command(command) else {
         return Vec::new();
     };
-    let sources =
-        scan_project_cached(scan_cache, root, Path::new(&request.relative_path), &request.content);
+    let sources = scan_project_cached(
+        scan_cache,
+        root,
+        Path::new(&request.relative_path),
+        &request.content,
+    );
     let resolved = match target {
         ArgumentTarget::Label => text_symbols(&sources, SymbolKind::Label, labels_in),
         ArgumentTarget::Citation => citation_symbols(&sources),

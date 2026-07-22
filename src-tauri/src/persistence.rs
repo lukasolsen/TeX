@@ -815,10 +815,9 @@ mod tests {
 
     use super::{
         load_startup_state_from_path, read_state, write_state, AppPreferences, BottomPanelTab,
-        BuildPanelTab,
-        BuildProfile, EditorViewerState, PdfLayoutMode, PdfSidebarMode, PdfViewerState,
-        PersistedRecentProject, PersistedState, ProjectAvailability, ProjectSidebarTab,
-        WorkspaceState, STATE_VERSION,
+        BuildPanelTab, BuildProfile, EditorViewerState, PdfLayoutMode, PdfSidebarMode,
+        PdfViewerState, PersistedRecentProject, PersistedState, ProjectAvailability,
+        ProjectSidebarTab, WorkspaceState, STATE_VERSION,
     };
 
     #[test]
