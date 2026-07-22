@@ -106,7 +106,7 @@ function CreateEntryInput({
       )}
       <Input
         aria-label={directory ? "New folder name" : "New file name"}
-        className="h-6 rounded-sm px-1.5 text-[13px]"
+        className="h-6 rounded-sm px-1.5 text-ui"
         onBlur={() => runDetached(submit())}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={handleKeyDown}
@@ -165,7 +165,7 @@ function RenameEntryInput({
       />
       <Input
         aria-label={`Rename ${entry.name}`}
-        className="h-6 min-w-0 rounded-sm px-1.5 text-[13px]"
+        className="h-6 min-w-0 rounded-sm px-1.5 text-ui"
         onBlur={() => runDetached(submit())}
         onChange={(event) => setName(event.target.value)}
         onKeyDown={(event) => {
@@ -283,7 +283,7 @@ function TreeBranch({
             <button
               aria-expanded={isDirectory ? expanded : undefined}
               className={cn(
-                "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-[13px] outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
+                "flex h-7 w-full min-w-0 items-center gap-1.5 rounded-md pr-2 text-left text-ui outline-none hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-55 [&>svg]:shrink-0",
                 (selectedFile === entry.path || selectedPdf === entry.path) &&
                   "bg-sidebar-accent text-foreground"
               )}

@@ -56,7 +56,7 @@ export function RecentProjectList({
               key={project.path}
             >
               <div className="flex min-w-0 items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-home-document text-primary shadow-xs">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-home-document text-primary shadow-raised">
                   {available ? (
                     <FileCode2 aria-hidden="true" />
                   ) : (

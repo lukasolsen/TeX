@@ -690,26 +690,36 @@ export function ProjectWorkspacePage({
         ) : null}
       </ResizablePanelGroup>
 
-      <footer className="flex min-w-0 items-center gap-1 border-t bg-status px-2 text-[11px] text-status-foreground">
-        <span className="flex min-w-0 items-center gap-1.5 truncate">
+      <footer className="flex min-w-0 items-center gap-2 border-t bg-status px-2 text-meta text-status-foreground">
+        <span className="flex shrink-0 items-center gap-1.5">
           <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
           Local project
         </span>
-        {activity !== null ? (
-          <span className="truncate rounded px-2 py-0.5" role="status">
-            {activity}
-          </span>
-        ) : null}
-        {saveActivity !== null ? (
-          <span className="truncate" role="status">
-            {saveActivity}
-          </span>
-        ) : null}
-        {buildOperationMessage !== null ? (
-          <span className="truncate" role="status">
-            {buildOperationMessage}
-          </span>
-        ) : null}
+        {activity === null &&
+        saveActivity === null &&
+        buildOperationMessage === null ? null : (
+          <>
+            <StatusDivider />
+            <span className="flex min-w-0 items-center gap-2">
+              {activity !== null ? (
+                <span className="truncate" role="status">
+                  {activity}
+                </span>
+              ) : null}
+              {saveActivity !== null ? (
+                <span className="truncate" role="status">
+                  {saveActivity}
+                </span>
+              ) : null}
+              {buildOperationMessage !== null ? (
+                <span className="truncate" role="status">
+                  {buildOperationMessage}
+                </span>
+              ) : null}
+            </span>
+          </>
+        )}
+        <StatusDivider />
         <Button
           className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
           onClick={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
@@ -737,16 +747,17 @@ export function ProjectWorkspacePage({
               ? "Watch error"
               : `Watch ${watch.state.status}`}
         </Button>
-        <span className="ml-auto hidden items-center gap-1.5 text-status-foreground/75 md:flex">
+        <span className="ml-auto hidden shrink-0 items-center gap-1.5 text-status-foreground/75 md:flex">
           <FileText aria-hidden="true" className="size-3.5" />
           {session.workspace.editorFontSize}px
         </span>
         {sourceLocation?.path === selectedFile ? (
-          <span className="hidden items-center gap-1.5 text-status-foreground/75 sm:flex">
+          <span className="hidden shrink-0 items-center gap-1.5 text-status-foreground/75 sm:flex">
             <MapPin aria-hidden="true" className="size-3.5" />
             Ln {sourceLocation.line}, Col {sourceLocation.column}
           </span>
         ) : null}
+        <StatusDivider />
         <span className="min-w-0">
           <RootFileControl
             onSelectRoot={onSelectRoot}
@@ -801,6 +812,16 @@ export function ProjectWorkspacePage({
         />
       ) : null}
     </main>
+  )
+}
+
+/** Separates the status bar's groups so they do not read as one run-on line. */
+function StatusDivider(): ReactElement {
+  return (
+    <span
+      aria-hidden="true"
+      className="h-3.5 w-px shrink-0 bg-status-foreground/20"
+    />
   )
 }
 

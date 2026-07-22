@@ -162,13 +162,13 @@ export function BuildPanel({
       >
         <div className="flex h-9 min-w-0 shrink-0 items-center gap-3 border-b px-2">
           <TabsList className="h-full shrink-0" variant="line">
-            <TabsTrigger className="px-2 text-xs" value="output">
+            <TabsTrigger className="px-3 text-xs" value="output">
               Output
             </TabsTrigger>
-            <TabsTrigger className="px-2 text-xs" value="problems">
+            <TabsTrigger className="px-3 text-xs" value="problems">
               Problems
               {problemCount === 0 ? null : (
-                <Badge className="h-4 px-1.5 text-[10px]" variant="secondary">
+                <Badge className="h-4 px-1.5 text-micro" variant="secondary">
                   {problemCount}
                 </Badge>
               )}

@@ -113,7 +113,7 @@ export function WindowChrome({
       {onOpenCommands !== null ? (
         <button
           aria-label="Open command palette"
-          className="absolute top-1/2 left-1/2 hidden h-7 w-80 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-border/80 bg-muted/45 px-3 text-left text-xs text-muted-foreground shadow-xs transition-colors outline-none hover:border-border hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 min-[760px]:flex xl:w-96"
+          className="absolute top-1/2 left-1/2 hidden h-7 w-80 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-md border border-border/80 bg-muted/45 px-3 text-left text-xs text-muted-foreground shadow-raised transition-colors outline-none hover:border-border hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/60 min-[760px]:flex xl:w-96"
           onClick={onOpenCommands}
           type="button"
         >
@@ -122,7 +122,7 @@ export function WindowChrome({
             {windowChromeCommandCenter.label}
           </span>
           <span aria-hidden="true" className="h-3 w-px bg-border/70" />
-          <span className="font-mono text-[10px] text-muted-foreground/75">
+          <span className="font-mono text-micro text-muted-foreground/75">
             {shortcutLabel(["primary", "shift", "p"])}
           </span>
         </button>
@@ -170,12 +170,12 @@ function WindowMenu({
 }): ReactElement {
   return (
     <Menu.Root>
-      <Menu.Trigger className="px-2 text-[12px] text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground data-open:bg-muted data-open:text-foreground">
+      <Menu.Trigger className="px-2 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:bg-muted focus-visible:text-foreground data-open:bg-muted data-open:text-foreground">
         {label}
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner align="start" side="bottom" sideOffset={4}>
-          <Menu.Popup className="z-50 min-w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg outline-none">
+          <Menu.Popup className="z-50 min-w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-popover outline-none">
             {children}
           </Menu.Popup>
         </Menu.Positioner>
@@ -361,7 +361,7 @@ function WindowControl({
       className={cn(
         "flex w-10 items-center justify-center border-l border-border/70 text-muted-foreground transition-colors duration-100 outline-none hover:bg-foreground/7 hover:text-foreground focus-visible:bg-foreground/10 focus-visible:text-foreground [&_svg]:size-3.5 [&_svg]:stroke-[1.7]",
         close &&
-          "border-l-0 hover:bg-[#c42b1c] hover:text-white focus-visible:bg-[#c42b1c] focus-visible:text-white"
+          "border-l-0 hover:bg-window-close hover:text-window-close-foreground focus-visible:bg-window-close focus-visible:text-window-close-foreground"
       )}
       onClick={onClick}
       type="button"

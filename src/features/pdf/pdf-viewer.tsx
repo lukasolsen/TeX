@@ -1344,7 +1344,7 @@ export function PdfViewer({
         ) : null}
         <div className="relative flex min-w-0 flex-1 flex-col">
           {searchOpen ? (
-            <div className="absolute top-2 right-3 z-20 flex w-[min(30rem,calc(100%-1.5rem))] items-center gap-1 rounded-md border bg-popover p-1 shadow-lg">
+            <div className="absolute top-2 right-3 z-20 flex w-[min(30rem,calc(100%-1.5rem))] items-center gap-1 rounded-md border bg-popover p-1 shadow-overlay">
               <InputGroup className="min-w-0 flex-1">
                 <InputGroupAddon>
                   <Search />

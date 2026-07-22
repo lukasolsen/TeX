@@ -47,11 +47,14 @@ export function BottomPanel({
           className="h-full gap-1 border-0 bg-transparent p-0"
           variant="line"
         >
-          <TabsTrigger className="flex-none gap-1.5 px-2" value="build">
+          <TabsTrigger className="flex-none gap-1.5 px-3 text-xs" value="build">
             <Hammer data-icon="inline-start" />
             Build
           </TabsTrigger>
-          <TabsTrigger className="flex-none gap-1.5 px-2" value="terminal">
+          <TabsTrigger
+            className="flex-none gap-1.5 px-3 text-xs"
+            value="terminal"
+          >
             <SquareTerminal data-icon="inline-start" />
             Terminal
           </TabsTrigger>

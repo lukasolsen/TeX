@@ -199,7 +199,7 @@ export function SourceViewer({
   return (
     <div className="relative flex min-h-0 flex-1 flex-col bg-source">
       {findOpen ? (
-        <div className="absolute top-2 right-3 z-20 flex w-[min(34rem,calc(100%-1.5rem))] flex-col gap-1 rounded-md border bg-popover p-1 shadow-lg">
+        <div className="absolute top-2 right-3 z-20 flex w-[min(34rem,calc(100%-1.5rem))] flex-col gap-1 rounded-md border bg-popover p-1 shadow-overlay">
           <div className="flex items-center gap-1">
             <InputGroup className="min-w-0 flex-1">
               <InputGroupAddon>
@@ -317,7 +317,7 @@ export function SourceViewer({
           {findQuery !== "" && findStatus !== null ? (
             <span
               className={cn(
-                "px-1 text-[11px]",
+                "px-1 text-meta",
                 findStatus.valid && findStatus.matches > 0
                   ? "text-muted-foreground"
                   : "text-destructive"

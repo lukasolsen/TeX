@@ -10,12 +10,12 @@ export function AppBrand({
 }): ReactElement {
   return (
     <div className="flex items-center gap-2.5" aria-label="TeX">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-xs">
+      <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-raised">
         <Braces aria-hidden="true" />
       </span>
       <span
         className={cn(
-          "font-heading text-[15px] font-semibold tracking-[-0.02em]",
+          "font-heading text-sm font-semibold tracking-[-0.02em]",
           compact && "sr-only"
         )}
       >

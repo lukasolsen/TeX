@@ -115,7 +115,7 @@ function DirectReferencesPanel({
         <p className="truncate text-xs font-medium">
           {documentState.document.path}
         </p>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-meta leading-relaxed text-muted-foreground">
           Direct references found in this file. Included files are not traced
           recursively, and installed LaTeX packages are not validated.
         </p>
@@ -164,10 +164,10 @@ function DirectReferencesPanel({
                   <DependencyIcon kind={dependency.kind} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px]">
+                  <span className="block truncate text-ui">
                     {dependency.path}
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
+                  <span className="block truncate text-meta text-muted-foreground">
                     {dependencyDescription(dependency)} · \\
                     {dependency.command}
                   </span>

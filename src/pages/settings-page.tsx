@@ -68,7 +68,7 @@ const themeOptions: {
 
 function SettingsGroup({ children }: { children: ReactNode }): ReactElement {
   return (
-    <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+    <section className="overflow-hidden rounded-xl border bg-card shadow-raised">
       <div className="px-5 sm:px-6">{children}</div>
     </section>
   )
@@ -179,7 +179,7 @@ export function SettingsPage({
           />
           <Input
             aria-label="Search settings"
-            className="h-10 bg-background pr-10 pl-9 shadow-sm"
+            className="h-10 bg-background pr-10 pl-9 shadow-raised"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search settings"
             value={query}
@@ -207,7 +207,7 @@ export function SettingsPage({
                   className={cn(
                     "flex h-9 items-center gap-2 rounded-lg px-3 text-sm text-muted-foreground transition-colors outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                     selected
-                      ? "bg-background font-medium text-foreground shadow-xs"
+                      ? "bg-background font-medium text-foreground shadow-raised"
                       : ""
                   )}
                   key={section.id}
@@ -263,7 +263,7 @@ export function SettingsPage({
                           <span className="block text-sm font-medium">
                             {option.label}
                           </span>
-                          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                          <span className="mt-0.5 block text-meta text-muted-foreground">
                             {option.detail}
                           </span>
                           {selected ? (
@@ -283,7 +283,7 @@ export function SettingsPage({
                   modified={colorTheme === "custom"}
                   title="Accent color"
                 >
-                  <label className="flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 text-sm shadow-xs">
+                  <label className="flex items-center gap-2 rounded-lg border bg-background px-2 py-1.5 text-sm shadow-raised">
                     <input
                       aria-label="Custom accent color"
                       className="size-7 cursor-pointer rounded border-0 bg-transparent p-0"
@@ -382,7 +382,7 @@ export function SettingsPage({
             ) : null}
 
             {visibleSections.length === 0 ? (
-              <Empty className="border bg-card py-12 shadow-sm">
+              <Empty className="border bg-card py-12 shadow-raised">
                 <EmptyHeader>
                   <EmptyMedia variant="icon">
                     <Search aria-hidden="true" />

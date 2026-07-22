@@ -70,7 +70,7 @@ export function DocumentOutlinePanel({
   const baseLevel = Math.min(...items.map((item) => item.level))
   return (
     <nav aria-label={`Outline of ${documentState.document.path}`}>
-      <p className="truncate border-b px-3 py-2 text-[11px] text-muted-foreground">
+      <p className="truncate border-b px-3 py-2 text-meta text-muted-foreground">
         {documentState.document.path}
       </p>
       <ol className="flex flex-col gap-0.5 p-1.5">
@@ -79,7 +79,7 @@ export function DocumentOutlinePanel({
             <button
               aria-current={index === activeIndex ? "location" : undefined}
               className={cn(
-                "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                "flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-ui hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                 index === activeIndex && "bg-sidebar-accent font-medium"
               )}
               onClick={() => onNavigate(item.line)}
@@ -90,7 +90,7 @@ export function DocumentOutlinePanel({
               type="button"
             >
               <span className="truncate">{item.title}</span>
-              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground tabular-nums">
+              <span className="ml-auto shrink-0 text-micro text-muted-foreground tabular-nums">
                 {item.line}
               </span>
             </button>

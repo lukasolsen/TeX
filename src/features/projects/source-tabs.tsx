@@ -166,7 +166,7 @@ export function SourceTabs({
       </TabsList>
       {clipboard.status !== null ? (
         <span
-          className="pointer-events-none absolute top-2 right-2 rounded bg-popover px-2 py-1 text-[11px] shadow-sm"
+          className="pointer-events-none absolute top-2 right-2 rounded bg-popover px-2 py-1 text-meta shadow-overlay"
           role="status"
         >
           Path copied

@@ -17,7 +17,7 @@ export function StartupScreen(): ReactElement {
       />
       <section
         aria-live="polite"
-        className="relative flex w-full max-w-xs flex-col items-center gap-5 rounded-2xl border bg-background/80 px-7 py-8 text-center shadow-sm backdrop-blur-sm"
+        className="relative flex w-full max-w-xs flex-col items-center gap-5 rounded-2xl border bg-background/80 px-7 py-8 text-center shadow-overlay backdrop-blur-sm"
         role="status"
       >
         <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">

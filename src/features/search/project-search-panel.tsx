@@ -283,7 +283,7 @@ export function ProjectSearchPanel({
             {expectedFiles.length === 1 ? "file" : "files"}. Files will be
             rechecked before writing.
           </p>
-          <ul className="flex max-h-36 flex-col gap-2 overflow-y-auto font-mono text-[11px]">
+          <ul className="flex max-h-36 flex-col gap-2 overflow-y-auto font-mono text-meta">
             {response.results.slice(0, 5).map((result, index) => (
               <li
                 className="rounded-md bg-background p-2"
@@ -388,7 +388,7 @@ export function ProjectSearchPanel({
                           }
                           type="button"
                         >
-                          <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                          <span className="shrink-0 font-mono text-meta text-muted-foreground">
                             {result.line}:{result.column}
                           </span>
                           <span className="truncate font-mono text-xs text-foreground/85">
