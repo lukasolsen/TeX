@@ -1,15 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ReactElement } from "react"
-import {
-  CircleAlert,
-  FileText,
-  Hammer,
-  ListChecks,
-  LockKeyhole,
-  MapPin,
-} from "lucide-react"
 
-import { Button } from "@/components/ui/button"
 import {
   ResizableHandle,
   ResizablePanel,
@@ -22,7 +13,7 @@ import type {
   PdfViewerState,
   ProjectSession,
   WorkspaceFocus,
-  WorkspaceState,
+  WorkspaceViewUpdate,
 } from "@/domain/project"
 import {
   projectRelativePath,
@@ -32,7 +23,6 @@ import {
 import type { HiddenEntryPredicate } from "@/domain/file-visibility"
 import type { AppPreferences } from "@/domain/preferences"
 import { ProjectSidebar } from "@/features/projects/project-sidebar"
-import { RootFileControl } from "@/features/projects/root-file-control"
 import { SourceViewer } from "@/features/projects/source-viewer"
 import { SourceTabs } from "@/features/projects/source-tabs"
 import { WorkspaceCommandPalette } from "@/features/commands/workspace-command-palette"
@@ -47,10 +37,14 @@ import { useProjectWatch } from "@/features/build/use-project-watch"
 import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
 import { PdfViewer } from "@/features/pdf/pdf-viewer"
 import { CleanAuxiliaryDialog } from "@/features/build/clean-auxiliary-dialog"
-import { formatDiagnostic, selectedBuildRun } from "@/domain/build"
 import { revealProjectOutput } from "@/services/build-service"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import { runDetached } from "@/lib/promises"
+
+import { WorkspaceStatusBar } from "./workspace-status-bar"
+import { describeOpenFeedback, describeSaveState } from "./workspace-status"
+import { useWorkspaceDiagnostics } from "./use-workspace-diagnostics"
+import { useWorkspaceShortcuts } from "./use-workspace-shortcuts"
 
 export function ProjectWorkspacePage({
   feedback,
@@ -126,21 +120,7 @@ export function ProjectWorkspacePage({
     path: ProjectRelativePath,
     state: EditorViewerState
   ) => void
-  onUpdateWorkspaceView: (
-    update: Partial<
-      Pick<
-        WorkspaceState,
-        | "pdfPaneOpen"
-        | "pdfPaneWidth"
-        | "buildPanelOpen"
-        | "buildPanelHeight"
-        | "sidebarTab"
-        | "buildPanelTab"
-        | "bottomPanelTab"
-        | "buildProfile"
-      >
-    >
-  ) => void
+  onUpdateWorkspaceView: (update: WorkspaceViewUpdate) => void
   restoreFocus: WorkspaceFocus
   restoreFocusToken: number
   session: ProjectSession
@@ -150,13 +130,7 @@ export function ProjectWorkspacePage({
   const pdfPaneWidth = useRef(session.workspace.pdfPaneWidth)
   const buildPanelHeight = useRef(session.workspace.buildPanelHeight)
   const lastWorkspaceFocus = useRef<WorkspaceFocus>("source")
-  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [searchOpen, setSearchOpen] = useState(false)
   const [cleanOpen, setCleanOpen] = useState(false)
-  const [diagnosticCursor, setDiagnosticCursor] = useState(0)
-  const [logContextSequence, setLogContextSequence] = useState<number | null>(
-    null
-  )
   const [buildOperationMessage, setBuildOperationMessage] = useState<
     string | null
   >(null)
@@ -209,16 +183,6 @@ export function ProjectWorkspacePage({
   const pdfOpen = session.workspace.pdfPaneOpen
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
-  const diagnosticRun = selectedBuildRun(build.state)
-  const diagnostics = diagnosticRun?.diagnostics ?? []
-  const activeDiagnosticIndex =
-    diagnostics.length === 0
-      ? null
-      : Math.min(diagnosticCursor, diagnostics.length - 1)
-  const activeDiagnostic =
-    activeDiagnosticIndex === null
-      ? null
-      : (diagnostics[activeDiagnosticIndex] ?? null)
   // Diagnostics belong to the buffer they were computed from; a tab switch
   // must not show the previous file's problems against the new one.
   const problemsAnalysed =
@@ -248,80 +212,43 @@ export function ProjectWorkspacePage({
     profileAvailable &&
     !running &&
     build.state.action.status !== "pending"
-  const activity =
-    feedback.status === "choosing"
-      ? "Waiting for a folder…"
-      : feedback.status === "opening"
-        ? "Opening project…"
-        : feedback.status === "cancelled"
-          ? "Folder selection cancelled"
-          : feedback.status === "error"
-            ? feedback.error.message
-            : null
-  const saveActivity =
-    session.documentState.status !== "ready"
-      ? null
-      : session.documentState.saveState.status === "saved"
-        ? "Saved"
-        : session.documentState.saveState.status === "dirty"
-          ? "Unsaved changes"
-          : session.documentState.saveState.status === "saving"
-            ? "Saving…"
-            : session.documentState.saveState.status === "error"
-              ? "Save failed · recovery available"
-              : session.documentState.saveState.status === "conflict"
-                ? "External change needs review"
-                : "Recovery draft needs review"
+  const activity = describeOpenFeedback(feedback)
+  const saveActivity = describeSaveState(session.documentState)
 
-  const selectDiagnostic = (index: number, navigate: boolean) => {
-    const diagnostic = diagnostics[index]
-    if (diagnostic === undefined) return
-    setDiagnosticCursor(index)
-    onUpdateWorkspaceView({
-      buildPanelOpen: true,
-      buildPanelTab: "problems",
-    })
-    if (
-      navigate &&
-      diagnostic.file !== null &&
-      diagnostic.line !== null &&
-      !diagnostic.mappingUncertain
-    ) {
-      setTarget({
-        path: diagnostic.file,
-        line: diagnostic.line,
-        column: 1,
-        token: Date.now(),
-      })
-      onPinFile(diagnostic.file)
-    }
-  }
+  const {
+    diagnostics,
+    activeDiagnosticIndex,
+    logContextSequence,
+    selectDiagnostic,
+    moveDiagnostic,
+    copyDiagnostic,
+    showLogContext,
+  } = useWorkspaceDiagnostics({
+    buildState: build.state,
+    shortcutsEnabled,
+    onUpdateWorkspaceView,
+    onPinFile,
+    onReport: setBuildOperationMessage,
+    setTarget,
+  })
 
-  const moveDiagnostic = (offset: number) => {
-    if (diagnostics.length === 0) return
-    const current = activeDiagnosticIndex ?? 0
-    const next = (current + offset + diagnostics.length) % diagnostics.length
-    selectDiagnostic(next, true)
-  }
-
-  const copyDiagnostic = async () => {
-    const diagnostic = activeDiagnostic ?? diagnostics[0]
-    if (diagnostic === undefined) return
-    try {
-      await navigator.clipboard.writeText(formatDiagnostic(diagnostic))
-      setBuildOperationMessage("Diagnostic copied")
-    } catch {
-      setBuildOperationMessage("Could not copy the diagnostic")
-    }
-  }
-
-  const showLogContext = () => {
-    const diagnostic = activeDiagnostic ?? diagnostics[0]
-    if (diagnostic === undefined) return
-    setDiagnosticCursor(Math.max(0, diagnostics.indexOf(diagnostic)))
-    setLogContextSequence(diagnostic.logSequence)
-    onUpdateWorkspaceView({ buildPanelOpen: true, buildPanelTab: "output" })
-  }
+  const {
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+    searchOpen,
+    setSearchOpen,
+  } = useWorkspaceShortcuts({
+    shortcutsEnabled,
+    buildEnabled,
+    pdfOpen,
+    editorFontSize: session.workspace.editorFontSize,
+    build,
+    onUpdateWorkspaceView,
+    onReturnHome,
+    onSaveDocument,
+    onSetEditorFontSize,
+    toggleTerminal,
+  })
 
   const revealOutput = async () => {
     const rootFile =
@@ -361,110 +288,6 @@ export function ProjectWorkspacePage({
     openPanelOnFailure,
     revealProblemsOnFailure,
   ])
-
-  useEffect(() => {
-    const openCommandPalette = () => setCommandPaletteOpen(true)
-    window.addEventListener("tex:open-command-palette", openCommandPalette)
-    return () =>
-      window.removeEventListener("tex:open-command-palette", openCommandPalette)
-  }, [])
-
-  useEffect(() => {
-    if (!shortcutsEnabled) return
-    const runWorkspaceAction = (event: Event) => {
-      if (!(event instanceof CustomEvent)) return
-      switch (event.detail) {
-        case "build":
-          if (buildEnabled) runDetached(build.build())
-          break
-        case "build-details":
-          onUpdateWorkspaceView({ buildPanelOpen: true })
-          break
-        case "find-source":
-          window.dispatchEvent(new Event("tex:open-source-find"))
-          break
-        case "project-home":
-          onReturnHome()
-          break
-        case "save":
-          runDetached(onSaveDocument())
-          break
-        case "search-project":
-          setSearchOpen(true)
-          break
-        case "toggle-pdf":
-          onUpdateWorkspaceView({ pdfPaneOpen: !pdfOpen })
-          break
-      }
-    }
-    window.addEventListener("tex:workspace-action", runWorkspaceAction)
-    return () =>
-      window.removeEventListener("tex:workspace-action", runWorkspaceAction)
-  }, [
-    build,
-    buildEnabled,
-    onReturnHome,
-    onSaveDocument,
-    onUpdateWorkspaceView,
-    pdfOpen,
-    shortcutsEnabled,
-  ])
-
-  useEffect(() => {
-    if (!shortcutsEnabled) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      const modifier = event.ctrlKey || event.metaKey
-      if (modifier && event.shiftKey && event.key.toLowerCase() === "p") {
-        event.preventDefault()
-        setCommandPaletteOpen(true)
-      } else if (
-        modifier &&
-        event.shiftKey &&
-        event.key.toLowerCase() === "b"
-      ) {
-        event.preventDefault()
-        onUpdateWorkspaceView({ buildPanelOpen: true })
-      } else if (
-        modifier &&
-        event.shiftKey &&
-        event.key.toLowerCase() === "f"
-      ) {
-        event.preventDefault()
-        setSearchOpen(true)
-      } else if (
-        modifier &&
-        !event.shiftKey &&
-        event.key.toLowerCase() === "j"
-      ) {
-        event.preventDefault()
-        toggleTerminal()
-      } else if (modifier && (event.key === "+" || event.key === "=")) {
-        event.preventDefault()
-        onSetEditorFontSize(session.workspace.editorFontSize + 1)
-      } else if (modifier && event.key === "-") {
-        event.preventDefault()
-        onSetEditorFontSize(session.workspace.editorFontSize - 1)
-      }
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [
-    onSetEditorFontSize,
-    onUpdateWorkspaceView,
-    session.workspace.editorFontSize,
-    shortcutsEnabled,
-    toggleTerminal,
-  ])
-
-  useEffect(() => {
-    const onDiagnosticKey = (event: KeyboardEvent) => {
-      if (!shortcutsEnabled || event.key !== "F8") return
-      event.preventDefault()
-      moveDiagnostic(event.shiftKey ? -1 : 1)
-    }
-    window.addEventListener("keydown", onDiagnosticKey)
-    return () => window.removeEventListener("keydown", onDiagnosticKey)
-  })
 
   useEffect(() => {
     if (restoreFocusToken === 0) return
@@ -807,106 +630,33 @@ export function ProjectWorkspacePage({
         ) : null}
       </ResizablePanelGroup>
 
-      <footer className="flex min-w-0 items-center gap-2 border-t bg-status px-2 text-meta text-status-foreground">
-        <span className="flex shrink-0 items-center gap-1.5">
-          <LockKeyhole aria-hidden="true" className="size-3.5 shrink-0" />
-          Local project
-        </span>
-        {activity === null &&
-        saveActivity === null &&
-        buildOperationMessage === null ? null : (
-          <>
-            <StatusDivider />
-            <span className="flex min-w-0 items-center gap-2">
-              {activity !== null ? (
-                <span className="truncate" role="status">
-                  {activity}
-                </span>
-              ) : null}
-              {saveActivity !== null ? (
-                <span className="truncate" role="status">
-                  {saveActivity}
-                </span>
-              ) : null}
-              {buildOperationMessage !== null ? (
-                <span className="truncate" role="status">
-                  {buildOperationMessage}
-                </span>
-              ) : null}
-            </span>
-          </>
-        )}
-        <StatusDivider />
-        <Button
-          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
-          onClick={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
-          size="xs"
-          variant="ghost"
-        >
-          <Hammer data-icon="inline-start" />
-          {latestBuild === null
-            ? "Build ready"
-            : latestBuild.status === "running"
-              ? "Building"
-              : `Build ${latestBuild.status}`}
-        </Button>
-        <Button
-          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
-          onClick={() =>
-            onUpdateWorkspaceView({
-              buildPanelOpen: true,
-              bottomPanelTab: "problems",
-            })
-          }
-          size="xs"
-          variant="ghost"
-        >
-          {activeProblemErrors > 0 ? (
-            <CircleAlert data-icon="inline-start" />
-          ) : (
-            <ListChecks data-icon="inline-start" />
-          )}
-          {!preferences.assistance.diagnosticsEnabled
-            ? "Problem analysis off"
-            : !problemsAnalysed
-              ? "Problems"
-              : activeProblems.length === 0
-                ? "No problems"
-                : `${activeProblems.length} ${activeProblems.length === 1 ? "problem" : "problems"}`}
-        </Button>
-        <Button
-          className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"
-          onClick={() =>
-            runDetached(watch.active ? watch.stop() : watch.start())
-          }
-          size="xs"
-          variant="ghost"
-        >
-          {watch.state.status === "off"
-            ? "Watch off"
-            : watch.state.status === "error"
-              ? "Watch error"
-              : `Watch ${watch.state.status}`}
-        </Button>
-        <span className="ml-auto hidden shrink-0 items-center gap-1.5 text-status-foreground/75 md:flex">
-          <FileText aria-hidden="true" className="size-3.5" />
-          {session.workspace.editorFontSize}px
-        </span>
-        {sourceLocation?.path === selectedFile ? (
-          <span className="hidden shrink-0 items-center gap-1.5 text-status-foreground/75 sm:flex">
-            <MapPin aria-hidden="true" className="size-3.5" />
-            Ln {sourceLocation.line}, Col {sourceLocation.column}
-          </span>
-        ) : null}
-        <StatusDivider />
-        <span className="min-w-0">
-          <RootFileControl
-            onSelectRoot={onSelectRoot}
-            project={session.project}
-            selectedRoot={session.workspace.selectedRoot}
-          />
-        </span>
-      </footer>
+      <WorkspaceStatusBar
+        activity={activity}
+        saveActivity={saveActivity}
+        buildOperationMessage={buildOperationMessage}
+        latestBuild={latestBuild}
+        onOpenBuild={() => onUpdateWorkspaceView({ buildPanelOpen: true })}
+        onOpenProblems={() =>
+          onUpdateWorkspaceView({
+            buildPanelOpen: true,
+            bottomPanelTab: "problems",
+          })
+        }
+        diagnosticsEnabled={preferences.assistance.diagnosticsEnabled}
+        problemsAnalysed={problemsAnalysed}
+        problemCount={activeProblems.length}
+        errorCount={activeProblemErrors}
+        watchState={watch.state}
+        onToggleWatch={() =>
+          runDetached(watch.active ? watch.stop() : watch.start())
+        }
+        editorFontSize={session.workspace.editorFontSize}
+        sourceLocation={sourceLocation}
+        selectedFile={selectedFile}
+        project={session.project}
+        selectedRoot={session.workspace.selectedRoot}
+        onSelectRoot={onSelectRoot}
+      />
       <WorkspaceCommandPalette
         buildEnabled={buildEnabled}
         diagnosticsAvailable={diagnostics.length > 0}
@@ -953,15 +703,5 @@ export function ProjectWorkspacePage({
         />
       ) : null}
     </main>
-  )
-}
-
-/** Separates the status bar's groups so they do not read as one run-on line. */
-function StatusDivider(): ReactElement {
-  return (
-    <span
-      aria-hidden="true"
-      className="h-3.5 w-px shrink-0 bg-status-foreground/20"
-    />
   )
 }

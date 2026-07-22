@@ -63,6 +63,24 @@ export type BottomPanelTab = "build" | "problems" | "terminal"
 export type BuildProfile = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
 export type WorkspaceFocus = "source" | "pdf"
 
+/**
+ * The subset of workspace view state persisted as the user drives the layout.
+ * Every field is optional so a single interaction updates only what changed.
+ */
+export type WorkspaceViewUpdate = Partial<
+  Pick<
+    WorkspaceState,
+    | "pdfPaneOpen"
+    | "pdfPaneWidth"
+    | "buildPanelOpen"
+    | "buildPanelHeight"
+    | "sidebarTab"
+    | "buildPanelTab"
+    | "bottomPanelTab"
+    | "buildProfile"
+  >
+>
+
 export type EditorViewerState = Readonly<{
   line: number
   column: number
