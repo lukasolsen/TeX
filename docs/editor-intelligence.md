@@ -157,6 +157,12 @@ These are the rules the implementation is held to, in priority order.
 6. **Colour is never the signal.** Every diagnostic carries severity text and an
    accessible name. Every folded region is operable and announced from the
    keyboard. This follows `ui-ux-requirements.md`, not editor convention.
-7. **Bounded by construction.** Every scan, cache, and result list has an
+7. **The context menu is an extension point.** Right-click actions are decided
+   by `editorContextActions` from a plain description of what the cursor is on,
+   with no editor types in the signature. Adding an action — a project-wide
+   rename, say — is one entry there plus one command binding. An action that
+   cannot do anything in the current state is omitted rather than shown
+   disabled, per `design-manual.md` §9.
+8. **Bounded by construction.** Every scan, cache, and result list has an
    explicit ceiling. A pathological document — a megabyte on one line, ten
    thousand unclosed braces — degrades to fewer results, never to a hang.

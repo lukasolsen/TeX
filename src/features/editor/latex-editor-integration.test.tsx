@@ -5,13 +5,27 @@ import { foldable, syntaxHighlighting } from "@codemirror/language"
 import { StreamLanguage } from "@codemirror/language"
 import { EditorState } from "@codemirror/state"
 import { EditorView } from "@codemirror/view"
-import { describe, expect, it } from "vitest"
+import { cleanup, render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
+import { LatexEditor } from "@/features/editor/latex-editor"
 
 import { latexAutoCloseEnvironment } from "@/features/editor/latex-auto-close-environment"
 import { latexFolding } from "@/features/editor/latex-folding"
 import { latexHighlightStyle } from "@/features/editor/latex-highlighting"
 import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import { latexStreamParser } from "@/features/editor/latex-stream-parser"
+
+vi.mock("@/services/latex-analysis-service", () => ({
+  requestLatexProjectAnalysis: vi.fn<
+    () => Promise<{ diagnostics: never[]; complete: boolean }>
+  >(() => Promise.resolve({ diagnostics: [], complete: true })),
+  requestLatexSymbol: vi.fn<() => Promise<null>>(() => Promise.resolve(null)),
+}))
+
+afterEach(cleanup)
 
 /**
  * The language-facing half of the editor's extension list. Wiring mistakes —
@@ -111,5 +125,57 @@ describe("editor wiring", () => {
     // One transaction means one undo step for the user.
     expect(view.state.doc.toString()).toContain("\\end{center}")
     view.destroy()
+  })
+})
+
+describe("the mounted editor", () => {
+  const noop = vi.fn<(...args: unknown[]) => void>()
+
+  function renderEditor(content: string) {
+    render(
+      <LatexEditor
+        content={content}
+        fontSize={14}
+        initialViewerState={undefined}
+        label="Edit main.tex"
+        onChange={noop}
+        onCursorChange={noop}
+        onDiagnosticsChange={noop}
+        onOpenFind={noop}
+        onOpenReference={noop}
+        onReport={noop}
+        onSave={noop}
+        onViewerStateChange={noop}
+        path={projectRelativePath("main.tex")}
+        projectPath={canonicalProjectPath("/projects/report")}
+        projectTree={{ name: "report", kind: "directory", children: [] }}
+        retainedPaths={[]}
+        target={null}
+      />
+    )
+  }
+
+  it("renders the document and keeps the focus region addressable", () => {
+    renderEditor("\\section{One}")
+
+    const region = document.querySelector('[data-workspace-focus="source"]')
+    expect(region).not.toBeNull()
+    expect(region?.querySelector(".cm-content")?.textContent).toBe(
+      "\\section{One}"
+    )
+  })
+
+  it("opens a context menu on the editing surface", async () => {
+    renderEditor("See \\ref{sec:intro}")
+    const content = document.querySelector(".cm-content")
+    expect(content).not.toBeNull()
+
+    await userEvent.pointer({
+      target: content as Element,
+      keys: "[MouseRight]",
+    })
+
+    expect(screen.getByRole("menu")).toBeTruthy()
+    expect(screen.getByRole("menuitem", { name: /Select all/ })).toBeTruthy()
   })
 })

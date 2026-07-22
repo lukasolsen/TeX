@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, type ReactElement } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react"
 import {
   autocompletion,
   closeBrackets,
@@ -10,12 +16,17 @@ import {
   history,
   historyKeymap,
   indentWithTab,
+  selectAll,
   toggleComment,
 } from "@codemirror/commands"
 import {
   bracketMatching,
+  foldable,
+  foldCode,
+  foldedRanges,
   indentOnInput,
   syntaxHighlighting,
+  unfoldCode,
   StreamLanguage,
 } from "@codemirror/language"
 import {
@@ -65,6 +76,12 @@ import {
 } from "@/features/editor/latex-navigation"
 import { requestLatexSymbol } from "@/services/latex-analysis-service"
 import { runDetached } from "@/lib/promises"
+import {
+  editorContextActions,
+  type EditorContextAction,
+  type EditorContextActionId,
+} from "@/features/editor/editor-context-actions"
+import { EditorContextMenu } from "@/features/editor/editor-context-menu"
 import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import {
@@ -267,39 +284,41 @@ function sourceEditorTheme(fontSize: number) {
       fontFamily: "var(--font-mono)",
       fontSize: "0.92em",
     },
+    // Density follows the VS Code suggest widget: 22px rows, one line each,
+    // no rules between them, and the detail beside the label rather than
+    // pushed to the far edge.
     ".cm-tooltip-autocomplete": {
       border: "1px solid var(--border)",
-      borderRadius: "0.75rem",
+      borderRadius: "calc(var(--radius) * 0.8)",
       backgroundColor: "var(--popover)",
       color: "var(--popover-foreground)",
-      boxShadow: "0 16px 40px color-mix(in srgb, black 22%, transparent)",
+      boxShadow: "var(--elevation-popover)",
       overflow: "hidden",
     },
     ".cm-tooltip-autocomplete > ul": {
-      maxHeight: "24rem",
-      minWidth: "28rem",
-      maxWidth: "34rem",
+      maxHeight: "16.5rem",
+      minWidth: "22rem",
+      maxWidth: "30rem",
       fontFamily: "var(--font-sans)",
-      fontSize: "0.875rem",
+      fontSize: "0.8125rem",
     },
     ".cm-tooltip-autocomplete > ul > li": {
       display: "flex",
       alignItems: "center",
-      gap: "0.625rem",
-      minHeight: "2.75rem",
-      padding: "0.5rem 0.85rem",
-      lineHeight: "1.35",
-      borderBottom:
-        "1px solid color-mix(in oklch, var(--border) 45%, transparent)",
+      gap: "0.375rem",
+      minHeight: "1.375rem",
+      padding: "0 0.5rem",
+      lineHeight: "1.375rem",
+      borderBottom: "none",
     },
-    ".cm-tooltip-autocomplete > ul > li:last-child": { borderBottom: "none" },
     ".cm-tooltip-autocomplete > ul > li[aria-selected]": {
       backgroundColor: "var(--accent)",
       color: "var(--accent-foreground)",
     },
     ".cm-completionLabel": {
+      flex: "none",
       fontFamily: "var(--font-mono)",
-      fontWeight: "500",
+      fontWeight: "400",
       color: "var(--foreground)",
     },
     ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionLabel": {
@@ -307,29 +326,29 @@ function sourceEditorTheme(fontSize: number) {
     },
     ".cm-completionMatchedText": {
       textDecoration: "none",
-      fontWeight: "700",
+      fontWeight: "600",
       color: "var(--primary)",
     },
     ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionMatchedText":
       { color: "inherit" },
     ".cm-completionDetail": {
-      marginLeft: "auto",
-      paddingLeft: "1rem",
-      maxWidth: "16rem",
+      flex: "1 1 auto",
+      minWidth: "0",
+      marginLeft: "0.25rem",
       overflow: "hidden",
       textOverflow: "ellipsis",
       whiteSpace: "nowrap",
       fontStyle: "normal",
       color: "var(--muted-foreground)",
-      fontSize: "0.75rem",
+      fontSize: "0.6875rem",
     },
     ".cm-tooltip-autocomplete > ul > li[aria-selected] .cm-completionDetail": {
-      color: "color-mix(in oklch, var(--accent-foreground) 78%, transparent)",
+      color: "color-mix(in oklch, var(--accent-foreground) 72%, transparent)",
     },
     ".tex-completion-icon": {
       flex: "none",
-      width: "18px",
-      height: "18px",
+      width: "14px",
+      height: "14px",
     },
     ".tex-completion-icon-command": { color: "var(--completion-icon-command)" },
     ".tex-completion-icon-environment": {
@@ -344,35 +363,39 @@ function sourceEditorTheme(fontSize: number) {
     ".tex-completion-icon-package": { color: "var(--completion-icon-package)" },
     ".tex-completion-icon-class": { color: "var(--completion-icon-class)" },
     ".cm-completionInfo": {
-      minWidth: "18rem",
-      maxWidth: "24rem",
-      borderLeft: "1px solid var(--border)",
+      minWidth: "16rem",
+      maxWidth: "22rem",
+      maxHeight: "16.5rem",
+      overflowY: "auto",
+      border: "1px solid var(--border)",
+      borderRadius: "calc(var(--radius) * 0.8)",
       backgroundColor: "var(--popover)",
       color: "var(--popover-foreground)",
+      boxShadow: "var(--elevation-popover)",
       padding: "0",
     },
     ".tex-completion-info": {
       display: "flex",
       flexDirection: "column",
-      gap: "0.5rem",
-      padding: "0.875rem 1rem",
+      gap: "0.375rem",
+      padding: "0.5rem 0.625rem",
     },
     ".tex-completion-meta": {
       display: "flex",
       alignItems: "center",
       flexWrap: "wrap",
-      gap: "0.5rem",
+      gap: "0.375rem",
     },
     ".tex-completion-provenance": {
       fontFamily: "var(--font-sans)",
-      fontSize: "0.75rem",
+      fontSize: "0.6875rem",
       color: "var(--muted-foreground)",
     },
     ".tex-completion-description": {
       margin: "0",
       fontFamily: "var(--font-sans)",
-      fontSize: "0.8125rem",
-      lineHeight: "1.5",
+      fontSize: "0.75rem",
+      lineHeight: "1.45",
       color: "var(--popover-foreground)",
     },
     ".tex-completion-preview-label": {
@@ -386,7 +409,7 @@ function sourceEditorTheme(fontSize: number) {
     },
     ".tex-completion-preview": {
       margin: "0",
-      maxHeight: "12rem",
+      maxHeight: "9rem",
       overflow: "auto",
       border: "1px solid var(--border)",
       borderRadius: "0.5rem",
@@ -399,8 +422,8 @@ function sourceEditorTheme(fontSize: number) {
       color: "var(--editor-preview-foreground)",
     },
     ".tex-completion-hint": {
-      margin: "0.25rem 0 0",
-      paddingTop: "0.5rem",
+      margin: "0.125rem 0 0",
+      paddingTop: "0.375rem",
       borderTop:
         "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
       fontFamily: "var(--font-sans)",
@@ -457,8 +480,15 @@ export function LatexEditor({
   retainedPaths: ReadonlyArray<ProjectRelativePath>
   target: EditorTarget | null
 }): ReactElement {
+  const [contextActions, setContextActions] = useState<
+    readonly EditorContextAction[]
+  >([])
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
+  const contextMenu = useRef<{
+    prepare: (event: { clientX: number; clientY: number }) => void
+    run: (id: EditorContextActionId) => void
+  } | null>(null)
   const onChangeRef = useRef(onChange)
   const onCursorChangeRef = useRef(onCursorChange)
   const onDiagnosticsChangeRef = useRef(onDiagnosticsChange)
@@ -618,6 +648,132 @@ export function LatexEditor({
       runDetached(followTarget(editor, target))
       return true
     }
+    // The right-click menu is prepared from the position under the pointer, so
+    // "Go to definition" reflects what was clicked rather than where the
+    // caret happened to be.
+    let contextTarget: NavigationTarget | null = null
+    const prepareContextMenu = (event: {
+      clientX: number
+      clientY: number
+    }) => {
+      const editor = view.current
+      if (editor === null) return
+      const position = editor.posAtCoords({
+        x: event.clientX,
+        y: event.clientY,
+      })
+      const selection = editor.state.selection.main
+      if (
+        position !== null &&
+        (position < selection.from || position > selection.to)
+      ) {
+        // Clicking outside the selection moves the caret first, the way a
+        // desktop editor does, so an action operates on what was clicked.
+        editor.dispatch({ selection: { anchor: position } })
+      }
+      const head = editor.state.selection.main.head
+      contextTarget = targetAt(editor, position ?? head)
+      const line = editor.state.doc.lineAt(head)
+      let folded = false
+      foldedRanges(editor.state).between(line.from, line.to, (from) => {
+        if (from >= line.from && from <= line.to) folded = true
+      })
+      setContextActions(
+        editorContextActions({
+          navigable: contextTarget !== null,
+          hasSelection: !editor.state.selection.main.empty,
+          foldable: foldable(editor.state, line.from, line.to) !== null,
+          folded,
+          readOnly: editor.state.readOnly,
+        })
+      )
+    }
+    const writeClipboard = async (text: string, andDelete: boolean) => {
+      const editor = view.current
+      if (editor === null) return
+      try {
+        await navigator.clipboard.writeText(text)
+      } catch {
+        onReportRef.current("TeX could not use the system clipboard")
+        return
+      }
+      if (!andDelete) return
+      const selection = editor.state.selection.main
+      editor.dispatch({
+        changes: { from: selection.from, to: selection.to, insert: "" },
+        userEvent: "delete.cut",
+      })
+    }
+    const pasteClipboard = async () => {
+      const editor = view.current
+      if (editor === null) return
+      let text: string
+      try {
+        text = await navigator.clipboard.readText()
+      } catch {
+        onReportRef.current("TeX could not read the system clipboard")
+        return
+      }
+      if (text === "") return
+      const selection = editor.state.selection.main
+      editor.dispatch({
+        changes: { from: selection.from, to: selection.to, insert: text },
+        selection: { anchor: selection.from + text.length },
+        userEvent: "input.paste",
+      })
+    }
+    const runContextAction = (id: EditorContextActionId) => {
+      const editor = view.current
+      if (editor === null) return
+      const selection = editor.state.selection.main
+      switch (id) {
+        case "go-to-definition":
+          if (contextTarget !== null) {
+            runDetached(followTarget(editor, contextTarget))
+          }
+          break
+        case "copy":
+          runDetached(
+            writeClipboard(
+              editor.state.sliceDoc(selection.from, selection.to),
+              false
+            )
+          )
+          break
+        case "cut":
+          runDetached(
+            writeClipboard(
+              editor.state.sliceDoc(selection.from, selection.to),
+              true
+            )
+          )
+          break
+        case "paste":
+          runDetached(pasteClipboard())
+          break
+        case "toggle-comment":
+          toggleComment(editor)
+          break
+        case "fold":
+          foldCode(editor)
+          break
+        case "unfold":
+          unfoldCode(editor)
+          break
+        case "find-in-file":
+          onOpenFindRef.current()
+          break
+        case "select-all":
+          selectAll(editor)
+          break
+      }
+      editor.focus()
+    }
+    contextMenu.current = {
+      prepare: prepareContextMenu,
+      run: runContextAction,
+    }
+
     const editorExtensions: Extension[] = [
       lineNumbers(),
       highlightActiveLineGutter(),
@@ -721,7 +877,7 @@ export function LatexEditor({
         addToOptions: [latexCompletionRowBadge],
         icons: false,
         activateOnTyping: true,
-        maxRenderedOptions: 24,
+        maxRenderedOptions: 50,
       }),
       keymap.of([
         { key: "Mod-s", run: () => (onSaveRef.current(), true) },
@@ -997,11 +1153,17 @@ export function LatexEditor({
   }, [target])
 
   return (
-    <div
-      className="min-h-0 flex-1"
-      data-workspace-focus="source"
-      ref={host}
-      tabIndex={-1}
-    />
+    <EditorContextMenu
+      actions={contextActions}
+      onOpen={(event) => contextMenu.current?.prepare(event)}
+      onSelect={(id) => contextMenu.current?.run(id)}
+    >
+      <div
+        className="min-h-0 flex-1"
+        data-workspace-focus="source"
+        ref={host}
+        tabIndex={-1}
+      />
+    </EditorContextMenu>
   )
 }
