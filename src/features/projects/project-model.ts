@@ -6,19 +6,11 @@ import type {
 } from "@/domain/project"
 import { latexCommands, latexFileReferences } from "@/domain/latex"
 import type { HiddenEntryPredicate } from "@/domain/file-visibility"
+import { isPdfFile } from "@/domain/file-kind"
 import {
   projectRelativePath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
-
-const readableSourceExtensions = new Set([
-  "tex",
-  "bib",
-  "sty",
-  "cls",
-  "txt",
-  "md",
-])
 
 export type ProjectTreeNode = ProjectEntry &
   Readonly<{ path: ProjectRelativePath }>
@@ -57,15 +49,6 @@ export function countHiddenEntries(
   return total
 }
 
-export function isReadableSource(path: string): boolean {
-  const extension = path.split(".").pop()?.toLowerCase()
-  return extension !== undefined && readableSourceExtensions.has(extension)
-}
-
-export function isPdf(path: string): boolean {
-  return path.toLowerCase().endsWith(".pdf")
-}
-
 export function preferredPdf(
   project: ProjectSummary,
   persistedPdf: ProjectRelativePath | null,
@@ -73,7 +56,7 @@ export function preferredPdf(
 ): ProjectRelativePath | null {
   if (
     persistedPdf !== null &&
-    isPdf(persistedPdf) &&
+    isPdfFile(persistedPdf) &&
     treeContainsPath(project.tree, persistedPdf)
   ) {
     return persistedPdf

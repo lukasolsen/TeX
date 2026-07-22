@@ -26,7 +26,11 @@ const projectWithArtifacts: ProjectEntry = {
 function renderTree(
   onRefresh = vi.fn<() => void>(),
   isHidden: HiddenEntryPredicate = () => false,
-  tree: ProjectEntry = { name: "project", kind: "directory", children: [] }
+  tree: ProjectEntry = { name: "project", kind: "directory", children: [] },
+  handlers: {
+    onOpenPdf?: (path: ProjectRelativePath) => void
+    onPreviewFile?: (path: ProjectRelativePath) => void
+  } = {}
 ): void {
   render(
     <NotificationProvider>
@@ -37,9 +41,13 @@ function renderTree(
           async () => undefined
         )}
         onOpenFileSettings={vi.fn<() => void>()}
-        onOpenPdf={vi.fn<(path: ProjectRelativePath) => void>()}
+        onOpenPdf={
+          handlers.onOpenPdf ?? vi.fn<(path: ProjectRelativePath) => void>()
+        }
         onPinFile={vi.fn<(path: ProjectRelativePath) => void>()}
-        onPreviewFile={vi.fn<(path: ProjectRelativePath) => void>()}
+        onPreviewFile={
+          handlers.onPreviewFile ?? vi.fn<(path: ProjectRelativePath) => void>()
+        }
         onRefresh={onRefresh}
         onRename={vi.fn<
           (path: ProjectRelativePath, name: string) => Promise<boolean>
@@ -112,6 +120,42 @@ describe("ProjectTree", () => {
 
     await user.click(screen.getByRole("button", { name: "Hide" }))
     expect(screen.queryByText("main.log")).toBeNull()
+  })
+
+  it("opens logs and images, and disables what it cannot display", async () => {
+    const user = userEvent.setup()
+    const onPreviewFile = vi.fn<(path: ProjectRelativePath) => void>()
+    const onOpenPdf = vi.fn<(path: ProjectRelativePath) => void>()
+    renderTree(
+      vi.fn<() => void>(),
+      () => false,
+      {
+        name: "project",
+        kind: "directory",
+        children: [
+          { name: "main.log", kind: "file", children: [] },
+          { name: "plot.png", kind: "file", children: [] },
+          { name: "main.pdf", kind: "file", children: [] },
+          { name: "cmr10.pfb", kind: "file", children: [] },
+        ],
+      },
+      { onOpenPdf, onPreviewFile }
+    )
+
+    await user.click(screen.getByRole("button", { name: /main\.log/ }))
+    await user.click(screen.getByRole("button", { name: /plot\.png/ }))
+    await user.click(screen.getByRole("button", { name: /main\.pdf/ }))
+
+    expect(onPreviewFile.mock.calls.map(([path]) => path)).toEqual([
+      "main.log",
+      "plot.png",
+    ])
+    expect(onOpenPdf).toHaveBeenCalledWith("main.pdf")
+    expect(
+      screen
+        .getByRole("button", { name: /cmr10\.pfb/ })
+        .hasAttribute("disabled")
+    ).toBe(true)
   })
 
   it("leaves the footer out when nothing is filtered", () => {

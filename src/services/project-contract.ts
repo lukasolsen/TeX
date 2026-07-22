@@ -513,10 +513,12 @@ export function parseInverseSearchResult(value: unknown): {
   }
 }
 
-export function parseBinaryResponse(value: unknown): Uint8Array {
+export function parseBinaryResponse(value: unknown): Uint8Array<ArrayBuffer> {
   if (value instanceof ArrayBuffer) return new Uint8Array(value)
-  if (value instanceof Uint8Array) return value
-  throw new IpcContractError("PDF data")
+  // A view supplied by a test double may sit on a buffer the DOM cannot take;
+  // copying it hands callers a plain `ArrayBuffer` view either way.
+  if (value instanceof Uint8Array) return new Uint8Array(value)
+  throw new IpcContractError("binary file data")
 }
 
 function parseProjectEntry(

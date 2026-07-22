@@ -21,9 +21,8 @@ import type { HiddenEntryPredicate } from "@/domain/file-visibility"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import { ProjectTree } from "@/features/projects/project-tree"
 import { DocumentOutlinePanel } from "@/features/projects/document-outline-panel"
+import { isOpenableFile, isPdfFile } from "@/domain/file-kind"
 import {
-  isReadableSource,
-  isPdf,
   texDependencies,
   treeContainsPath,
   type TexDependency,
@@ -129,8 +128,8 @@ function DirectReferencesPanel({
           const available =
             dependency.kind !== "package" &&
             treeContainsPath(tree, dependency.path)
-          const readable = available && isReadableSource(dependency.path)
-          const pdf = available && isPdf(dependency.path)
+          const readable = available && isOpenableFile(dependency.path)
+          const pdf = available && isPdfFile(dependency.path)
           const status =
             dependency.kind === "package"
               ? "LaTeX"

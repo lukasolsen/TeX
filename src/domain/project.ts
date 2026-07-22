@@ -134,6 +134,17 @@ export type ProjectError = Readonly<{
   message: string
 }>
 
+/**
+ * An image opened from the project tree. The bytes are kept as read: the
+ * viewer, not the session, owns the object URL that displays them, so the URL
+ * is revoked with the element that used it.
+ */
+export type ProjectImage = Readonly<{
+  path: ProjectRelativePath
+  mediaType: string
+  bytes: Uint8Array<ArrayBuffer>
+}>
+
 export type AsyncDocumentState =
   | { status: "empty" }
   | { status: "loading"; path: ProjectRelativePath }
@@ -143,6 +154,8 @@ export type AsyncDocumentState =
       content: string
       saveState: DocumentSaveState
     }
+  /** A non-editable file shown in its own viewer rather than the editor. */
+  | { status: "image"; path: ProjectRelativePath; image: ProjectImage }
   | { status: "error"; path: ProjectRelativePath; error: ProjectError }
 
 export type DocumentSaveState =

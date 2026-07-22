@@ -4,8 +4,6 @@ import type { ProjectSummary } from "@/domain/project"
 import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
 import {
   formatLastOpened,
-  isReadableSource,
-  isPdf,
   preferredPdf,
   preferredRoot,
   preferredSourceFile,
@@ -80,12 +78,6 @@ describe("project model", () => {
     expect(
       treeContainsPath(project.tree, projectRelativePath("chapters"))
     ).toBe(false)
-  })
-
-  it("keeps preview support explicit and case-insensitive", () => {
-    expect(isReadableSource("sources/MAIN.TEX")).toBe(true)
-    expect(isReadableSource("figures/chart.pdf")).toBe(false)
-    expect(isPdf("figures/CHART.PDF")).toBe(true)
   })
 
   it("restores a project PDF or selects the root output", () => {

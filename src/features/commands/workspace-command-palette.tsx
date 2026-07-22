@@ -40,10 +40,11 @@ import {
   projectRelativePath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
-import { isReadableSource } from "@/features/projects/project-model"
+import { isOpenableFile, isPdfFile } from "@/domain/file-kind"
 import { shortcutLabel } from "@/lib/shortcuts"
 
-function readableFiles(
+/** Every file the palette can open in the source pane; a PDF has its own pane. */
+function openableFiles(
   entry: ProjectEntry,
   parent: ProjectRelativePath | null = null
 ): ProjectRelativePath[] {
@@ -52,8 +53,8 @@ function readableFiles(
     const path = projectRelativePath(
       parent === null ? child.name : `${parent}/${child.name}`
     )
-    if (child.kind === "directory") paths.push(...readableFiles(child, path))
-    else if (isReadableSource(path)) paths.push(path)
+    if (child.kind === "directory") paths.push(...openableFiles(child, path))
+    else if (isOpenableFile(path) && !isPdfFile(path)) paths.push(path)
   }
   return paths
 }
@@ -115,8 +116,8 @@ export function WorkspaceCommandPalette({
   watchActive: boolean
   tree: ProjectEntry
 }): ReactElement {
-  const sourceFiles = useMemo(
-    () => (open ? readableFiles(tree) : []),
+  const projectFiles = useMemo(
+    () => (open ? openableFiles(tree) : []),
     [open, tree]
   )
   const run = (command: () => void) => {
@@ -243,8 +244,8 @@ export function WorkspaceCommandPalette({
           </CommandItem>
         </CommandGroup>
         <CommandSeparator className="mx-2" />
-        <CommandGroup heading="Open source file">
-          {sourceFiles.map((path) => (
+        <CommandGroup heading="Open project file">
+          {projectFiles.map((path) => (
             <CommandItem
               key={path}
               onSelect={() => run(() => onOpenFile(path))}

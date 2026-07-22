@@ -111,10 +111,8 @@ import {
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
-import {
-  isReadableSource,
-  treeContainsPath,
-} from "@/features/projects/project-model"
+import { isLatexSource, isOpenableFile } from "@/domain/file-kind"
+import { treeContainsPath } from "@/features/projects/project-model"
 
 export type EditorTarget = Readonly<{
   line: number
@@ -566,7 +564,11 @@ export function LatexEditor({
   // Assigned when the view is built; the extensions it produces close over the
   // same refs the rest of the editor uses.
   const reconfigureSettings = useRef<
-    ((settings: AppPreferences) => StateEffect<unknown>) | null
+    | ((
+        settings: AppPreferences,
+        documentPath: ProjectRelativePath
+      ) => StateEffect<unknown>)
+    | null
   >(null)
   const activePath = useRef(path)
   const extensions = useRef<Extension[]>([])
@@ -643,7 +645,7 @@ export function LatexEditor({
     if (host.current === null) return
     let activeReference: ProjectReference = null
     const fileExists = (candidate: ProjectRelativePath) =>
-      isReadableSource(candidate) &&
+      isOpenableFile(candidate) &&
       treeContainsPath(projectTreeRef.current, candidate)
     const targetAt = (editor: EditorView, position: number) =>
       navigationTargetAt(
@@ -835,11 +837,25 @@ export function LatexEditor({
       run: runContextAction,
     }
 
-    // Everything a preference can turn on, off, or resize. Held in one
-    // compartment so a settings change reconfigures the live editor in place
-    // rather than rebuilding it and losing the cursor, scroll, and undo history.
-    const configurableExtensions = (settings: AppPreferences): Extension[] => {
-      const { assistance, editor } = settings
+    // Everything a preference or the open file can turn on, off, or resize.
+    // Held in one compartment so a settings change or a tab switch reconfigures
+    // the live editor in place rather than rebuilding it and losing the cursor,
+    // scroll, and undo history.
+    const configurableExtensions = (
+      settings: AppPreferences,
+      documentPath: ProjectRelativePath
+    ): Extension[] => {
+      const { editor } = settings
+      // A log, a data file, or a Makefile is editable but is not LaTeX, so TeX
+      // does not offer completions, hovers, or diagnostics it cannot mean.
+      const assistance = isLatexSource(documentPath)
+        ? settings.assistance
+        : {
+            ...settings.assistance,
+            hoverDocumentation: false,
+            diagnosticsEnabled: false,
+            completionEnabled: false,
+          }
       return [
         editor.showLineNumbers
           ? [lineNumbers(), highlightActiveLineGutter()]
@@ -912,7 +928,7 @@ export function LatexEditor({
       rectangularSelection(),
       crosshairCursor(),
       settingsCompartment.current.of(
-        configurableExtensions(preferencesRef.current)
+        configurableExtensions(preferencesRef.current, activePath.current)
       ),
       tooltips({
         tooltipSpace: (editor) => {
@@ -1005,8 +1021,10 @@ export function LatexEditor({
         contentAttributes(labelRef.current, preferencesRef.current.editor)
       ),
     ]
-    reconfigureSettings.current = (settings) =>
-      settingsCompartment.current.reconfigure(configurableExtensions(settings))
+    reconfigureSettings.current = (settings, documentPath) =>
+      settingsCompartment.current.reconfigure(
+        configurableExtensions(settings, documentPath)
+      )
     extensions.current = editorExtensions
     const initialPosition = viewerSelectionPosition(
       contentRef.current,
@@ -1116,7 +1134,10 @@ export function LatexEditor({
     preferencesRef.current = preferences
     const editor = view.current
     if (editor === null) return
-    const settingsEffect = reconfigureSettings.current?.(preferences)
+    const settingsEffect = reconfigureSettings.current?.(
+      preferences,
+      activePath.current
+    )
     editor.dispatch({
       effects: [
         themeCompartment.current.reconfigure(
@@ -1185,7 +1206,10 @@ export function LatexEditor({
     editor.setState(nextState)
     // A restored or newly created state carries the configuration captured when
     // the extension list was built, so every compartment is re-applied here.
-    const settingsEffect = reconfigureSettings.current?.(preferencesRef.current)
+    const settingsEffect = reconfigureSettings.current?.(
+      preferencesRef.current,
+      path
+    )
     editor.dispatch({
       effects: [
         themeCompartment.current.reconfigure(

@@ -121,7 +121,6 @@ describe("defaultHiddenFileRules", () => {
       "main.aux",
       "main.fdb_latexmk",
       "main.fls",
-      "main.log",
       "main.run.xml",
       "main.synctex.gz",
       "main.toc",
@@ -131,6 +130,8 @@ describe("defaultHiddenFileRules", () => {
     expect(isHidden("main.tex")).toBe(false)
     expect(isHidden("main.pdf")).toBe(false)
     expect(isHidden("references.bib")).toBe(false)
+    // The engine log stays visible by default: it is the artifact people read.
+    expect(isHidden("main.log")).toBe(false)
   })
 
   it("normalizes cleanly, so the shipped defaults contain no duplicates", () => {

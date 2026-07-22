@@ -9,10 +9,12 @@ import type {
   LatexCompletionResponse,
 } from "@/domain/latex-completion"
 import { parseLatexCompletionResponse } from "@/domain/latex-completion"
+import { imageMediaType } from "@/domain/file-kind"
 
 import type { AppPreferences } from "@/domain/preferences"
 import type {
   ProjectError,
+  ProjectImage,
   ProjectSearchResponse,
   ProjectSummary,
   RecoveryDraft,
@@ -117,6 +119,29 @@ export async function readProjectPdf(
     relativePath,
   })
   return parseBinaryResponse(response)
+}
+
+/** Reads a project-local image; the media type follows from its extension. */
+export async function readProjectImage(
+  projectPath: CanonicalProjectPath,
+  relativePath: ProjectRelativePath
+): Promise<ProjectImage> {
+  const mediaType = imageMediaType(relativePath)
+  if (mediaType === null) {
+    throw {
+      code: "unsupported-image",
+      message: "TeX cannot display this image format.",
+    } satisfies ProjectError
+  }
+  const response = await invoke<unknown>("read_project_image", {
+    projectPath,
+    relativePath,
+  })
+  return {
+    path: relativePath,
+    mediaType,
+    bytes: parseBinaryResponse(response),
+  }
 }
 
 export async function projectPdfRevision(

@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod asset_read;
 mod bounded_io;
 mod build_operations;
 mod build_system;
@@ -70,6 +71,7 @@ pub fn run() {
             persistence::save_workspace_state,
             project_config::load_project_build_configuration,
             project_config::save_project_build_configuration,
+            asset_read::read_project_image,
             pdf_read::read_project_pdf,
             pdf_read::project_pdf_revision,
             source_read::read_project_source,

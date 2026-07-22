@@ -14,6 +14,7 @@ import {
   EyeOff,
   FileCode2,
   File,
+  FileImage,
   FileText,
   FileType2,
   FilePlus,
@@ -22,6 +23,7 @@ import {
   FolderPlus,
   Pencil,
   RefreshCw,
+  ScrollText,
   Settings2,
   Trash2,
 } from "lucide-react"
@@ -39,10 +41,9 @@ import { Input } from "@/components/ui/input"
 import type { ProjectEntry } from "@/domain/project"
 import type { HiddenEntryPredicate } from "@/domain/file-visibility"
 import type { ProjectRelativePath } from "@/domain/identifiers"
+import { projectFileKind } from "@/domain/file-kind"
 import {
   countHiddenEntries,
-  isReadableSource,
-  isPdf,
   projectTreeNodes,
 } from "@/features/projects/project-model"
 import { cn } from "@/lib/utils"
@@ -209,10 +210,18 @@ function EntryIcon({
   }
   if (path.endsWith(".tex"))
     return <FileCode2 aria-hidden="true" className="size-3.5" />
-  if (isReadableSource(path))
-    return <FileText aria-hidden="true" className="size-3.5" />
-  if (isPdf(path)) return <FileType2 aria-hidden="true" className="size-3.5" />
-  return <File aria-hidden="true" className="size-3.5" />
+  switch (projectFileKind(path)) {
+    case "latexSource":
+      return <FileText aria-hidden="true" className="size-3.5" />
+    case "text":
+      return <ScrollText aria-hidden="true" className="size-3.5" />
+    case "image":
+      return <FileImage aria-hidden="true" className="size-3.5" />
+    case "pdf":
+      return <FileType2 aria-hidden="true" className="size-3.5" />
+    case "unsupported":
+      return <File aria-hidden="true" className="size-3.5" />
+  }
 }
 
 /**
@@ -287,8 +296,10 @@ function TreeBranch({
   const [expanded, setExpanded] = useState(level < 1 || selectedDescendant)
   const [renaming, setRenaming] = useState(false)
   const isDirectory = entry.kind === "directory"
-  const readable = !isDirectory && isReadableSource(entry.path)
-  const pdf = !isDirectory && isPdf(entry.path)
+  const kind = isDirectory ? null : projectFileKind(entry.path)
+  // Text and images open in the source pane; a PDF opens in the PDF pane.
+  const openable = kind === "latexSource" || kind === "text" || kind === "image"
+  const pdf = kind === "pdf"
   const rootLabel =
     !isDirectory && selectedRoot === entry.path
       ? "Root"
@@ -322,20 +333,20 @@ function TreeBranch({
                 // so the reveal never disguises itself as the normal listing.
                 hidden && "text-muted-foreground"
               )}
-              disabled={!isDirectory && !readable && !pdf}
+              disabled={!isDirectory && !openable && !pdf}
               onClick={() => {
                 if (isDirectory) setExpanded((current) => !current)
                 else if (pdf) onOpenPdf(entry.path)
-                else if (readable) onPreviewFile(entry.path)
+                else if (openable) onPreviewFile(entry.path)
               }}
               onDoubleClick={() => {
                 if (pdf) onOpenPdf(entry.path)
-                else if (readable) onPinFile(entry.path)
+                else if (openable) onPinFile(entry.path)
               }}
               style={{ paddingInlineStart: `${8 + level * 14}px` }}
               title={
-                !isDirectory && !readable && !pdf
-                  ? "Preview is unavailable for this file type"
+                !isDirectory && !openable && !pdf
+                  ? "TeX cannot preview this file type"
                   : entry.path
               }
               type="button"

@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::{
     build_system::resolve_executable, pdf_read::resolve_pdf, process_support::run_bounded,
-    project_access::ProjectAccess, source_read::resolve_source_path,
+    project_access::ProjectAccess, source_read::resolve_latex_source_path,
 };
 
 const SYNCTEX_TIMEOUT: Duration = Duration::from_secs(5);
@@ -45,7 +45,7 @@ pub fn synctex_forward_search(
 ) -> Result<ForwardSearchResult, SyncTexError> {
     let root = access.resolve(&project_path).map_err(|_| unavailable())?;
     let pdf = resolve_pdf(&root, Path::new(&pdf_path)).map_err(|_| stale())?;
-    let source = resolve_source_path(&root, Path::new(&source_path)).map_err(|_| stale())?;
+    let source = resolve_latex_source_path(&root, Path::new(&source_path)).map_err(|_| stale())?;
     let input = format!("{}:{}:{}", line.max(1), column.max(1), source.display());
     let executable = resolve_executable("synctex").ok_or_else(unavailable)?;
     let output = run_bounded(

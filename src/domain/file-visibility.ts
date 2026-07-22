@@ -6,7 +6,8 @@ export const MAX_HIDDEN_FILE_RULE_LENGTH = 64
 /**
  * The build artifacts TeX hides out of the box. These are only a default: every
  * rule is listed in Settings and can be removed, so nothing on disk is ever
- * permanently invisible.
+ * permanently invisible. The engine log is deliberately absent — it is the one
+ * artifact people read, and TeX opens it in the editor.
  */
 export const defaultHiddenFileRules: ReadonlyArray<HiddenFileRule> = [
   "aux",
@@ -22,7 +23,6 @@ export const defaultHiddenFileRules: ReadonlyArray<HiddenFileRule> = [
   "ilg",
   "ind",
   "lof",
-  "log",
   "lot",
   "nav",
   "out",

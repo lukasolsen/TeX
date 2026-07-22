@@ -48,6 +48,7 @@ import type {
 } from "@/domain/identifiers"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import { LatexEditor, type EditorTarget } from "@/features/editor/latex-editor"
+import { ImageViewer } from "@/features/projects/image-viewer"
 import type { EditorPosition } from "@/features/editor/latex-navigation"
 import { shortcutLabel } from "@/lib/shortcuts"
 import { cn } from "@/lib/utils"
@@ -196,6 +197,10 @@ export function SourceViewer({
         <Skeleton className="h-3 w-11/12 rounded" />
       </div>
     )
+  }
+
+  if (state.status === "image") {
+    return <ImageViewer image={state.image} />
   }
 
   if (state.status === "error") {

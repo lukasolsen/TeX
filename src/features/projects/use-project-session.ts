@@ -15,6 +15,7 @@ import {
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
+import { isImageFile } from "@/domain/file-kind"
 import {
   closeDocument,
   openDocument,
@@ -41,6 +42,7 @@ import {
   loadRecoveryDraft,
   openProjectFolder,
   projectErrorFromUnknown,
+  readProjectImage,
   readProjectSource,
   saveProjectSource,
   saveRecoveryDraft,
@@ -59,10 +61,22 @@ function readyDocument(
   }
 }
 
-async function loadEditableDocument(
+/**
+ * Opens whatever the project tree pointed at. Images are read as bytes and
+ * shown in their own viewer; everything else the backend will read as text
+ * becomes an editable document with its recovery draft applied.
+ */
+async function loadDocument(
   projectPath: CanonicalProjectPath,
   relativePath: ProjectRelativePath
 ): Promise<AsyncDocumentState> {
+  if (isImageFile(relativePath)) {
+    return {
+      status: "image",
+      path: relativePath,
+      image: await readProjectImage(projectPath, relativePath),
+    }
+  }
   const document = await readProjectSource(projectPath, relativePath)
   const draft = await loadRecoveryDraft({ projectPath, relativePath })
   if (draft === null || draft.content === document.content) {
@@ -177,7 +191,7 @@ async function hydrateSession(
   }
 
   try {
-    const documentState = await loadEditableDocument(project.path, selectedFile)
+    const documentState = await loadDocument(project.path, selectedFile)
     return {
       project,
       workspace,
@@ -967,7 +981,7 @@ export function useProjectSession({
       const projectPath = stateAfterSave.session.project.path
 
       try {
-        const documentState = await loadEditableDocument(projectPath, path)
+        const documentState = await loadDocument(projectPath, path)
         if (request !== documentRequest.current) return
         setState((current) => {
           if (current.status !== "workspace") return current
@@ -1048,7 +1062,7 @@ export function useProjectSession({
       if (!closingActiveFile || nextFile === null) return
 
       try {
-        const documentState = await loadEditableDocument(project.path, nextFile)
+        const documentState = await loadDocument(project.path, nextFile)
         if (request !== documentRequest.current) return
         setState((current) => {
           if (current.status !== "workspace") return current
@@ -1113,7 +1127,7 @@ export function useProjectSession({
       if (!activeFileChanged || nextFile === null) return
 
       try {
-        const documentState = await loadEditableDocument(project.path, nextFile)
+        const documentState = await loadDocument(project.path, nextFile)
         if (request !== documentRequest.current) return
         setState((current) =>
           current.status !== "workspace"
@@ -1421,7 +1435,7 @@ export function useProjectSession({
         ) {
           return
         }
-        const documentState = await loadEditableDocument(projectPath, nextFile)
+        const documentState = await loadDocument(projectPath, nextFile)
         if (request !== documentRequest.current) return
         setState((current) =>
           current.status !== "workspace" ||
@@ -1569,8 +1583,28 @@ export function useProjectSession({
 
   const refreshActiveDocument = useCallback(async () => {
     const current = stateRef.current
+    if (current.status !== "workspace") return
+    // An image carries no unsaved work, so a rebuilt figure can simply replace
+    // the bytes on screen.
+    if (current.session.documentState.status === "image") {
+      const imagePath = current.session.documentState.path
+      const projectPath = current.session.project.path
+      try {
+        const documentState = await loadDocument(projectPath, imagePath)
+        setState((value) =>
+          value.status !== "workspace" ||
+          value.session.project.path !== projectPath ||
+          value.session.documentState.status !== "image" ||
+          value.session.documentState.path !== imagePath
+            ? value
+            : { ...value, session: { ...value.session, documentState } }
+        )
+      } catch {
+        // The image on screen stays until it can be read again.
+      }
+      return
+    }
     if (
-      current.status !== "workspace" ||
       current.session.documentState.status !== "ready" ||
       current.session.documentState.saveState.status !== "saved"
     ) {
@@ -1578,7 +1612,7 @@ export function useProjectSession({
     }
     const path = current.session.documentState.document.path
     try {
-      const documentState = await loadEditableDocument(
+      const documentState = await loadDocument(
         current.session.project.path,
         path
       )

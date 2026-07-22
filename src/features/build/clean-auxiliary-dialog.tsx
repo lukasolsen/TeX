@@ -21,6 +21,7 @@ import {
   previewCleanAuxiliaryFiles,
 } from "@/services/build-service"
 import { projectErrorFromUnknown } from "@/services/project-service"
+import { formatBytes } from "@/lib/format"
 import { runDetached } from "@/lib/promises"
 
 type CleanState =
@@ -159,10 +160,4 @@ export function CleanAuxiliaryDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
 }

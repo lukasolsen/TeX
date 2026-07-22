@@ -23,7 +23,7 @@ use crate::{
         load_configuration_for_project, validate_configuration, BibliographyTool,
         EnvironmentSetting, ProjectBuildConfiguration,
     },
-    source_read::{resolve_source_path, valid_relative_path},
+    source_read::{resolve_latex_source_path, valid_relative_path},
 };
 
 const BUILD_EVENT: &str = "tex://build-event";
@@ -403,7 +403,7 @@ fn validate_build_with_resolver(
     if relative_root.extension().and_then(|value| value.to_str()) != Some("tex") {
         return Err(invalid_root());
     }
-    resolve_source_path(&project_root, relative_root).map_err(|_| invalid_root())?;
+    resolve_latex_source_path(&project_root, relative_root).map_err(|_| invalid_root())?;
 
     let (executable, arguments, custom) = if let Some(command) = &configuration.custom_command {
         let executable = Path::new(&command.executable)
@@ -436,7 +436,7 @@ fn validate_build_with_resolver(
         }
         // Prefix the validated relative root with `./` so a filename beginning
         // with `-` cannot be reinterpreted by the engine (notably latexmk) as an
-        // option token. `root_file` is guaranteed relative by `resolve_source_path`.
+        // option token. `root_file` is guaranteed relative by `resolve_latex_source_path`.
         arguments.push(format!("./{root_file}"));
         (executable.to_string_lossy().into_owned(), arguments, false)
     };

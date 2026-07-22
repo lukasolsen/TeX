@@ -1,4 +1,12 @@
-import { Copy, FileCode2, Scissors, X } from "lucide-react"
+import {
+  Copy,
+  FileCode2,
+  FileImage,
+  FileText,
+  ScrollText,
+  Scissors,
+  X,
+} from "lucide-react"
 import type { ReactElement } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -16,8 +24,24 @@ import type {
   CanonicalProjectPath,
   ProjectRelativePath,
 } from "@/domain/identifiers"
+import { projectFileKind } from "@/domain/file-kind"
 import { runDetached } from "@/lib/promises"
 import { useClipboard } from "@/lib/use-clipboard"
+
+/** Matches the project tree's icon vocabulary so a tab names the same thing. */
+function TabIcon({ path }: { path: ProjectRelativePath }): ReactElement {
+  if (path.endsWith(".tex")) return <FileCode2 data-icon="inline-start" />
+  switch (projectFileKind(path)) {
+    case "latexSource":
+      return <FileText data-icon="inline-start" />
+    case "image":
+      return <FileImage data-icon="inline-start" />
+    case "text":
+    case "pdf":
+    case "unsupported":
+      return <ScrollText data-icon="inline-start" />
+  }
+}
 
 function absoluteDisplayPath(
   projectPath: CanonicalProjectPath,
@@ -93,7 +117,7 @@ export function SourceTabs({
                   onDoubleClick={() => onPin(path)}
                   value={path}
                 >
-                  <FileCode2 data-icon="inline-start" />
+                  <TabIcon path={path} />
                   <span className="truncate">{path}</span>
                   {unsaved ? <span aria-label="Unsaved changes">●</span> : null}
                 </TabsTrigger>

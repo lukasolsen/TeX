@@ -10,7 +10,32 @@ use tauri::State;
 use crate::{bounded_io, project_access::ProjectAccess};
 
 pub(crate) const MAX_SOURCE_BYTES: u64 = 2 * 1024 * 1024;
+/// The files TeX treats as LaTeX source: what project search walks, what LaTeX
+/// analysis runs on, and what may be selected as a build root.
 pub(crate) const READABLE_EXTENSIONS: &[&str] = &["tex", "bib", "sty", "cls", "txt", "md"];
+
+/// The other text files a LaTeX project carries — engine logs and auxiliary
+/// output, class and package internals, tool configuration, small data sources.
+/// Opening these is all that is granted here; they are still not LaTeX source.
+/// Mirrored by `src/domain/file-kind.ts`, which decides what the UI offers.
+const TEXT_EXTENSIONS: &[&str] = &[
+    "aux", "bat", "bbl", "bbx", "blg", "bst", "cbx", "cfg", "clo", "csv", "def", "dtx", "fd",
+    "fls", "glg", "glo", "gls", "gnuplot", "idx", "ilg", "ind", "ini", "ins", "json", "lbx", "ldf",
+    "lof", "log", "lot", "ltx", "mk", "nav", "out", "pgf", "plt", "py", "rnw", "sh", "snm", "tikz",
+    "toc", "toml", "tsv", "vrb", "xml", "yaml", "yml",
+];
+
+/// Whole names, for the extensionless files a LaTeX project usually carries.
+const TEXT_FILE_NAMES: &[&str] = &[
+    ".editorconfig",
+    ".gitattributes",
+    ".gitignore",
+    ".latexmkrc",
+    "latexmkrc",
+    "license",
+    "makefile",
+    "readme",
+];
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -50,7 +75,7 @@ pub(crate) fn read_source(
     project_path: &Path,
     relative_path: &Path,
 ) -> Result<SourceDocument, SourceReadError> {
-    if relative_path.is_absolute() || !is_readable_source(relative_path) {
+    if relative_path.is_absolute() || !is_openable_text(relative_path) {
         return Err(unsupported());
     }
 
@@ -79,11 +104,24 @@ pub(crate) fn read_source(
     })
 }
 
+/// Resolves a path that must be LaTeX source, not merely readable text. Callers
+/// that hand the result to an engine — build roots, SyncTeX — use this so a log
+/// or a configuration file can never be presented to LaTeX as a document.
+pub(crate) fn resolve_latex_source_path(
+    project_root: &Path,
+    relative_path: &Path,
+) -> Result<std::path::PathBuf, SourceReadError> {
+    if !is_readable_source(relative_path) {
+        return Err(unsupported());
+    }
+    resolve_source_path(project_root, relative_path)
+}
+
 pub(crate) fn resolve_source_path(
     project_root: &Path,
     relative_path: &Path,
 ) -> Result<std::path::PathBuf, SourceReadError> {
-    if !valid_relative_path(relative_path) || !is_readable_source(relative_path) {
+    if !valid_relative_path(relative_path) || !is_openable_text(relative_path) {
         return Err(unsupported());
     }
     reject_symlink_components(project_root, relative_path)?;
@@ -134,11 +172,23 @@ fn reject_symlink_components(root: &Path, relative: &Path) -> Result<(), SourceR
 }
 
 pub(crate) fn is_readable_source(path: &Path) -> bool {
+    has_extension(path, READABLE_EXTENSIONS)
+}
+
+/// True for every text file TeX will read into the editor, LaTeX source or not.
+pub(crate) fn is_openable_text(path: &Path) -> bool {
+    if has_extension(path, READABLE_EXTENSIONS) || has_extension(path, TEXT_EXTENSIONS) {
+        return true;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| TEXT_FILE_NAMES.contains(&name.to_ascii_lowercase().as_str()))
+}
+
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
     path.extension()
         .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| {
-            READABLE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
-        })
+        .is_some_and(|extension| extensions.contains(&extension.to_ascii_lowercase().as_str()))
 }
 
 pub(crate) fn revision_for_content(content: &[u8]) -> SourceRevision {
@@ -248,6 +298,30 @@ mod tests {
 
         assert!(source.content.contains("Sigrid Ødegård"));
         assert_eq!(source.path, "Måneanalyse/hoveddokument.tex");
+        Ok(())
+    }
+
+    #[test]
+    fn opens_project_text_files_that_are_not_latex_source() -> Result<(), Box<dyn std::error::Error>>
+    {
+        use super::{is_openable_text, is_readable_source};
+
+        let root = std::env::temp_dir().join(format!("tex-text-open-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir(&root)?;
+        fs::write(root.join("main.log"), "This is pdfTeX, Version 3.14")?;
+        fs::write(root.join("Makefile"), "all:\n\tlatexmk\n")?;
+
+        let log = read_source(&root, Path::new("main.log")).map_err(|_| "log read failed")?;
+        assert!(log.content.starts_with("This is pdfTeX"));
+        assert!(read_source(&root, Path::new("Makefile")).is_ok());
+        // Readable does not mean it is LaTeX source: analysis, project search,
+        // and build roots stay on the narrow set.
+        assert!(is_openable_text(Path::new("main.log")));
+        assert!(!is_readable_source(Path::new("main.log")));
+        assert!(!is_openable_text(Path::new("figures/plot.png")));
+
+        fs::remove_dir_all(root)?;
         Ok(())
     }
 
