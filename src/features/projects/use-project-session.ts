@@ -2,12 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 import type {
   AppSessionState,
-  AsyncDocumentState,
   EditorDocumentChange,
-  OpenProjectFeedback,
-  ProjectSession,
-  ProjectSummary,
-  StartupState,
   WorkspaceState,
 } from "@/domain/project"
 import {
@@ -15,18 +10,25 @@ import {
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
-import { isImageFile } from "@/domain/file-kind"
 import {
   closeDocument,
   openDocument,
   shouldSaveBeforeOpening,
 } from "@/features/projects/document-tabs"
 import {
-  preferredRoot,
-  preferredPdf,
-  preferredSourceFile,
-} from "@/features/projects/project-model"
-import { restoreWorkspaceGeometry } from "@/features/projects/workspace-restoration"
+  dialogError,
+  emptyStartupState,
+  hydrateSession,
+  loadDocument,
+  pruneWorkspaceAfterDelete,
+  readyDocument,
+  recoveryFailureNotice,
+  remapWorkspaceAfterRename,
+  renamedProjectPath,
+  withOpenFeedback,
+  workspacePersistenceFailureNotice,
+} from "@/features/projects/session-helpers"
+import { useWorkspaceView } from "@/features/projects/use-workspace-view"
 import {
   classifyEditorChange,
   saveStateAfterWrite,
@@ -39,186 +41,14 @@ import {
   forgetRecentProject,
   discardRecoveryDraft,
   loadStartupState,
-  loadRecoveryDraft,
   openProjectFolder,
   projectErrorFromUnknown,
-  readProjectImage,
   readProjectSource,
   saveProjectSource,
   saveRecoveryDraft,
   renameProjectEntry as renameProjectEntryRequest,
   saveWorkspaceState,
 } from "@/services/project-service"
-
-function readyDocument(
-  document: Awaited<ReturnType<typeof readProjectSource>>
-): AsyncDocumentState {
-  return {
-    status: "ready",
-    document,
-    content: document.content,
-    saveState: { status: "saved" },
-  }
-}
-
-/**
- * Opens whatever the project tree pointed at. Images are read as bytes and
- * shown in their own viewer; everything else the backend will read as text
- * becomes an editable document with its recovery draft applied.
- */
-async function loadDocument(
-  projectPath: CanonicalProjectPath,
-  relativePath: ProjectRelativePath
-): Promise<AsyncDocumentState> {
-  if (isImageFile(relativePath)) {
-    return {
-      status: "image",
-      path: relativePath,
-      image: await readProjectImage(projectPath, relativePath),
-    }
-  }
-  const document = await readProjectSource(projectPath, relativePath)
-  const draft = await loadRecoveryDraft({ projectPath, relativePath })
-  if (draft === null || draft.content === document.content) {
-    return readyDocument(document)
-  }
-  return {
-    status: "ready",
-    document,
-    content: draft.content,
-    saveState: { status: "recovery", draft },
-  }
-}
-
-const emptyStartupState: StartupState = {
-  recentProjects: [],
-  lastWorkspace: null,
-  restorationNotice: null,
-}
-
-const dialogError = {
-  code: "dialog-unavailable",
-  message:
-    "TeX could not show the folder picker. Try again after restarting the application.",
-}
-
-const recoveryFailureNotice =
-  "TeX could not update the recovery copy. Keep TeX open until the source is saved."
-const workspacePersistenceFailureNotice =
-  "TeX could not persist the current workspace layout. Keep TeX open to retain this context."
-
-function workspaceForProject(
-  project: ProjectSummary,
-  restored: WorkspaceState | null
-): WorkspaceState {
-  const selectedRoot = preferredRoot(project, restored?.selectedRoot ?? null)
-  return {
-    projectPath: project.path,
-    pinnedFiles: restored?.pinnedFiles ?? [],
-    selectedRoot,
-    selectedFile: preferredSourceFile(
-      project,
-      restored?.selectedFile ?? null,
-      selectedRoot
-    ),
-    sidebarWidth: restored?.sidebarWidth ?? 288,
-    editorFontSize: restored?.editorFontSize ?? 14,
-    pdfPaneOpen: restored?.pdfPaneOpen ?? true,
-    pdfPaneWidth: restored?.pdfPaneWidth ?? 480,
-    buildPanelOpen: restored?.buildPanelOpen ?? false,
-    buildPanelHeight: restored?.buildPanelHeight ?? 240,
-    sidebarTab: restored?.sidebarTab ?? "files",
-    buildPanelTab: restored?.buildPanelTab ?? "output",
-    bottomPanelTab: restored?.bottomPanelTab ?? "build",
-    buildProfile: restored?.buildProfile ?? "latexmkPdf",
-    selectedPdf: preferredPdf(
-      project,
-      restored?.selectedPdf ?? null,
-      selectedRoot
-    ),
-    pdfViewerStates: restored?.pdfViewerStates ?? {},
-    editorViewerStates: restored?.editorViewerStates ?? {},
-  }
-}
-
-function combinedNotice(...notices: (string | null)[]): string | null {
-  const available = notices.filter(
-    (notice): notice is string => notice !== null
-  )
-  return available.length === 0 ? null : available.join(" ")
-}
-
-function renamedProjectPath(
-  path: ProjectRelativePath,
-  from: ProjectRelativePath,
-  to: ProjectRelativePath
-): ProjectRelativePath {
-  return path === from || path.startsWith(`${from}/`)
-    ? projectRelativePath(`${to}${path.slice(from.length)}`)
-    : path
-}
-
-function isProjectPathWithin(
-  path: ProjectRelativePath | null,
-  parent: ProjectRelativePath
-): boolean {
-  return path === parent || path?.startsWith(`${parent}/`) === true
-}
-
-async function hydrateSession(
-  project: ProjectSummary,
-  restored: WorkspaceState | null,
-  notice: string | null
-): Promise<ProjectSession> {
-  const restoredGeometry = restoreWorkspaceGeometry(
-    workspaceForProject(project, restored),
-    { width: window.innerWidth, height: window.innerHeight }
-  )
-  const workspace = restoredGeometry.workspace
-  const restorationNotice = combinedNotice(
-    project.persistenceNote,
-    notice,
-    restoredGeometry.notice
-  )
-  const selectedFile = workspace.selectedFile
-  if (selectedFile === null) {
-    return {
-      project,
-      workspace,
-      documentState: { status: "empty" },
-      notice: restorationNotice,
-    }
-  }
-
-  try {
-    const documentState = await loadDocument(project.path, selectedFile)
-    return {
-      project,
-      workspace,
-      documentState,
-      notice: restorationNotice,
-    }
-  } catch (error: unknown) {
-    return {
-      project,
-      workspace: { ...workspace, selectedFile: null },
-      documentState: {
-        status: "error",
-        path: selectedFile,
-        error: projectErrorFromUnknown(error),
-      },
-      notice: restorationNotice,
-    }
-  }
-}
-
-function withOpenFeedback(
-  current: AppSessionState,
-  openFeedback: OpenProjectFeedback
-): AppSessionState {
-  if (current.status === "starting") return current
-  return { ...current, openFeedback }
-}
 
 export type ProjectSessionController = Readonly<{
   state: AppSessionState
@@ -1258,60 +1088,11 @@ export function useProjectSession({
             current.session.project.path !== projectPath
           )
             return current
-          const workspace = {
-            ...current.session.workspace,
-            pinnedFiles: current.session.workspace.pinnedFiles.map((file) =>
-              renamedProjectPath(file, path, renamedPath)
-            ),
-            selectedRoot:
-              current.session.workspace.selectedRoot === null
-                ? null
-                : renamedProjectPath(
-                    current.session.workspace.selectedRoot,
-                    path,
-                    renamedPath
-                  ),
-            selectedFile:
-              current.session.workspace.selectedFile === null
-                ? null
-                : renamedProjectPath(
-                    current.session.workspace.selectedFile,
-                    path,
-                    renamedPath
-                  ),
-            selectedPdf:
-              current.session.workspace.selectedPdf === null
-                ? null
-                : renamedProjectPath(
-                    current.session.workspace.selectedPdf,
-                    path,
-                    renamedPath
-                  ),
-            pdfViewerStates: Object.fromEntries(
-              Object.entries(current.session.workspace.pdfViewerStates).map(
-                ([pdfPath, viewerState]) => [
-                  renamedProjectPath(
-                    projectRelativePath(pdfPath),
-                    path,
-                    renamedPath
-                  ),
-                  viewerState,
-                ]
-              )
-            ),
-            editorViewerStates: Object.fromEntries(
-              Object.entries(current.session.workspace.editorViewerStates).map(
-                ([sourcePath, viewerState]) => [
-                  renamedProjectPath(
-                    projectRelativePath(sourcePath),
-                    path,
-                    renamedPath
-                  ),
-                  viewerState,
-                ]
-              )
-            ),
-          }
+          const workspace = remapWorkspaceAfterRename(
+            current.session.workspace,
+            path,
+            renamedPath
+          )
           const documentState = current.session.documentState
           const nextDocumentState =
             documentState.status === "empty"
@@ -1382,36 +1163,8 @@ export function useProjectSession({
         documentRequest.current += 1
         const request = documentRequest.current
         const previous = currentState.session.workspace
-        const pinnedFiles = previous.pinnedFiles.filter(
-          (file) => !isProjectPathWithin(file, path)
-        )
-        const selectedRoot = isProjectPathWithin(previous.selectedRoot, path)
-          ? null
-          : previous.selectedRoot
-        const nextFile = isProjectPathWithin(previous.selectedFile, path)
-          ? (pinnedFiles.at(-1) ?? selectedRoot)
-          : previous.selectedFile
-        const workspace = {
-          ...previous,
-          pinnedFiles,
-          selectedRoot,
-          editorViewerStates: Object.fromEntries(
-            Object.entries(previous.editorViewerStates).filter(
-              ([sourcePath]) =>
-                !isProjectPathWithin(projectRelativePath(sourcePath), path)
-            )
-          ),
-          selectedFile: nextFile,
-          selectedPdf: isProjectPathWithin(previous.selectedPdf, path)
-            ? null
-            : previous.selectedPdf,
-          pdfViewerStates: Object.fromEntries(
-            Object.entries(previous.pdfViewerStates).filter(
-              ([pdfPath]) =>
-                !isProjectPathWithin(projectRelativePath(pdfPath), path)
-            )
-          ),
-        }
+        const workspace = pruneWorkspaceAfterDelete(previous, path)
+        const nextFile = workspace.selectedFile
         persistWorkspace(workspace)
         setState((current) => {
           if (
@@ -1471,121 +1224,14 @@ export function useProjectSession({
     [persistWorkspace, saveActiveDocument]
   )
 
-  const resizeSidebar = useCallback(
-    (width: number, persist: boolean) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = {
-          ...current.session.workspace,
-          sidebarWidth: Math.round(width),
-        }
-        if (persist) persistWorkspace(workspace)
-        return {
-          ...current,
-          session: { ...current.session, workspace },
-        }
-      })
-    },
-    [persistWorkspace]
-  )
-
-  const setEditorFontSize = useCallback(
-    (fontSize: number) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = {
-          ...current.session.workspace,
-          editorFontSize: Math.max(11, Math.min(24, fontSize)),
-        }
-        persistWorkspace(workspace)
-        return {
-          ...current,
-          session: { ...current.session, workspace },
-        }
-      })
-    },
-    [persistWorkspace]
-  )
-
-  const openPdf = useCallback(
-    (path: ProjectRelativePath) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = { ...current.session.workspace, selectedPdf: path }
-        persistWorkspace(workspace)
-        return { ...current, session: { ...current.session, workspace } }
-      })
-    },
-    [persistWorkspace]
-  )
-
-  const updatePdfViewerState = useCallback(
-    (
-      path: ProjectRelativePath,
-      viewerState: WorkspaceState["pdfViewerStates"][string]
-    ) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = {
-          ...current.session.workspace,
-          pdfViewerStates: {
-            ...current.session.workspace.pdfViewerStates,
-            [path]: viewerState,
-          },
-        }
-        persistWorkspace(workspace)
-        return { ...current, session: { ...current.session, workspace } }
-      })
-    },
-    [persistWorkspace]
-  )
-
-  const updateEditorViewerState = useCallback(
-    (
-      path: ProjectRelativePath,
-      viewerState: WorkspaceState["editorViewerStates"][string]
-    ) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = {
-          ...current.session.workspace,
-          editorViewerStates: {
-            ...current.session.workspace.editorViewerStates,
-            [path]: viewerState,
-          },
-        }
-        persistWorkspace(workspace)
-        return { ...current, session: { ...current.session, workspace } }
-      })
-    },
-    [persistWorkspace]
-  )
-
-  const updateWorkspaceView = useCallback(
-    (
-      update: Partial<
-        Pick<
-          WorkspaceState,
-          | "pdfPaneOpen"
-          | "pdfPaneWidth"
-          | "buildPanelOpen"
-          | "buildPanelHeight"
-          | "sidebarTab"
-          | "buildPanelTab"
-          | "bottomPanelTab"
-          | "buildProfile"
-        >
-      >
-    ) => {
-      setState((current) => {
-        if (current.status !== "workspace") return current
-        const workspace = { ...current.session.workspace, ...update }
-        persistWorkspace(workspace)
-        return { ...current, session: { ...current.session, workspace } }
-      })
-    },
-    [persistWorkspace]
-  )
+  const {
+    resizeSidebar,
+    setEditorFontSize,
+    openPdf,
+    updatePdfViewerState,
+    updateEditorViewerState,
+    updateWorkspaceView,
+  } = useWorkspaceView(setState, persistWorkspace)
 
   const refreshActiveDocument = useCallback(async () => {
     const current = stateRef.current
