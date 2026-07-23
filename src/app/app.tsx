@@ -9,6 +9,7 @@ import {
 import type { ReactElement } from "react"
 import { getCurrentWindow } from "@tauri-apps/api/window"
 import type { WorkspaceFocus } from "@/domain/project"
+import type { CanonicalProjectPath } from "@/domain/identifiers"
 
 import { ProjectHomePage } from "@/pages/project-home-page"
 import { useProjectSession } from "@/features/projects/use-project-session"
@@ -21,6 +22,7 @@ import { WindowChrome } from "@/components/window-chrome/window-chrome"
 import { shouldRestoreStartupWorkspace } from "@/components/window-chrome/window-chrome-model"
 import { createNewWindow } from "@/services/project-service"
 import { countHiddenEntries } from "@/features/projects/project-model"
+import { RecentProjectsDialog } from "@/features/projects/recent-projects-dialog"
 
 const ProjectWorkspacePage = lazy(() =>
   import("@/pages/project-workspace-page").then((module) => ({
@@ -30,6 +32,7 @@ const ProjectWorkspacePage = lazy(() =>
 
 export default function App(): ReactElement {
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [recentProjectsOpen, setRecentProjectsOpen] = useState(false)
   const [workspaceFocus, setWorkspaceFocus] = useState<WorkspaceFocus>("source")
   const [focusRestoreToken, setFocusRestoreToken] = useState(0)
   const {
@@ -74,6 +77,15 @@ export default function App(): ReactElement {
   const openNewWindow = useCallback(() => {
     runDetached(createNewWindow())
   }, [])
+  // Opening another project replaces the session, so the document the user is
+  // editing is written first; a failed save keeps them where they are.
+  const openRecentProject = useCallback(
+    async (path: CanonicalProjectPath) => {
+      if (!(await saveActiveDocument())) return
+      await openProjectAtPath(path)
+    },
+    [openProjectAtPath, saveActiveDocument]
+  )
   const onProjectFilesChanged = useCallback(() => {
     runDetached(refreshProjectFiles())
   }, [refreshProjectFiles])
@@ -82,17 +94,28 @@ export default function App(): ReactElement {
     // Window-level chords stay out of the way while a modal owns the keyboard.
     if (settingsOpen) return
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        (event.ctrlKey || event.metaKey) &&
-        event.shiftKey &&
-        event.key.toLowerCase() === "n"
-      ) {
+      const modifier = event.ctrlKey || event.metaKey
+      if (modifier && event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault()
         openNewWindow()
+      } else if (
+        modifier &&
+        !event.shiftKey &&
+        !event.altKey &&
+        event.key.toLowerCase() === "r"
+      ) {
+        // The webview would otherwise reload and discard the session.
+        event.preventDefault()
+        setRecentProjectsOpen(true)
       }
     }
+    const openRecentProjects = () => setRecentProjectsOpen(true)
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    window.addEventListener("tex:open-recent-projects", openRecentProjects)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("tex:open-recent-projects", openRecentProjects)
+    }
   }, [openNewWindow, settingsOpen])
 
   // Settings shows this so the rule list can be judged against a real project
@@ -169,7 +192,7 @@ export default function App(): ReactElement {
         onClearFeedback={clearFeedback}
         onForgetProject={(path) => runDetached(forgetProject(path))}
         onOpenProject={() => runDetached(chooseAndOpenProject())}
-        onOpenRecent={(path) => runDetached(openProjectAtPath(path))}
+        onOpenRecent={(path) => runDetached(openRecentProject(path))}
         onOpenSettings={() => setSettingsOpen(true)}
         startup={state.startup}
       />
@@ -199,10 +222,21 @@ export default function App(): ReactElement {
           onOpenProject={
             applicationReady ? () => runDetached(chooseAndOpenProject()) : null
           }
+          onOpenRecentProjects={
+            applicationReady && !settingsOpen
+              ? () => setRecentProjectsOpen(true)
+              : null
+          }
           onOpenSettings={applicationReady ? () => setSettingsOpen(true) : null}
           onReturnHome={onReturnHome}
         />
         <div className="min-h-0 flex-1">{content}</div>
+        <RecentProjectsDialog
+          onOpenChange={setRecentProjectsOpen}
+          onOpenProject={() => runDetached(chooseAndOpenProject())}
+          onOpenRecent={(path) => runDetached(openRecentProject(path))}
+          open={recentProjectsOpen}
+        />
         <SettingsDialog
           hiddenInProject={hiddenInProject}
           onAddHiddenFileRule={addHiddenFileRule}

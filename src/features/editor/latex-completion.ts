@@ -20,7 +20,7 @@ import { requestLatexCompletions } from "@/services/project-service"
 /**
  * Every kind a completion row can carry. The backend supplies the first six;
  * `package` and `class` come from the bundled catalog, which the project index
- * knows nothing about.
+ * knows nothing about, and `entry` and `field` from the BibTeX catalog.
  */
 const KIND_LABELS: Record<string, string> = {
   command: "Command",
@@ -31,6 +31,8 @@ const KIND_LABELS: Record<string, string> = {
   file: "File",
   package: "Package",
   class: "Document class",
+  entry: "Entry type",
+  field: "Field",
 }
 
 /** Plain-language name for a completion kind, or `null` for an unrecognized value. */
@@ -95,6 +97,16 @@ const ICON_SHAPES: Record<
     ],
     ["path", { d: "M4 17.5A1.5 1.5 0 0 1 5.5 16H20" }],
     ["path", { d: "M9 8h7" }],
+  ],
+  entry: [
+    ["path", { d: "M4 5.5A1.5 1.5 0 0 1 5.5 4H12v16H6a2 2 0 0 1-2-2z" }],
+    ["path", { d: "M20 5.5A1.5 1.5 0 0 0 18.5 4H12v16h6a2 2 0 0 0 2-2z" }],
+  ],
+  field: [
+    ["path", { d: "M4 6h6v12H4z" }],
+    ["path", { d: "M13 8h7" }],
+    ["path", { d: "M13 12h7" }],
+    ["path", { d: "M13 16h4" }],
   ],
 }
 

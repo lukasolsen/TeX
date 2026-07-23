@@ -12,6 +12,7 @@ export type ShortcutKey =
   | "j"
   | "n"
   | "p"
+  | "r"
   | "s"
   | "/"
 

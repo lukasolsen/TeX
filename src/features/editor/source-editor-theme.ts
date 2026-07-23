@@ -202,6 +202,10 @@ export function sourceEditorTheme(
     ".tex-completion-icon-file": { color: "var(--completion-icon-file)" },
     ".tex-completion-icon-package": { color: "var(--completion-icon-package)" },
     ".tex-completion-icon-class": { color: "var(--completion-icon-class)" },
+    // A bibliography entry and a citation are the same kind of thing, and a
+    // field names a value the way a label does, so each shares that colour.
+    ".tex-completion-icon-entry": { color: "var(--completion-icon-citation)" },
+    ".tex-completion-icon-field": { color: "var(--completion-icon-label)" },
     // CodeMirror styles this element as `.cm-tooltip.cm-completionInfo`, so
     // matching that specificity is what makes these rules apply at all.
     ".cm-tooltip.cm-completionInfo": {
@@ -310,7 +314,8 @@ export function sourceEditorTheme(
       lineHeight: "1.45",
     },
     ".cm-diagnostic + .cm-diagnostic": {
-      borderTop: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
+      borderTop:
+        "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
     },
     ".cm-diagnostic-error": { borderLeftColor: "var(--destructive)" },
     ".cm-diagnostic-warning": {

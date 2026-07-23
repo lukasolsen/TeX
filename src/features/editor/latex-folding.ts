@@ -7,17 +7,11 @@
  * to it.
  */
 
-import {
-  codeFolding,
-  foldGutter,
-  foldKeymap,
-  foldService,
-  unfoldCode,
-} from "@codemirror/language"
-import { keymap } from "@codemirror/view"
+import { foldService } from "@codemirror/language"
 import type { Extension, Text } from "@codemirror/state"
 
 import { SECTION_LEVELS, type LatexDocumentModel } from "@/domain/latex-syntax"
+import { foldPresentation } from "@/features/editor/fold-presentation"
 import { latexModelOf } from "@/features/editor/latex-model"
 
 export type LatexFoldRange = Readonly<{
@@ -139,46 +133,9 @@ function foldRangesFor(doc: Text): Map<number, LatexFoldRange> {
 /** Folding, its gutter, the fold service, and the standard fold keymap. */
 export function latexFolding(): Extension {
   return [
-    codeFolding({
-      preparePlaceholder: (state, range) => {
-        const fold = foldRangesFor(state.doc).get(
-          state.doc.lineAt(range.from).number
-        )
-        const lines =
-          state.doc.lineAt(range.to).number -
-          state.doc.lineAt(range.from).number
-        const what = fold === undefined ? "lines" : describe(fold)
-        return `${lines} folded ${lines === 1 ? "line" : "lines"} of ${what}`
-      },
-      placeholderDOM: (view, onclick, prepared) => {
-        // A folded range must be reachable and reversible from the keyboard,
-        // not only by clicking the gutter marker.
-        const button = document.createElement("button")
-        button.className = "cm-latex-fold-placeholder"
-        button.type = "button"
-        button.textContent = "⋯"
-        button.setAttribute(
-          "aria-label",
-          typeof prepared === "string" ? `Unfold ${prepared}` : "Unfold"
-        )
-        button.title = typeof prepared === "string" ? prepared : "Folded"
-        button.addEventListener("click", onclick)
-        button.addEventListener("keydown", (event) => {
-          if (event.key !== "Enter" && event.key !== " ") return
-          event.preventDefault()
-          unfoldCode(view)
-        })
-        return button
-      },
-    }),
-    foldGutter({
-      markerDOM: (open) => {
-        const marker = document.createElement("span")
-        marker.className = `cm-latex-fold-marker${open ? "" : " cm-latex-fold-marker-closed"}`
-        marker.textContent = open ? "\u25BE" : "\u25B8"
-        marker.setAttribute("aria-hidden", "true")
-        return marker
-      },
+    foldPresentation((state, from) => {
+      const fold = foldRangesFor(state.doc).get(state.doc.lineAt(from).number)
+      return fold === undefined ? "lines" : describe(fold)
     }),
     foldService.of((state, lineStart) => {
       const range = foldRangesFor(state.doc).get(
@@ -186,7 +143,6 @@ export function latexFolding(): Extension {
       )
       return range === undefined ? null : { from: range.from, to: range.to }
     }),
-    keymap.of(foldKeymap),
   ]
 }
 

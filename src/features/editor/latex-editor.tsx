@@ -26,9 +26,7 @@ import {
   foldedRanges,
   indentOnInput,
   indentUnit,
-  syntaxHighlighting,
   unfoldCode,
-  StreamLanguage,
 } from "@codemirror/language"
 import { highlightSelectionMatches, search } from "@codemirror/search"
 import {
@@ -56,8 +54,10 @@ import { lintGutter, nextDiagnostic } from "@codemirror/lint"
 import { latexHoverTooltip } from "@/features/editor/latex-hover"
 import { latexDiagnostics } from "@/features/editor/latex-diagnostics-extension"
 import { latexAutoCloseEnvironment } from "@/features/editor/latex-auto-close-environment"
-import { latexFolding } from "@/features/editor/latex-folding"
-import { latexStreamParser } from "@/features/editor/latex-stream-parser"
+import {
+  editorLanguageCompletions,
+  editorLanguageSupport,
+} from "@/features/editor/editor-languages"
 import {
   navigationTargetAt,
   unresolvedSymbolMessage,
@@ -72,17 +72,9 @@ import {
   type EditorContextActionId,
 } from "@/features/editor/editor-context-actions"
 import { EditorContextMenu } from "@/features/editor/editor-context-menu"
-import { latexDelimiterMatching } from "@/features/editor/latex-matching"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
-import {
-  latexCompletionRowBadge,
-  latexCompletionSource,
-} from "@/features/editor/latex-completion"
-import { latexHighlightStyle } from "@/features/editor/latex-highlighting"
-import {
-  latexSemanticHighlighting,
-  setLatexSemanticContext,
-} from "@/features/editor/latex-semantic-highlighting"
+import { latexCompletionRowBadge } from "@/features/editor/latex-completion"
+import { setLatexSemanticContext } from "@/features/editor/latex-semantic-highlighting"
 import type {
   EditorDocumentChange,
   EditorViewerState,
@@ -93,7 +85,8 @@ import {
   type CanonicalProjectPath,
   type ProjectRelativePath,
 } from "@/domain/identifiers"
-import { isLatexSource, isOpenableFile } from "@/domain/file-kind"
+import { isOpenableFile } from "@/domain/file-kind"
+import { editorLanguage, hasLatexAnalysis } from "@/domain/editor-language"
 import {
   projectFilePaths,
   treeContainsPath,
@@ -482,17 +475,28 @@ export function LatexEditor({
       documentPath: ProjectRelativePath
     ): Extension[] => {
       const { editor } = settings
+      const language = editorLanguage(documentPath)
       // A log, a data file, or a Makefile is editable but is not LaTeX, so TeX
-      // does not offer completions, hovers, or diagnostics it cannot mean.
-      const assistance = isLatexSource(documentPath)
+      // does not offer hovers or diagnostics it cannot mean. Completion is
+      // decided per language instead: a `.bib` file has suggestions of its own.
+      const assistance = hasLatexAnalysis(documentPath)
         ? settings.assistance
         : {
             ...settings.assistance,
             hoverDocumentation: false,
             diagnosticsEnabled: false,
-            completionEnabled: false,
           }
+      const completionSources = editorLanguageCompletions(language, {
+        projectPath: () => projectPathRef.current,
+        relativePath: () => activePath.current,
+      })
       return [
+        editorLanguageSupport(language, {
+          semantic: {
+            sourcePath: documentPath,
+            projectFiles: projectFilePaths(projectTreeRef.current),
+          },
+        }),
         editor.showLineNumbers
           ? [lineNumbers(), highlightActiveLineGutter()]
           : [],
@@ -500,7 +504,9 @@ export function LatexEditor({
         editor.highlightSelectionMatches ? highlightSelectionMatches() : [],
         editor.wrapLines ? EditorView.lineWrapping : [],
         editor.autoCloseBrackets ? closeBrackets() : [],
-        editor.autoCloseEnvironments ? latexAutoCloseEnvironment() : [],
+        editor.autoCloseEnvironments && language === "latex"
+          ? latexAutoCloseEnvironment()
+          : [],
         indentUnit.of(indentUnitText(editor.indentStyle, editor.indentWidth)),
         EditorState.tabSize.of(editor.indentWidth),
         assistance.hoverDocumentation
@@ -528,14 +534,9 @@ export function LatexEditor({
               }),
             ]
           : [],
-        assistance.completionEnabled
+        assistance.completionEnabled && completionSources.length > 0
           ? autocompletion({
-              override: [
-                latexCompletionSource(
-                  () => projectPathRef.current,
-                  () => activePath.current
-                ),
-              ],
+              override: completionSources,
               addToOptions: [latexCompletionRowBadge],
               icons: false,
               activateOnTyping: assistance.completionOnTyping,
@@ -552,15 +553,7 @@ export function LatexEditor({
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),
       indentOnInput(),
-      StreamLanguage.define(latexStreamParser),
-      syntaxHighlighting(latexHighlightStyle),
-      latexSemanticHighlighting({
-        sourcePath: activePath.current,
-        projectFiles: projectFilePaths(projectTreeRef.current),
-      }),
       bracketMatching(),
-      latexDelimiterMatching(),
-      latexFolding(),
       rectangularSelection(),
       crosshairCursor(),
       settingsCompartment.current.of(

@@ -29,6 +29,7 @@ type WindowChromeProps = Readonly<{
   onOpenCommands: (() => void) | null
   onWorkspaceAction: ((action: WorkspaceChromeAction) => void) | null
   onOpenProject: (() => void) | null
+  onOpenRecentProjects: (() => void) | null
   onOpenSettings: (() => void) | null
   onReturnHome: (() => void) | null
 }>
@@ -39,6 +40,7 @@ export function WindowChrome({
   onOpenCommands,
   onWorkspaceAction,
   onOpenProject,
+  onOpenRecentProjects,
   onOpenSettings,
   onReturnHome,
 }: WindowChromeProps): ReactElement {
@@ -102,6 +104,7 @@ export function WindowChrome({
                 label={label}
                 onNewWindow={onNewWindow}
                 onOpenProject={onOpenProject}
+                onOpenRecentProjects={onOpenRecentProjects}
                 onOpenSettings={onOpenSettings}
                 onReturnHome={onReturnHome}
                 onWorkspaceAction={onWorkspaceAction}
@@ -188,6 +191,7 @@ function WindowMenuContent({
   label,
   onNewWindow,
   onOpenProject,
+  onOpenRecentProjects,
   onOpenSettings,
   onReturnHome,
   onWorkspaceAction,
@@ -195,6 +199,7 @@ function WindowMenuContent({
   WindowChromeProps,
   | "onNewWindow"
   | "onOpenProject"
+  | "onOpenRecentProjects"
   | "onOpenSettings"
   | "onReturnHome"
   | "onWorkspaceAction"
@@ -212,6 +217,14 @@ function WindowMenuContent({
         ) : null}
         {onOpenProject !== null ? (
           <WindowMenuItem onClick={onOpenProject}>Open project</WindowMenuItem>
+        ) : null}
+        {onOpenRecentProjects !== null ? (
+          <WindowMenuItem
+            onClick={onOpenRecentProjects}
+            shortcut={shortcutLabel(["primary", "r"])}
+          >
+            Recent projects
+          </WindowMenuItem>
         ) : null}
         {onReturnHome !== null ? (
           <WindowMenuItem

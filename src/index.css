@@ -392,18 +392,18 @@ body {
   outline: 1px solid color-mix(in oklch, var(--destructive) 55%, transparent);
 }
 
-.cm-editor .cm-latex-fold-marker {
+.cm-editor .cm-source-fold-marker {
   display: inline-block;
   width: 1em;
   text-align: center;
   color: var(--muted-foreground);
 }
 
-.cm-editor .cm-foldGutter .cm-gutterElement:hover .cm-latex-fold-marker {
+.cm-editor .cm-foldGutter .cm-gutterElement:hover .cm-source-fold-marker {
   color: var(--foreground);
 }
 
-.cm-editor .cm-latex-fold-placeholder {
+.cm-editor .cm-source-fold-placeholder {
   margin: 0 0.15em;
   border: 1px solid var(--border);
   border-radius: 0.25rem;
@@ -414,14 +414,145 @@ body {
   cursor: pointer;
 }
 
-.cm-editor .cm-latex-fold-placeholder:hover {
+.cm-editor .cm-source-fold-placeholder:hover {
   background-color: var(--accent);
   color: var(--accent-foreground);
 }
 
-.cm-editor .cm-latex-fold-placeholder:focus-visible {
+.cm-editor .cm-source-fold-placeholder:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 1px;
+}
+
+/* Every language other than LaTeX resolves through these, so a string, a
+   comment, and a number look the same in a .bib, a .yaml, and a .tex file. */
+
+.cm-editor .cm-syntax-comment {
+  color: var(--editor-comment);
+  font-style: italic;
+}
+
+.cm-editor .cm-syntax-keyword {
+  color: var(--editor-command);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-string {
+  color: var(--editor-string);
+}
+
+.cm-editor .cm-syntax-number {
+  color: var(--editor-number);
+}
+
+.cm-editor .cm-syntax-property {
+  color: var(--editor-label);
+}
+
+.cm-editor .cm-syntax-type {
+  color: var(--editor-environment);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-definition {
+  color: var(--editor-reference);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-label {
+  color: var(--editor-citation);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-name {
+  color: var(--editor-argument);
+}
+
+.cm-editor .cm-syntax-punctuation {
+  color: var(--editor-bracket);
+}
+
+.cm-editor .cm-syntax-meta {
+  color: var(--editor-option);
+}
+
+.cm-editor .cm-syntax-escape {
+  color: var(--editor-delimiter);
+}
+
+.cm-editor .cm-syntax-invalid {
+  color: var(--editor-invalid);
+  text-decoration: wavy underline;
+  text-decoration-color: var(--editor-invalid);
+}
+
+.cm-editor .cm-syntax-math {
+  color: var(--editor-math);
+}
+
+.cm-editor .cm-syntax-marker {
+  color: var(--editor-delimiter);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-heading {
+  color: var(--editor-heading);
+  font-weight: 700;
+}
+
+.cm-editor .cm-syntax-heading-1 {
+  font-size: 1.15em;
+}
+
+.cm-editor .cm-syntax-heading-2 {
+  font-size: 1.07em;
+}
+
+.cm-editor .cm-syntax-strong {
+  font-weight: 700;
+}
+
+.cm-editor .cm-syntax-emphasis {
+  font-style: italic;
+}
+
+.cm-editor .cm-syntax-strikethrough {
+  text-decoration: line-through;
+}
+
+.cm-editor .cm-syntax-link {
+  color: var(--editor-reference);
+}
+
+.cm-editor .cm-syntax-url {
+  color: var(--editor-url);
+  text-decoration: underline;
+  text-decoration-color: color-mix(
+    in oklch,
+    var(--editor-url) 45%,
+    transparent
+  );
+  text-underline-offset: 0.18em;
+}
+
+.cm-editor .cm-syntax-code {
+  border-radius: 0.2em;
+  background-color: color-mix(in oklch, var(--muted) 70%, transparent);
+  color: var(--editor-argument);
+}
+
+.cm-editor .cm-syntax-list {
+  color: var(--editor-delimiter);
+  font-weight: 600;
+}
+
+.cm-editor .cm-syntax-quote {
+  color: var(--editor-comment);
+}
+
+.cm-editor .cm-syntax-separator {
+  color: var(--editor-bracket);
+  font-weight: 600;
 }
 
 @keyframes tex-reference-underline {

@@ -2,6 +2,7 @@ import {
   FileCode2,
   FolderOpen,
   Hammer,
+  History,
   MessageSquareText,
   PanelBottomOpen,
   PanelRightClose,
@@ -238,6 +239,16 @@ export function WorkspaceCommandPalette({
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenProject)}>
             <FolderOpen /> Open project
+          </CommandItem>
+          <CommandItem
+            onSelect={() =>
+              run(() =>
+                window.dispatchEvent(new Event("tex:open-recent-projects"))
+              )
+            }
+          >
+            <History /> Recent projects
+            <CommandShortcut>{shortcutLabel(["primary", "r"])}</CommandShortcut>
           </CommandItem>
           <CommandItem onSelect={() => run(onOpenSettings)}>
             <Settings /> Open settings

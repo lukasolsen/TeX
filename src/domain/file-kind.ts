@@ -106,11 +106,13 @@ const imageMediaTypes = new Map([
   ["webp", "image/webp"],
 ])
 
-function fileName(path: string): string {
+/** The lowercased final segment of a path, without its directories. */
+export function fileName(path: string): string {
   return (path.split("/").pop() ?? path).toLowerCase()
 }
 
-function extension(path: string): string | null {
+/** The lowercased extension of a path, or `null` when it carries none. */
+export function fileExtension(path: string): string | null {
   const name = fileName(path)
   const separator = name.lastIndexOf(".")
   // A leading dot names the file rather than starting an extension, so
@@ -120,7 +122,7 @@ function extension(path: string): string | null {
 }
 
 export function projectFileKind(path: string): ProjectFileKind {
-  const suffix = extension(path)
+  const suffix = fileExtension(path)
   if (suffix === null) {
     return textFileNames.has(fileName(path)) ? "text" : "unsupported"
   }
@@ -159,6 +161,6 @@ export function isOpenableFile(path: string): boolean {
 
 /** The media type an image's bytes are handed to the WebView with. */
 export function imageMediaType(path: string): string | null {
-  const suffix = extension(path)
+  const suffix = fileExtension(path)
   return suffix === null ? null : (imageMediaTypes.get(suffix) ?? null)
 }

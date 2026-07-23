@@ -1,6 +1,7 @@
 import type { ReactElement } from "react"
 import {
   CircleAlert,
+  Code,
   FileText,
   Hammer,
   ListChecks,
@@ -9,6 +10,8 @@ import {
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { editorLanguage, editorLanguageName } from "@/domain/editor-language"
+import { isTextFile } from "@/domain/file-kind"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectSummary } from "@/domain/project"
 import type { BuildRun } from "@/domain/build"
@@ -145,6 +148,14 @@ export function WorkspaceStatusBar({
         <span className="hidden shrink-0 items-center gap-1.5 text-status-foreground/75 sm:flex">
           <MapPin aria-hidden="true" className="size-3.5" />
           Ln {sourceLocation.line}, Col {sourceLocation.column}
+        </span>
+      ) : null}
+      {/* Which syntax the open file is edited with, so highlighting,
+          folding, and completion are never a surprise. */}
+      {selectedFile !== null && isTextFile(selectedFile) ? (
+        <span className="hidden shrink-0 items-center gap-1.5 text-status-foreground/75 lg:flex">
+          <Code aria-hidden="true" className="size-3.5" />
+          {editorLanguageName(editorLanguage(selectedFile))}
         </span>
       ) : null}
       <StatusDivider />
