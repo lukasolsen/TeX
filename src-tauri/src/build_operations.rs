@@ -302,9 +302,17 @@ mod tests {
 
     #[test]
     fn clean_preview_never_includes_source_or_pdf() -> Result<(), Box<dyn std::error::Error>> {
-        let root = std::env::temp_dir().join(format!("tex-clean-{}", std::process::id()));
-        let _ = fs::remove_dir_all(&root);
+        // Keyed on the clock rather than the process id: two `cargo test`
+        // invocations share neither, and a stale directory from a killed run
+        // must not decide whether this one passes.
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("tex-clean-{unique}"));
         fs::create_dir_all(&root)?;
+        // The platform temporary directory is reached through a symlink on
+        // macOS, and `preview_clean` keeps only paths under the canonical root.
+        let root = root.canonicalize()?;
         fs::write(root.join("main.tex"), "source")?;
         fs::write(root.join("main.pdf"), "pdf")?;
         fs::write(root.join("main.aux"), "aux")?;

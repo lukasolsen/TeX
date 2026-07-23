@@ -269,11 +269,14 @@ mod tests {
 
     use super::{create_entry, delete_entry, entry_name, rename_entry, resolve_entry};
 
+    /// Canonicalized, because the platform temporary directory is reached
+    /// through a symlink on macOS and every path check under test compares
+    /// against a canonical root.
     fn temporary_directory() -> Result<std::path::PathBuf, Box<dyn std::error::Error>> {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
         let directory = std::env::temp_dir().join(format!("tex-project-files-{unique}"));
         fs::create_dir(&directory)?;
-        Ok(directory)
+        Ok(directory.canonicalize()?)
     }
 
     #[test]
