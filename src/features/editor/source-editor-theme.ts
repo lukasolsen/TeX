@@ -289,6 +289,80 @@ export function sourceEditorTheme(
       whiteSpace: "pre",
       color: "var(--editor-preview-foreground)",
     },
+    // The lint tooltip is a plain `.cm-tooltip`, so without these it keeps
+    // CodeMirror's light default surface and turns into a white card on a dark
+    // editor. Everything below resolves through the theme variables instead.
+    ".cm-tooltip:has(.cm-tooltip-lint)": {
+      border: "1px solid var(--border)",
+      borderRadius: "calc(var(--radius) * 0.8)",
+      backgroundColor: "var(--popover)",
+      color: "var(--popover-foreground)",
+      boxShadow: "var(--elevation-popover)",
+      maxWidth: "min(28rem, calc(100vw - 2rem))",
+      overflow: "hidden",
+    },
+    ".cm-diagnostic": {
+      padding: "0.375rem 0.625rem",
+      marginLeft: "0",
+      borderLeft: "3px solid var(--muted-foreground)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.75rem",
+      lineHeight: "1.45",
+    },
+    ".cm-diagnostic + .cm-diagnostic": {
+      borderTop: "1px solid color-mix(in oklch, var(--border) 60%, transparent)",
+    },
+    ".cm-diagnostic-error": { borderLeftColor: "var(--destructive)" },
+    ".cm-diagnostic-warning": {
+      borderLeftColor: "var(--diagnostic-warning)",
+    },
+    ".cm-diagnostic-info": { borderLeftColor: "var(--muted-foreground)" },
+    ".cm-diagnostic-hint": { borderLeftColor: "var(--primary)" },
+    ".cm-diagnosticSource": {
+      display: "block",
+      marginTop: "0.125rem",
+      fontSize: "0.6875rem",
+      opacity: "1",
+      color: "var(--muted-foreground)",
+    },
+    ".cm-diagnosticAction": {
+      border: "1px solid var(--border)",
+      borderRadius: "calc(var(--radius) * 0.5)",
+      backgroundColor: "var(--secondary)",
+      color: "var(--secondary-foreground)",
+      fontFamily: "var(--font-sans)",
+      fontSize: "0.6875rem",
+    },
+    // The default squiggle is a fixed-colour SVG data URI; a wavy underline
+    // takes a variable, so it tracks the theme the way the rest of the editor
+    // does.
+    ".cm-lintRange": {
+      backgroundImage: "none",
+      paddingBottom: "0",
+      textDecorationLine: "underline",
+      textDecorationStyle: "wavy",
+      textDecorationSkipInk: "none",
+      textDecorationThickness: "1px",
+      textUnderlineOffset: "0.2em",
+    },
+    ".cm-lintRange-error": { textDecorationColor: "var(--destructive)" },
+    ".cm-lintRange-warning": {
+      textDecorationColor: "var(--diagnostic-warning)",
+    },
+    ".cm-lintRange-info": { textDecorationColor: "var(--muted-foreground)" },
+    ".cm-lintRange-hint": { textDecorationColor: "var(--primary)" },
+    ".cm-lintRange-active": {
+      backgroundColor:
+        "color-mix(in oklch, var(--diagnostic-warning) 24%, transparent)",
+    },
+    ".cm-lintPoint::after": { borderBottomColor: "var(--destructive)" },
+    ".cm-lintPoint-warning::after": {
+      borderBottomColor: "var(--diagnostic-warning)",
+    },
+    ".cm-lintPoint-info::after": {
+      borderBottomColor: "var(--muted-foreground)",
+    },
+    ".cm-lintPoint-hint::after": { borderBottomColor: "var(--primary)" },
     ".tex-completion-hint": {
       margin: "0.125rem 0 0",
       paddingTop: "0.375rem",
