@@ -11,7 +11,11 @@ import {
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { initialProjectBuildState, type BuildProfile } from "@/domain/build"
+import {
+  initialBuildProgress,
+  initialProjectBuildState,
+  type BuildProfile,
+} from "@/domain/build"
 import type {
   InstallEvent,
   InstallMethod,
@@ -112,9 +116,11 @@ function emit(event: InstallEvent): void {
 
 const missing: BuildProfile = {
   engine: "latexmkPdf",
-  label: "latexmk (PDF)",
-  description: "Recommended; reruns LaTeX and bibliography tools as needed.",
+  label: "pdfLaTeX",
+  description:
+    "Reruns pdfLaTeX and the bibliography tools until references resolve.",
   executable: "latexmk",
+  resolvesReferences: true,
   recommended: true,
   available: false,
 }
@@ -126,9 +132,10 @@ const asyncNoop = vi.fn<(...arguments_: unknown[]) => Promise<void>>(() =>
 
 const pdfLatex: BuildProfile = {
   engine: "pdfLatex",
-  label: "pdfLaTeX",
-  description: "Single compiler pass; references may require additional runs.",
+  label: "Single pass (pdfLaTeX)",
+  description: "One pdfLaTeX run. Cross-references will not resolve.",
   executable: "pdflatex",
+  resolvesReferences: false,
   recommended: false,
   available: true,
 }
@@ -155,6 +162,8 @@ function renderPanel(
         onStop={noop}
         onStopWatch={noop}
         onTabChange={noop}
+        queued={false}
+        rootCandidates={["main.tex"]}
         profiles={{
           status: "ready",
           profiles: overrides.profiles ?? [missing],
@@ -259,16 +268,46 @@ describe("completion feedback", () => {
     expect(screen.queryByText("LaTeX installed")).toBeNull()
   })
 
-  it("reports the refreshed build tools when only some engines arrived", async () => {
+  /// An installed single-pass engine is offered, but never described as able
+  /// to build the project: it resolves no references.
+  it("offers a single-pass engine without claiming it builds the project", async () => {
     const setEngine = vi.fn<(...arguments_: unknown[]) => void>()
     renderPanel({ profiles: [missing, pdfLatex], setEngine })
 
     expect(
-      screen.getByText(/pdfLaTeX is installed and can build this project/)
+      screen.getByText(
+        /leaves cross-references, the table of contents, and citations unresolved/
+      )
     ).toBeTruthy()
-    await userEvent.click(screen.getByRole("button", { name: "Use pdfLaTeX" }))
+    expect(screen.queryByText(/can build this project/)).toBeNull()
+    await userEvent.click(
+      screen.getByRole("button", { name: "Use Single pass (pdfLaTeX)" })
+    )
 
     expect(setEngine).toHaveBeenCalledWith("pdfLatex")
+  })
+
+  /// A reference-resolving engine is preferred over a single-pass one when
+  /// both arrived, so the offer is the one that produces a correct document.
+  it("prefers a reference-resolving alternative", async () => {
+    const setEngine = vi.fn<(...arguments_: unknown[]) => void>()
+    const xelatex: BuildProfile = {
+      engine: "xeLatex",
+      label: "XeLaTeX",
+      description: "Reruns XeLaTeX until references resolve.",
+      executable: "latexmk",
+      resolvesReferences: true,
+      recommended: false,
+      available: true,
+    }
+    renderPanel({ profiles: [missing, pdfLatex, xelatex], setEngine })
+
+    expect(
+      screen.getByText(/XeLaTeX is installed and can build this project/)
+    ).toBeTruthy()
+    await userEvent.click(screen.getByRole("button", { name: "Use XeLaTeX" }))
+
+    expect(setEngine).toHaveBeenCalledWith("xeLatex")
   })
 })
 
@@ -283,10 +322,13 @@ describe("latexmk cached failures", () => {
       rootFile: projectRelativePath("main.tex"),
       engine: "latexmkPdf" as const,
       environment: [],
-      bibliographyTool: "automatic" as const,
+      bibliography: "automatic" as const,
+      resolvesReferences: true,
       custom: false,
     },
     status: "failed" as const,
+    reason: null,
+    pdfFresh: false,
     startedAt: 1_700_000_000,
     finishedAt: 1_700_000_010,
     exitCode: 12,
@@ -305,6 +347,7 @@ describe("latexmk cached failures", () => {
       },
     ],
     diagnostics: [],
+    progress: initialBuildProgress,
   }
 
   it("explains the replayed error and routes to the clean action", async () => {
@@ -328,6 +371,8 @@ describe("latexmk cached failures", () => {
           onStop={noop}
           onStopWatch={noop}
           onTabChange={noop}
+          queued={false}
+          rootCandidates={["main.tex"]}
           profiles={{
             status: "ready",
             profiles: [{ ...missing, available: true }],

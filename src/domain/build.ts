@@ -7,7 +7,18 @@ import type {
 
 export type BuildEngine = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
 
-export type BuildStatus = "running" | "succeeded" | "failed" | "cancelled"
+/**
+ * What a run turned out to be. Not the exit code: latexmk can exit 0 having
+ * written nothing, and an engine in nonstopmode routinely exits non-zero having
+ * written a usable PDF. The artifact decides.
+ */
+export type BuildStatus =
+  | "running"
+  | "succeeded"
+  | "succeededWithProblems"
+  | "failed"
+  | "cancelled"
+  | "timedOut"
 export type BuildLogStream = "stdout" | "stderr"
 export type DiagnosticSeverity = "error" | "warning"
 
@@ -42,21 +53,28 @@ export type BuildRequest = Readonly<{
   engine: BuildEngine
 }>
 
-export type BibliographyTool = "automatic" | "biber" | "bibtex" | "none"
+/**
+ * Whether the bibliography runs — not which tool runs it. latexmk chooses biber
+ * or bibtex from the presence of a `.bcf`, so a setting that named the tool
+ * could not honour the claim; the run reports which tool ran instead.
+ */
+export type BibliographyMode = "automatic" | "always" | "never"
 
 export type EnvironmentSetting = Readonly<{ name: string; value: string }>
 
 export type ProjectBuildConfiguration = Readonly<{
-  schemaVersion: 1
+  schemaVersion: 2
   rootFile: string | null
   outputDirectory: string | null
-  bibliographyTool: BibliographyTool
+  bibliography: BibliographyMode
   generatedDirectories: ReadonlyArray<string>
   environment: ReadonlyArray<EnvironmentSetting>
   customCommand: Readonly<{
     executable: string
     arguments: ReadonlyArray<string>
   }> | null
+  /** Shell escape on the standard invocation, consented natively. */
+  shellEscape: boolean
 }>
 
 export type ProjectBuildConfigurationState =
@@ -77,7 +95,9 @@ export type BuildInvocation = Readonly<{
   rootFile: ProjectRelativePath
   engine: BuildEngine
   environment: ReadonlyArray<EnvironmentSetting>
-  bibliographyTool: BibliographyTool
+  bibliography: BibliographyMode
+  /** False for the single-pass profile, which resolves no cross-references. */
+  resolvesReferences: boolean
   custom: boolean
 }>
 
@@ -86,8 +106,37 @@ export type BuildProfile = Readonly<{
   label: string
   description: string
   executable: string
+  resolvesReferences: boolean
   recommended: boolean
   available: boolean
+}>
+
+/** One tool the build path can use, and what stops working without it. */
+export type ToolReport = Readonly<{
+  name: string
+  purpose: string
+  /** What TeX cannot do while this is missing. */
+  absence: string
+  available: boolean
+  path: string | null
+}>
+
+/** Which TeX distribution answered, so several installs stay distinguishable. */
+export type DistributionReport = Readonly<{
+  label: string
+  directory: string
+}>
+
+export type BuildToolReport = Readonly<{
+  tools: ReadonlyArray<ToolReport>
+  distribution: DistributionReport | null
+}>
+
+/** The package providing a file a build could not find. */
+export type PackageCandidate = Readonly<{
+  file: string
+  package: string
+  command: string
 }>
 
 export type BuildProfilesState =
@@ -102,25 +151,79 @@ export type BuildLogEntry = Readonly<{
   text: string
 }>
 
+/**
+ * The closed set of problems TeX explains in its own words. `compilerMessage`
+ * carries anything not recognised, with the compiler's wording intact.
+ */
+export type DiagnosticCode =
+  | "undefinedControlSequence"
+  | "missingPackage"
+  | "missingFile"
+  | "undefinedReference"
+  | "undefinedCitation"
+  | "missingDollar"
+  | "runawayArgument"
+  | "tooManyBraces"
+  | "overfullBox"
+  | "underfullBox"
+  | "rerunLimit"
+  | "bibliographyFailed"
+  | "compilerMessage"
+
 export type BuildDiagnostic = Readonly<{
+  code: DiagnosticCode
   severity: DiagnosticSeverity
+  /** One sentence naming what is wrong and what would resolve it. */
   message: string
+  /** The compiler's own line, kept so the translation never hides it. */
+  raw: string
+  /** The `l.NN` source excerpt, when the engine printed one. */
+  context: string | null
   file: ProjectRelativePath | null
   line: number | null
   mappingUncertain: boolean
-  logSequence: number
+  /** How many passes reported this; 1 unless latexmk repeated it. */
+  occurrences: number
+  logSequence: number | null
 }>
+
+/**
+ * What the run is doing right now, read from output the engine already
+ * produces. An indefinite spinner is not evidence of work.
+ */
+export type BuildProgress = Readonly<{
+  /** Passes latexmk has announced; 0 before the first announcement. */
+  pass: number
+  /** The tool that pass is running, as latexmk named it. */
+  tool: string | null
+  /** Pages shipped so far, from the engine's `[n]` markers. */
+  pages: number
+  /** The engine's own closing summary, once it prints one. */
+  summary: string | null
+}>
+
+export const initialBuildProgress: BuildProgress = {
+  pass: 0,
+  tool: null,
+  pages: 0,
+  summary: null,
+}
 
 export type BuildRun = Readonly<{
   id: BuildId
   projectPath: CanonicalProjectPath
   invocation: BuildInvocation
   status: BuildStatus
+  /** One sentence explaining a terminal status; null while running. */
+  reason: string | null
+  /** True when this run wrote the PDF, so a failed run's output is usable. */
+  pdfFresh: boolean
   startedAt: number
   finishedAt: number | null
   exitCode: number | null
   entries: ReadonlyArray<BuildLogEntry>
   diagnostics: ReadonlyArray<BuildDiagnostic>
+  progress: BuildProgress
 }>
 
 export type BuildEvent =
@@ -128,16 +231,23 @@ export type BuildEvent =
       kind: "log"
       projectPath: CanonicalProjectPath
       runId: BuildId
-      entry: BuildLogEntry
-      diagnostic: BuildDiagnostic | null
+      /** One flush of output, in order. */
+      entries: ReadonlyArray<BuildLogEntry>
+      diagnostics: ReadonlyArray<BuildDiagnostic>
+      /** Present only when this batch changed what the run is doing. */
+      progress: BuildProgress | null
     }>
   | Readonly<{
       kind: "finished"
       projectPath: CanonicalProjectPath
       runId: BuildId
       status: Exclude<BuildStatus, "running">
+      reason: string
+      pdfFresh: boolean
       finishedAt: number
       exitCode: number | null
+      /** Read from the engine's `.log`; replaces what the stream produced. */
+      diagnostics: ReadonlyArray<BuildDiagnostic>
     }>
 
 export type BuildPreviewState =
@@ -174,6 +284,7 @@ export type ProjectBuildAction =
 const MAX_VISIBLE_RUNS = 10
 const MAX_VISIBLE_LOG_ENTRIES = 500
 const MAX_VISIBLE_LOG_BYTES = 512 * 1024
+const MAX_VISIBLE_DIAGNOSTICS = 500
 const MAX_PENDING_BUILD_EVENTS = 512
 
 export const initialProjectBuildState: ProjectBuildState = {
@@ -263,42 +374,59 @@ function updateRun(run: BuildRun, event: BuildEvent): BuildRun {
     return {
       ...run,
       status: event.status,
+      reason: event.reason,
+      pdfFresh: event.pdfFresh,
       finishedAt: event.finishedAt,
       exitCode: event.exitCode,
+      // The log-derived set is authoritative. It arrives complete, so it
+      // replaces rather than merges with what the stream guessed live.
+      diagnostics:
+        event.diagnostics.length > 0 ? [...event.diagnostics] : run.diagnostics,
     }
   }
-  if (run.entries.some((entry) => entry.sequence === event.entry.sequence)) {
-    return run
-  }
-  const entries = retainLogEntries([...run.entries, event.entry])
-  const retainedSequences = new Set(entries.map((entry) => entry.sequence))
+  // The backend numbers sequences monotonically, so an entry already present
+  // means that part of the flush was already applied.
+  const seen = new Set(run.entries.map((entry) => entry.sequence))
+  const arriving = event.entries.filter((entry) => !seen.has(entry.sequence))
+  if (arriving.length === 0 && event.progress === null) return run
+  // Diagnostics are retained independently of the log lines that carried them.
+  // Errors arrive early and the log is trimmed from the middle, so tying a
+  // diagnostic's lifetime to its line would drop the first error of every long
+  // build — the one worth reading.
   return {
     ...run,
-    entries,
-    diagnostics: (event.diagnostic === null
-      ? run.diagnostics
-      : [...run.diagnostics, event.diagnostic]
-    ).filter((diagnostic) => retainedSequences.has(diagnostic.logSequence)),
+    entries: retainLogEntries([...run.entries, ...arriving]),
+    diagnostics: [...run.diagnostics, ...event.diagnostics].slice(
+      -MAX_VISIBLE_DIAGNOSTICS
+    ),
+    progress: event.progress ?? run.progress,
   }
 }
 
+/**
+ * Keeps the head and the tail of a long log. The backend trims the same way
+ * and marks the gap with a sequence-zero notice, which is preserved here.
+ */
 function retainLogEntries(entries: BuildLogEntry[]): BuildLogEntry[] {
+  if (entries.length <= MAX_VISIBLE_LOG_ENTRIES) return entries
+  const head = Math.floor(MAX_VISIBLE_LOG_ENTRIES / 4)
+  const tail = MAX_VISIBLE_LOG_ENTRIES - head
   let retainedBytes = 0
-  const retained: BuildLogEntry[] = []
+  const retainedTail: BuildLogEntry[] = []
   for (
     let index = entries.length - 1;
-    index >= 0 && retained.length < MAX_VISIBLE_LOG_ENTRIES;
+    index >= head && retainedTail.length < tail;
     index -= 1
   ) {
     const entry = entries[index]
     if (entry === undefined) continue
     const nextBytes = retainedBytes + entry.text.length
-    if (nextBytes > MAX_VISIBLE_LOG_BYTES && retained.length > 0) break
-    retained.push(entry)
+    if (nextBytes > MAX_VISIBLE_LOG_BYTES && retainedTail.length > 0) break
+    retainedTail.push(entry)
     retainedBytes = nextBytes
   }
-  retained.reverse()
-  return retained
+  retainedTail.reverse()
+  return [...entries.slice(0, head), ...retainedTail]
 }
 
 function applyPendingEvents(state: ProjectBuildState): ProjectBuildState {
@@ -372,11 +500,11 @@ export function isBuildEngine(value: unknown): value is BuildEngine {
   )
 }
 
-/** Narrows a nullable string to a supported bibliography tool. */
-export function isBibliographyTool(
+/** Narrows a nullable string to a supported bibliography mode. */
+export function isBibliographyMode(
   value: string | null
-): value is BibliographyTool {
-  return ["automatic", "biber", "bibtex", "none"].includes(value ?? "")
+): value is BibliographyMode {
+  return ["automatic", "always", "never"].includes(value ?? "")
 }
 
 /** Renders a diagnostic as `file:line: SEVERITY: message` for copy-out. */

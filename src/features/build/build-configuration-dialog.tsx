@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { ProjectBuildConfiguration } from "@/domain/build"
-import { formatBuildInvocation, isBibliographyTool } from "@/domain/build"
+import { formatBuildInvocation, isBibliographyMode } from "@/domain/build"
 import { projectErrorFromUnknown } from "@/services/project-service"
 import { runDetached } from "@/lib/promises"
 
@@ -32,11 +32,14 @@ export function BuildConfigurationDialog({
   onOpenChange,
   onSave,
   open,
+  rootCandidates,
 }: {
   configuration: ProjectBuildConfiguration
   onOpenChange: (open: boolean) => void
   onSave: (configuration: ProjectBuildConfiguration) => Promise<void>
   open: boolean
+  /** Every `.tex` file in the project, offered instead of a free-text path. */
+  rootCandidates: ReadonlyArray<string>
 }): ReactElement {
   const [draft, setDraft] = useState(configuration)
   const [environmentText, setEnvironmentText] = useState(() =>
@@ -110,17 +113,29 @@ export function BuildConfigurationDialog({
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Root file">
-            <Input
-              maxLength={1_024}
-              onChange={(event) =>
+            <Select
+              onValueChange={(value) =>
                 setDraft((current) => ({
                   ...current,
-                  rootFile: emptyToNull(event.target.value),
+                  rootFile: value === AUTOMATIC_ROOT ? null : value,
                 }))
               }
-              placeholder="main.tex"
-              value={draft.rootFile ?? ""}
-            />
+              value={draft.rootFile ?? AUTOMATIC_ROOT}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={AUTOMATIC_ROOT}>
+                  Detected automatically
+                </SelectItem>
+                {rootCandidates.map((path) => (
+                  <SelectItem key={path} value={path}>
+                    {path}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </Field>
           <Field label="Output directory">
             <Input
@@ -135,28 +150,31 @@ export function BuildConfigurationDialog({
               value={draft.outputDirectory ?? ""}
             />
           </Field>
-          <Field label="Bibliography tool">
+          <Field label="Bibliography">
             <Select
               onValueChange={(value) => {
-                if (isBibliographyTool(value)) {
-                  setDraft((current) => ({
-                    ...current,
-                    bibliographyTool: value,
-                  }))
+                if (isBibliographyMode(value)) {
+                  setDraft((current) => ({ ...current, bibliography: value }))
                 }
               }}
-              value={draft.bibliographyTool}
+              value={draft.bibliography}
             >
-              <SelectTrigger>
+              <SelectTrigger aria-describedby="build-bibliography-help">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="automatic">Automatic</SelectItem>
-                <SelectItem value="biber">Biber</SelectItem>
-                <SelectItem value="bibtex">BibTeX</SelectItem>
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="always">Always run</SelectItem>
+                <SelectItem value="never">Never run</SelectItem>
               </SelectContent>
             </Select>
+            <p
+              id="build-bibliography-help"
+              className="text-xs font-normal text-muted-foreground"
+            >
+              latexmk picks biber or BibTeX from the document. The build reports
+              which one ran.
+            </p>
           </Field>
           <Field label="Generated directories">
             <Input
@@ -190,6 +208,39 @@ export function BuildConfigurationDialog({
             TEXMFHOME, and TEXMFOUTPUT are accepted.
           </p>
         </Field>
+
+        <div className="rounded-lg border p-3">
+          <h3 className="font-medium">Shell escape</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Lets LaTeX run other programs while it builds. Packages such as
+            minted need it; most documents do not. Saving this on opens a native
+            confirmation.
+          </p>
+          <label className="mt-3 flex items-center gap-2 text-sm">
+            <input
+              checked={draft.shellEscape}
+              className="size-4 accent-primary"
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  shellEscape: event.target.checked,
+                }))
+              }
+              type="checkbox"
+            />
+            Allow this project&apos;s source to run other programs
+          </label>
+          {draft.shellEscape ? (
+            <Alert className="mt-3" variant="destructive">
+              <ShieldAlert />
+              <AlertTitle>Shell escape expands project trust</AlertTitle>
+              <AlertDescription>
+                Any program the source asks for runs with your user permissions.
+                Enable it only for projects you trust.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
 
         <div className="rounded-lg border p-3">
           <h3 className="font-medium">Custom command</h3>
@@ -266,6 +317,12 @@ export function BuildConfigurationDialog({
     </Dialog>
   )
 }
+
+/**
+ * The sentinel for "no configured root", so the picker can offer detection as
+ * an option. A project cannot contain a file with this name: it is not a path.
+ */
+const AUTOMATIC_ROOT = "\u0000automatic"
 
 function Field({
   label,

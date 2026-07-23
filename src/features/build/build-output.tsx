@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, FileCheck2 } from "lucide-react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import {
@@ -86,6 +86,14 @@ export function BuildOutput({
   return (
     <div className="flex size-full min-h-0 flex-col bg-source">
       <BuildCommandLine state={state} />
+      {run !== null && run.progress.summary !== null ? (
+        // The engine's own closing line: what it wrote, how many pages, how
+        // large. It is the one line of a LaTeX log most readers want.
+        <p className="flex min-w-0 shrink-0 items-center gap-1.5 border-b px-3 py-1 text-xs">
+          <FileCheck2 aria-hidden="true" className="size-3.5 shrink-0" />
+          <span className="truncate">{run.progress.summary}</span>
+        </p>
+      ) : null}
       {run === null ? (
         <PanelPlaceholder>
           No output yet. Build the project to capture the compiler log here.

@@ -37,6 +37,8 @@ const saveRequiredError = {
 
 export type ProjectBuildController = Readonly<{
   state: ProjectBuildState
+  /** A build the user asked for while another was still running. */
+  queued: boolean
   profiles: BuildProfilesState
   engine: BuildEngine
   setEngine: (engine: BuildEngine) => void
@@ -73,16 +75,21 @@ export function useProjectBuild({
   })
   const [configurationState, setConfigurationState] =
     useState<ProjectBuildConfigurationState>({ status: "loading" })
+  const [queued, setQueued] = useState(false)
   const activeProject = useRef(projectPath)
   const operationRevision = useRef(0)
   const buildInFlight = useRef(false)
   const configurationSaveRevision = useRef(0)
   const configurationSaveQueue = useRef(createSerialTaskQueue())
+  // Read through a ref so the queue-drain effect does not depend on `build`,
+  // which changes identity whenever the configuration or root file does.
+  const buildRef = useRef<() => Promise<void>>(() => Promise.resolve())
   activeProject.current = projectPath
 
   useEffect(() => {
     operationRevision.current += 1
     buildInFlight.current = false
+    setQueued(false)
     return () => {
       operationRevision.current += 1
       configurationSaveRevision.current += 1
@@ -184,6 +191,19 @@ export function useProjectBuild({
   }, [projectPath])
 
   const buildRunning = state.runs.some((run) => run.status === "running")
+  // Read through a ref so `build` keeps a stable identity across log events;
+  // the watch controller depends on it and would re-register otherwise.
+  const buildRunningRef = useRef(buildRunning)
+  buildRunningRef.current = buildRunning
+  // Runs the build queued while another was in flight, once the panel has
+  // observed the running one finish. The dependency on `buildRunning` is what
+  // makes this fire exactly once per transition.
+  useEffect(() => {
+    if (!queued || buildRunning) return
+    setQueued(false)
+    void buildRef.current()
+  }, [buildRunning, queued])
+
   useEffect(() => {
     if (!buildRunning) return
     let active = true
@@ -260,6 +280,13 @@ export function useProjectBuild({
     if (configurationState.status !== "ready") return
     const effectiveRoot = configurationState.configuration.rootFile ?? rootFile
     if (effectiveRoot === null) return
+    // Pressing Build while a build runs queues the next one. Raising an error
+    // for using the primary button twice is a defect, not a guard rail: the
+    // request is unambiguous, and the running build will finish in a moment.
+    if (buildRunningRef.current) {
+      setQueued(true)
+      return
+    }
     buildInFlight.current = true
     const revision = operationRevision.current
     const remainsCurrent = (): boolean =>
@@ -331,8 +358,11 @@ export function useProjectBuild({
     }
   }, [projectPath])
 
+  buildRef.current = build
+
   return {
     state,
+    queued,
     profiles,
     engine,
     setEngine,

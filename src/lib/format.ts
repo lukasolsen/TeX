@@ -12,11 +12,23 @@ export function formatDuration(seconds: number): string {
   return `${minutes}:${remainder.toString().padStart(2, "0")}`
 }
 
-/** Renders a UNIX timestamp (seconds) as a localized wall-clock time of day. */
-export function formatClockTime(timestamp: number): string {
-  return new Date(timestamp * 1_000).toLocaleTimeString([], {
+/** Renders a UNIX timestamp in milliseconds as a localized wall-clock time. */
+export function formatClockTime(millis: number): string {
+  return new Date(millis).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   })
+}
+
+/**
+ * Renders how long a build took. Sub-second precision below a minute, because
+ * that is the range most builds land in and "0:02" hides the difference
+ * between a fast build and a slow one.
+ */
+export function formatElapsed(millis: number): string {
+  if (millis < 1_000) return `${Math.max(millis, 0)} ms`
+  const seconds = millis / 1_000
+  if (seconds < 60) return `${seconds.toFixed(1)} s`
+  return formatDuration(Math.round(seconds))
 }
