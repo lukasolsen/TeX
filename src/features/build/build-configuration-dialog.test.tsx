@@ -8,13 +8,14 @@ import type { ProjectBuildConfiguration } from "@/domain/build"
 import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 
 const configuration: ProjectBuildConfiguration = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   rootFile: "main.tex",
   outputDirectory: null,
-  bibliographyTool: "automatic",
+  bibliography: "automatic",
   generatedDirectories: [],
   environment: [],
   customCommand: null,
+  shellEscape: false,
 }
 
 afterEach(() => cleanup())
@@ -30,6 +31,7 @@ describe("BuildConfigurationDialog", () => {
         onOpenChange={vi.fn<(open: boolean) => void>()}
         onSave={onSave}
         open
+        rootCandidates={["main.tex", "chapters/intro.tex"]}
       />
     )
 

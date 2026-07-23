@@ -5,7 +5,9 @@ import type {
   BuildLogEntry,
   BuildProfile,
   BuildRun,
+  BuildToolReport,
   CleanPreview,
+  PackageCandidate,
   ProjectBuildConfiguration,
   WatchEvent,
   WatchStatus,
@@ -59,10 +61,14 @@ export function parseBuildInvocation(value: unknown): BuildInvocation {
       5,
       parseEnvironment
     ),
-    bibliographyTool: enumValue(
-      input["bibliographyTool"],
-      "bibliography tool",
-      ["automatic", "biber", "bibtex", "none"]
+    bibliography: enumValue(input["bibliography"], "bibliography mode", [
+      "automatic",
+      "always",
+      "never",
+    ]),
+    resolvesReferences: booleanValue(
+      input["resolvesReferences"],
+      "reference resolution"
     ),
     custom: booleanValue(input["custom"], "custom build state"),
   }
@@ -84,6 +90,10 @@ export function parseBuildProfiles(value: unknown): BuildProfile[] {
         "build profile executable",
         128
       ),
+      resolvesReferences: booleanValue(
+        input["resolvesReferences"],
+        "profile reference resolution"
+      ),
       recommended: booleanValue(
         input["recommended"],
         "recommended build profile"
@@ -102,6 +112,8 @@ export function parseBuildRun(value: unknown): BuildRun {
     ),
     invocation: parseBuildInvocation(input["invocation"]),
     status: parseBuildStatus(input["status"]),
+    reason: nullableString(input["reason"], "build reason", 1_024),
+    pdfFresh: booleanValue(input["pdfFresh"], "build PDF freshness"),
     startedAt: integer(
       input["startedAt"],
       "build start time",
@@ -132,6 +144,7 @@ export function parseBuildRun(value: unknown): BuildRun {
       500,
       parseBuildDiagnostic
     ),
+    progress: parseBuildProgress(input["progress"]),
   }
 }
 
@@ -152,11 +165,22 @@ export function parseBuildEvent(value: unknown): BuildEvent {
     return {
       kind,
       ...common,
-      entry: parseBuildLogEntry(input["entry"]),
-      diagnostic:
-        input["diagnostic"] === null
+      entries: arrayValue(
+        input["entries"],
+        "build log entries",
+        4_096,
+        parseBuildLogEntry
+      ),
+      diagnostics: arrayValue(
+        input["diagnostics"],
+        "build diagnostics",
+        500,
+        parseBuildDiagnostic
+      ),
+      progress:
+        input["progress"] === null || input["progress"] === undefined
           ? null
-          : parseBuildDiagnostic(input["diagnostic"]),
+          : parseBuildProgress(input["progress"]),
     }
   }
   return {
@@ -164,9 +188,13 @@ export function parseBuildEvent(value: unknown): BuildEvent {
     ...common,
     status: enumValue(input["status"], "finished build status", [
       "succeeded",
+      "succeededWithProblems",
       "failed",
       "cancelled",
+      "timedOut",
     ]),
+    reason: stringValue(input["reason"], "build reason", 1_024),
+    pdfFresh: booleanValue(input["pdfFresh"], "build PDF freshness"),
     finishedAt: integer(
       input["finishedAt"],
       "build finish time",
@@ -178,6 +206,12 @@ export function parseBuildEvent(value: unknown): BuildEvent {
       "build exit code",
       -2_147_483_648,
       2_147_483_647
+    ),
+    diagnostics: arrayValue(
+      input["diagnostics"],
+      "build diagnostics",
+      500,
+      parseBuildDiagnostic
     ),
   }
 }
@@ -239,13 +273,15 @@ export function parseBuildConfiguration(
   value: unknown
 ): ProjectBuildConfiguration {
   const input = record(value, "build configuration")
+  // The backend migrates an accepted older configuration before it answers, so
+  // the frontend only ever sees the current version.
   const schemaVersion = integer(
     input["schemaVersion"],
     "build configuration version",
-    1,
-    1
+    2,
+    2
   )
-  if (schemaVersion !== 1)
+  if (schemaVersion !== 2)
     throw new IpcContractError("build configuration version")
   return {
     schemaVersion,
@@ -255,11 +291,11 @@ export function parseBuildConfiguration(
       "output directory",
       PATH_LIMIT
     ),
-    bibliographyTool: enumValue(
-      input["bibliographyTool"],
-      "bibliography tool",
-      ["automatic", "biber", "bibtex", "none"]
-    ),
+    bibliography: enumValue(input["bibliography"], "bibliography mode", [
+      "automatic",
+      "always",
+      "never",
+    ]),
     generatedDirectories: arrayValue(
       input["generatedDirectories"],
       "generated directories",
@@ -277,6 +313,45 @@ export function parseBuildConfiguration(
       input["customCommand"] === null
         ? null
         : parseCustomCommand(input["customCommand"]),
+    shellEscape: booleanValue(input["shellEscape"], "shell escape"),
+  }
+}
+
+export function parseBuildToolReport(value: unknown): BuildToolReport {
+  const input = record(value, "build tool report")
+  return {
+    tools: arrayValue(input["tools"], "build tools", 64, (tool) => {
+      const entry = record(tool, "build tool")
+      return {
+        name: nonEmptyString(entry["name"], "tool name", 128),
+        purpose: nonEmptyString(entry["purpose"], "tool purpose", 1_024),
+        absence: nonEmptyString(entry["absence"], "tool absence", 1_024),
+        available: booleanValue(entry["available"], "tool availability"),
+        path: nullableString(entry["path"], "tool path", PATH_LIMIT),
+      }
+    }),
+    distribution:
+      input["distribution"] === null || input["distribution"] === undefined
+        ? null
+        : parseDistribution(input["distribution"]),
+  }
+}
+
+function parseDistribution(value: unknown) {
+  const input = record(value, "distribution")
+  return {
+    label: nonEmptyString(input["label"], "distribution label", 256),
+    directory: stringValue(input["directory"], "distribution path", PATH_LIMIT),
+  }
+}
+
+export function parsePackageCandidate(value: unknown): PackageCandidate | null {
+  if (value === null || value === undefined) return null
+  const input = record(value, "package candidate")
+  return {
+    file: nonEmptyString(input["file"], "package file", 256),
+    package: nonEmptyString(input["package"], "package name", 256),
+    command: nonEmptyString(input["command"], "package command", 1_024),
   }
 }
 
@@ -309,12 +384,24 @@ function parseBuildEngine(value: unknown) {
   ])
 }
 
+function parseBuildProgress(value: unknown) {
+  const input = record(value, "build progress")
+  return {
+    pass: integer(input["pass"], "build pass", 0, Number.MAX_SAFE_INTEGER),
+    tool: nullableString(input["tool"], "build pass tool", 128),
+    pages: integer(input["pages"], "build pages", 0, Number.MAX_SAFE_INTEGER),
+    summary: nullableString(input["summary"], "build summary", 1_024),
+  }
+}
+
 function parseBuildStatus(value: unknown) {
   return enumValue(value, "build status", [
     "running",
     "succeeded",
+    "succeededWithProblems",
     "failed",
     "cancelled",
+    "timedOut",
   ])
 }
 
@@ -369,11 +456,28 @@ function parseBuildLogEntry(value: unknown): BuildLogEntry {
 function parseBuildDiagnostic(value: unknown): BuildDiagnostic {
   const input = record(value, "build diagnostic")
   return {
+    code: enumValue(input["code"], "diagnostic code", [
+      "undefinedControlSequence",
+      "missingPackage",
+      "missingFile",
+      "undefinedReference",
+      "undefinedCitation",
+      "missingDollar",
+      "runawayArgument",
+      "tooManyBraces",
+      "overfullBox",
+      "underfullBox",
+      "rerunLimit",
+      "bibliographyFailed",
+      "compilerMessage",
+    ]),
     severity: enumValue(input["severity"], "diagnostic severity", [
       "error",
       "warning",
     ]),
     message: stringValue(input["message"], "diagnostic message", 4_128),
+    raw: stringValue(input["raw"], "diagnostic source line", 4_128),
+    context: nullableString(input["context"], "diagnostic context", 4_128),
     file: parseNullableRelativePath(input["file"], "diagnostic file"),
     line: nullableInteger(
       input["line"],
@@ -385,7 +489,13 @@ function parseBuildDiagnostic(value: unknown): BuildDiagnostic {
       input["mappingUncertain"],
       "diagnostic mapping"
     ),
-    logSequence: integer(
+    occurrences: integer(
+      input["occurrences"],
+      "diagnostic occurrences",
+      1,
+      Number.MAX_SAFE_INTEGER
+    ),
+    logSequence: nullableInteger(
       input["logSequence"],
       "diagnostic sequence",
       1,

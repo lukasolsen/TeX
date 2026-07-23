@@ -68,7 +68,7 @@ export function BuildProfileSelect({
 function BuildProfileItem({ profile }: { profile: BuildProfile }) {
   return (
     <SelectItem
-      aria-label={`${profile.label}. ${profile.description}${profile.available ? "" : " Unavailable because the executable was not found."}`}
+      aria-label={`${profile.label}. ${profile.description}${profile.available ? "" : ` Unavailable because ${profile.executable} was not found.`}`}
       disabled={!profile.available}
       title={profile.description}
       value={profile.engine}
@@ -76,6 +76,10 @@ function BuildProfileItem({ profile }: { profile: BuildProfile }) {
       {profile.label}
       {!profile.available ? (
         <Badge variant="destructive">Not installed</Badge>
+      ) : !profile.resolvesReferences ? (
+        // Stated on the option itself, because choosing this profile silently
+        // leaves every `\ref`, `\cite`, and table-of-contents entry unresolved.
+        <Badge variant="secondary">No references</Badge>
       ) : profile.recommended ? (
         <Badge variant="secondary">Recommended</Badge>
       ) : null}

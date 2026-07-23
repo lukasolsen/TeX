@@ -15,8 +15,11 @@ describe("build IPC contracts", () => {
         projectPath: "/project",
         runId: "42-1",
         status: "succeeded",
+        reason: "main.pdf is up to date.",
+        pdfFresh: true,
         finishedAt: 42,
         exitCode: 0,
+        diagnostics: [],
       })
     ).toMatchObject({ kind: "finished", status: "succeeded" })
   })

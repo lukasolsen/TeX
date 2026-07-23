@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest"
 import type { ProjectSummary } from "@/domain/project"
 import { canonicalProjectPath, projectRelativePath } from "@/domain/identifiers"
 import {
+  builtPdfPath,
   formatLastOpened,
+  latexSourcePaths,
   preferredPdf,
   preferredRoot,
   preferredSourceFile,
   projectTreeNodes,
+  reconciledPdf,
   texDependencies,
   treeContainsPath,
 } from "@/features/projects/project-model"
@@ -94,6 +97,65 @@ describe("project model", () => {
     expect(preferredPdf(project, projectRelativePath("main.pdf"), null)).toBe(
       "main.pdf"
     )
+  })
+
+  /// A project that builds into an output directory writes its PDF there, and
+  /// the viewer has to look where the build wrote rather than beside the root.
+  it("locates the built PDF inside a configured output directory", () => {
+    expect(builtPdfPath(projectRelativePath("main.tex"), null)).toBe("main.pdf")
+    expect(builtPdfPath(projectRelativePath("main.tex"), "build")).toBe(
+      "build/main.pdf"
+    )
+    expect(builtPdfPath(projectRelativePath("main.tex"), "./out/")).toBe(
+      "out/main.pdf"
+    )
+    expect(
+      builtPdfPath(projectRelativePath("sources/paper.tex"), "build")
+    ).toBe("build/paper.pdf")
+    expect(builtPdfPath(projectRelativePath("sources/paper.tex"), null)).toBe(
+      "sources/paper.pdf"
+    )
+  })
+
+  /// The root-file setting offers files that exist rather than accepting a
+  /// typed path that can only fail at save time.
+  it("lists every LaTeX source in tree order", () => {
+    expect(latexSourcePaths(project.tree)).toEqual([
+      "chapters/intro.tex",
+      "main.tex",
+    ])
+  })
+
+  it("adopts the configured output PDF only when nothing is selected", () => {
+    const withOutput: ProjectSummary = {
+      ...project,
+      tree: {
+        ...project.tree,
+        children: [
+          ...project.tree.children,
+          {
+            name: "build",
+            kind: "directory",
+            children: [{ name: "main.pdf", kind: "file", children: [] }],
+          },
+        ],
+      },
+    }
+
+    expect(
+      reconciledPdf(withOutput, null, projectRelativePath("main.tex"), "build")
+    ).toBe("build/main.pdf")
+    expect(
+      reconciledPdf(
+        withOutput,
+        projectRelativePath("main.pdf"),
+        projectRelativePath("main.tex"),
+        "build"
+      )
+    ).toBeNull()
+    expect(
+      reconciledPdf(project, null, projectRelativePath("main.tex"), "missing")
+    ).toBeNull()
   })
 
   it("finds direct LaTeX dependencies and ignores comments", () => {

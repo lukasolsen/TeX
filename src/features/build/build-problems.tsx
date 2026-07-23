@@ -1,13 +1,175 @@
-import { AlertCircle, Trash2, TriangleAlert } from "lucide-react"
+import { useState } from "react"
+import { AlertCircle, PackagePlus, Trash2, TriangleAlert } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import type { BuildRun } from "@/domain/build"
+import type { BuildDiagnostic, BuildRun } from "@/domain/build"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectError } from "@/domain/project"
 import { replaysCachedFailure } from "@/features/build/build-panel-model"
+import {
+  missingPackageFile,
+  type PackageRecoveryController,
+} from "@/features/build/use-package-recovery"
+import { runDetached } from "@/lib/promises"
 import { PanelPlaceholder } from "@/features/build/panel-placeholder"
+
+/**
+ * One problem: the sentence naming it, where it is, and — on request — the
+ * compiler's own line and the `l.NN` excerpt beneath it. The translation never
+ * stands between a reader and what the engine actually said.
+ */
+function BuildProblem({
+  active,
+  diagnostic,
+  onNavigate,
+  onSelect,
+  recovery,
+}: {
+  active: boolean
+  diagnostic: BuildDiagnostic
+  onNavigate: (path: ProjectRelativePath, line: number) => void
+  onSelect: () => void
+  recovery: PackageRecoveryController
+}) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false)
+  const { file, line, mappingUncertain } = diagnostic
+  const locatable = file !== null && line !== null && !mappingUncertain
+  // A translated sentence differs from the compiler's line; an untranslated one
+  // repeats it, and showing the same text twice is noise, not evidence.
+  const translated = diagnostic.message !== diagnostic.raw
+  const evidence = translated || diagnostic.context !== null
+
+  return (
+    <li className="flex flex-col">
+      <Button
+        aria-current={active ? "true" : undefined}
+        className="h-auto w-full justify-start gap-2 rounded-md px-2 py-1 text-left font-normal"
+        onClick={() => {
+          onSelect()
+          if (locatable) onNavigate(file, line)
+        }}
+        variant={active ? "secondary" : "ghost"}
+      >
+        {diagnostic.severity === "error" ? (
+          <AlertCircle aria-hidden="true" className="text-destructive" />
+        ) : (
+          <TriangleAlert aria-hidden="true" className="text-muted-foreground" />
+        )}
+        <span className="sr-only">
+          {diagnostic.severity === "error" ? "Error: " : "Warning: "}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{diagnostic.message}</span>
+        {diagnostic.occurrences > 1 ? (
+          <Badge className="shrink-0" variant="secondary">
+            {diagnostic.occurrences} passes
+          </Badge>
+        ) : null}
+        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+          {file === null
+            ? "no location"
+            : `${file}${line === null ? "" : `:${line}`}${mappingUncertain ? " · uncertain" : ""}`}
+        </span>
+      </Button>
+      {missingPackageFile(diagnostic) === null ? null : (
+        <PackageRecovery diagnostic={diagnostic} recovery={recovery} />
+      )}
+      {evidence ? (
+        <div className="pl-8">
+          <Button
+            aria-expanded={evidenceOpen}
+            className="h-6 px-2 text-xs font-normal text-muted-foreground"
+            onClick={() => setEvidenceOpen((open) => !open)}
+            size="sm"
+            variant="ghost"
+          >
+            {evidenceOpen ? "Hide compiler output" : "Show compiler output"}
+          </Button>
+          {evidenceOpen ? (
+            <pre className="mt-1 mb-1 overflow-x-auto rounded-sm bg-muted px-2 py-1 font-mono text-xs whitespace-pre-wrap">
+              {diagnostic.context === null
+                ? diagnostic.raw
+                : `${diagnostic.raw}\n${diagnostic.context}`}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+/**
+ * The one action a missing package needs. `! LaTeX Error: File 'x.sty' not
+ * found` is the most common LaTeX failure there is, and it was a dead end with
+ * a red icon; every step from here names exactly what it will do.
+ */
+function PackageRecovery({
+  diagnostic,
+  recovery,
+}: {
+  diagnostic: BuildDiagnostic
+  recovery: PackageRecoveryController
+}) {
+  const { state } = recovery
+  const file = missingPackageFile(diagnostic)
+  // The controller is shared, so only the row whose file is being handled
+  // shows its progress; the rest keep offering the lookup.
+  const owned =
+    (state.status === "ready" ||
+      state.status === "installing" ||
+      state.status === "installed") &&
+    state.candidate.file === file
+  const unresolved = state.status === "unresolved" && state.file === file
+
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 pl-8">
+      {owned && state.status !== "installed" ? (
+        <>
+          <span className="font-mono text-xs text-muted-foreground">
+            {state.candidate.command}
+          </span>
+          <Button
+            className="h-6 px-2 text-xs"
+            disabled={state.status === "installing"}
+            onClick={() => runDetached(recovery.install())}
+            size="sm"
+            variant="secondary"
+          >
+            <PackagePlus aria-hidden="true" data-icon="inline-start" />
+            {state.status === "installing"
+              ? `Installing ${state.candidate.package}…`
+              : `Install ${state.candidate.package}`}
+          </Button>
+        </>
+      ) : owned ? (
+        <span className="text-xs text-muted-foreground">
+          {state.candidate.package} is installed. Build again to use it.
+        </span>
+      ) : unresolved ? (
+        <span className="text-xs text-muted-foreground">
+          No package in this distribution provides {state.file}.
+        </span>
+      ) : (
+        <Button
+          className="h-6 px-2 text-xs font-normal text-muted-foreground"
+          disabled={state.status === "resolving"}
+          onClick={() => runDetached(recovery.resolve(diagnostic))}
+          size="sm"
+          variant="ghost"
+        >
+          {state.status === "resolving"
+            ? "Looking up the package…"
+            : "Find the package that provides this"}
+        </Button>
+      )}
+      {state.status === "error" ? (
+        <span className="text-xs text-destructive">{state.message}</span>
+      ) : null}
+    </div>
+  )
+}
 
 function BuildIssue({ error }: { error: ProjectError }) {
   return (
@@ -25,6 +187,7 @@ export function BuildProblems({
   onClean,
   onNavigate,
   onSelect,
+  recovery,
   run,
 }: {
   activeIndex: number | null
@@ -32,6 +195,7 @@ export function BuildProblems({
   onClean: () => void
   onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelect: (index: number) => void
+  recovery: PackageRecoveryController
   run: BuildRun | null
 }) {
   const unmappedFailure =
@@ -81,51 +245,16 @@ export function BuildProblems({
           </Alert>
         ) : null}
         <ul className="flex flex-col" aria-label="Build diagnostics">
-          {(run?.diagnostics ?? []).map((diagnostic, index) => {
-            const locationAvailable =
-              diagnostic.file !== null &&
-              diagnostic.line !== null &&
-              !diagnostic.mappingUncertain
-            return (
-              <li key={`${diagnostic.logSequence}-${diagnostic.message}`}>
-                <Button
-                  aria-current={activeIndex === index ? "true" : undefined}
-                  className="h-auto w-full justify-start gap-2 rounded-md px-2 py-1 text-left font-normal"
-                  onClick={() => {
-                    onSelect(index)
-                    if (
-                      locationAvailable &&
-                      diagnostic.file !== null &&
-                      diagnostic.line !== null
-                    ) {
-                      onNavigate(diagnostic.file, diagnostic.line)
-                    }
-                  }}
-                  variant={activeIndex === index ? "secondary" : "ghost"}
-                >
-                  {diagnostic.severity === "error" ? (
-                    <AlertCircle
-                      aria-hidden="true"
-                      className="text-destructive"
-                    />
-                  ) : (
-                    <TriangleAlert
-                      aria-hidden="true"
-                      className="text-muted-foreground"
-                    />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
-                    {diagnostic.message}
-                  </span>
-                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                    {diagnostic.file === null
-                      ? "no location"
-                      : `${diagnostic.file}${diagnostic.line === null ? "" : `:${diagnostic.line}`}${diagnostic.mappingUncertain ? " · uncertain" : ""}`}
-                  </span>
-                </Button>
-              </li>
-            )
-          })}
+          {(run?.diagnostics ?? []).map((diagnostic, index) => (
+            <BuildProblem
+              active={activeIndex === index}
+              diagnostic={diagnostic}
+              key={`${diagnostic.code}-${diagnostic.file ?? ""}-${diagnostic.line ?? 0}-${diagnostic.message}`}
+              onNavigate={onNavigate}
+              onSelect={() => onSelect(index)}
+              recovery={recovery}
+            />
+          ))}
         </ul>
       </div>
     </ScrollArea>

@@ -1,6 +1,6 @@
 # Engineering instructions
 
-Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md) and [docs/requirements/standards/ui-ux-requirements.md](docs/requirements/standards/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines. Also read [docs/requirements/standards/design-manual.md](docs/requirements/standards/design-manual.md) before writing or restyling any user-facing code; it fixes the visual vocabulary — surfaces, type scale, density, elevation, motion, tabs, menus, and feedback channels — and its rules are checkable, not advisory. The full review authority is [docs/requirements/standards/engineering-standard.md](docs/requirements/standards/engineering-standard.md); repository, privacy, and support policy live in [docs/requirements/policies/](docs/requirements/policies/).
+Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/code-quality.md) and [docs/requirements/standards/ui-ux-requirements.md](docs/requirements/standards/ui-ux-requirements.md) before modifying source code. They are mandatory quality and product-experience baselines. Also read [docs/requirements/standards/design-manual.md](docs/requirements/standards/design-manual.md) before writing or restyling any user-facing code; it fixes the visual vocabulary — surfaces, type scale, density, elevation, motion, tabs, menus, and feedback channels — and its rules are checkable, not advisory. Read [docs/requirements/standards/build-system.md](docs/requirements/standards/build-system.md) before changing anything that runs, judges, or reports a LaTeX build; it fixes the engine model, the outcome model, the diagnostic pipeline, and the wording of every build message, and its rules are checkable in the same way. The full review authority is [docs/requirements/standards/engineering-standard.md](docs/requirements/standards/engineering-standard.md); repository, privacy, and support policy live in [docs/requirements/policies/](docs/requirements/policies/).
 
 ## Product constraints
 
@@ -13,7 +13,7 @@ Read [docs/requirements/standards/code-quality.md](docs/requirements/standards/c
 
 - `src/`: React/TypeScript presentation layer. It does not directly access the filesystem or execute build commands.
 - `src-tauri/`: Rust application boundary. It owns filesystem access, process execution, persistence, and validation.
-- `docs/requirements/standards/`: required implementation, review, product-experience, and visual-design rules.
+- `docs/requirements/standards/`: required implementation, review, product-experience, visual-design, and build-system rules.
 - `docs/requirements/policies/`: repository, privacy, and support policy.
 
 ## Required verification

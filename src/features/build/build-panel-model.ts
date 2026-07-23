@@ -1,6 +1,6 @@
 import type { BuildRun } from "@/domain/build"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
-import { formatClockTime } from "@/lib/format"
+import { formatClockTime, formatElapsed } from "@/lib/format"
 
 /**
  * latexmk keeps a database of the previous run. When nothing has changed since
@@ -22,11 +22,24 @@ export function statusLabel(status: BuildRun["status"]): string {
       return "Building"
     case "succeeded":
       return "Succeeded"
+    case "succeededWithProblems":
+      return "Built with problems"
     case "failed":
       return "Failed"
     case "cancelled":
-      return "Cancelled"
+      return "Stopped"
+    case "timedOut":
+      return "Timed out"
   }
+}
+
+/**
+ * Whether a status is a failure the panel should mark. A run that produced a
+ * PDF and reported problems is not a failure, and colouring it as one teaches
+ * people to distrust the signal.
+ */
+export function isFailedStatus(status: BuildRun["status"]): boolean {
+  return status === "failed" || status === "timedOut"
 }
 
 export function watchLabel(state: ProjectWatchState): string | null {
@@ -56,6 +69,35 @@ export function runLabel(run: BuildRun, index: number): string {
   return index === 0
     ? `Latest · ${statusLabel(run.status)}`
     : `${time} · ${statusLabel(run.status)}`
+}
+
+/**
+ * What a running build is doing, in the order a reader wants it: which pass,
+ * running what, and how far it has got. Returns null before the engine has
+ * said anything, so the panel shows the spinner alone only briefly.
+ */
+export function progressLabel(run: BuildRun): string | null {
+  if (run.status !== "running") return null
+  const parts: string[] = []
+  if (run.progress.pass > 0) {
+    parts.push(
+      run.progress.tool === null
+        ? `pass ${run.progress.pass}`
+        : `pass ${run.progress.pass} · ${run.progress.tool}`
+    )
+  }
+  if (run.progress.pages > 0) {
+    parts.push(
+      `${run.progress.pages} ${run.progress.pages === 1 ? "page" : "pages"}`
+    )
+  }
+  return parts.length === 0 ? null : parts.join(" · ")
+}
+
+/** How long a finished run took, or how long the running one has been going. */
+export function elapsedLabel(run: BuildRun, now: number): string {
+  const end = run.finishedAt ?? now
+  return formatElapsed(Math.max(end - run.startedAt, 0))
 }
 
 export function diagnosticSummary(run: BuildRun): string {

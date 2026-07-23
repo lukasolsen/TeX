@@ -28,12 +28,17 @@ export function LatexToolBanner({
     progress === null
       ? null
       : (progress.steps[progress.activeStep ?? 0] ?? null)
+  const missing = profile?.executable ?? "the build tool"
+  // An alternative that cannot resolve references is still worth offering, but
+  // presenting it as an equivalent would promise a document it cannot produce.
   const detail =
     running && progress !== null
       ? `${installStepSummary(progress)} · ${activeStep?.detail ?? activeStep?.title ?? "Working"}`
       : alternative === null
-        ? `TeX could not find ${profile?.executable ?? "the build tool"} on this computer. Install it to build this project.`
-        : `TeX could not find ${profile?.executable ?? "the build tool"}, but ${alternative.label} is installed and can build this project.`
+        ? `TeX could not find ${missing} on this computer. Install it to build this project.`
+        : alternative.resolvesReferences
+          ? `TeX could not find ${missing}, but ${alternative.label} is installed and can build this project.`
+          : `TeX could not find ${missing}. ${alternative.label} is installed, but it leaves cross-references, the table of contents, and citations unresolved.`
 
   return (
     <div className="flex min-w-0 shrink-0 items-center gap-3 border-b bg-card px-3 py-2">

@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest"
 
 import {
   diagnosticSummary,
+  elapsedLabel,
+  isFailedStatus,
+  progressLabel,
   replaysCachedFailure,
   runLabel,
   statusLabel,
   watchLabel,
 } from "@/features/build/build-panel-model"
-import type { BuildRun } from "@/domain/build"
+import { initialBuildProgress, type BuildRun } from "@/domain/build"
 import {
   buildId,
   canonicalProjectPath,
@@ -26,15 +29,19 @@ const baseRun: BuildRun = {
     rootFile: projectRelativePath("main.tex"),
     engine: "latexmkPdf",
     environment: [],
-    bibliographyTool: "automatic",
+    bibliography: "automatic",
+    resolvesReferences: true,
     custom: false,
   },
   status: "succeeded",
+  reason: null,
+  pdfFresh: false,
   startedAt: 1,
   finishedAt: 2,
   exitCode: 0,
   entries: [],
   diagnostics: [],
+  progress: initialBuildProgress,
 }
 
 describe("build panel model", () => {
@@ -42,7 +49,14 @@ describe("build panel model", () => {
     expect(statusLabel("running")).toBe("Building")
     expect(statusLabel("succeeded")).toBe("Succeeded")
     expect(statusLabel("failed")).toBe("Failed")
-    expect(statusLabel("cancelled")).toBe("Cancelled")
+    expect(statusLabel("cancelled")).toBe("Stopped")
+    // A run that produced a PDF and reported problems is not a failure, and
+    // a timeout is not an unexplained one.
+    expect(statusLabel("succeededWithProblems")).toBe("Built with problems")
+    expect(statusLabel("timedOut")).toBe("Timed out")
+    expect(isFailedStatus("succeededWithProblems")).toBe(false)
+    expect(isFailedStatus("timedOut")).toBe(true)
+    expect(isFailedStatus("cancelled")).toBe(false)
   })
 
   it("summarizes diagnostics with singular and plural counts", () => {
@@ -54,16 +68,24 @@ describe("build panel model", () => {
         ...baseRun,
         diagnostics: [
           {
+            code: "compilerMessage",
             severity: "error",
             message: "boom",
+            raw: "boom",
+            context: null,
+            occurrences: 1,
             file: null,
             line: null,
             mappingUncertain: false,
             logSequence: 1,
           },
           {
+            code: "compilerMessage",
             severity: "warning",
             message: "careful",
+            raw: "careful",
+            context: null,
+            occurrences: 1,
             file: null,
             line: null,
             mappingUncertain: false,
@@ -111,5 +133,41 @@ describe("build panel model", () => {
         ],
       })
     ).toBe(true)
+  })
+})
+
+describe("progress and elapsed time", () => {
+  /// An indefinite spinner is not evidence of work, and the engine already
+  /// says which pass it is on and how many pages it has shipped.
+  it("reports the pass and page count of a running build", () => {
+    const running: BuildRun = {
+      ...baseRun,
+      status: "running",
+      finishedAt: null,
+      progress: { pass: 2, tool: "pdflatex", pages: 12, summary: null },
+    }
+
+    expect(progressLabel(running)).toBe("pass 2 · pdflatex · 12 pages")
+  })
+
+  it("says nothing before the engine has reported anything", () => {
+    expect(
+      progressLabel({ ...baseRun, status: "running", finishedAt: null })
+    ).toBeNull()
+  })
+
+  /// A finished run does not advertise progress; it advertises its outcome.
+  it("reports no progress for a finished run", () => {
+    expect(progressLabel({ ...baseRun, status: "succeeded" })).toBeNull()
+  })
+
+  /// Whole seconds cannot tell a fast build from a slow one. Milliseconds can.
+  it("renders sub-second build durations", () => {
+    const run: BuildRun = { ...baseRun, startedAt: 1_000, finishedAt: 3_400 }
+
+    expect(elapsedLabel(run, 9_999)).toBe("2.4 s")
+    expect(
+      elapsedLabel({ ...run, finishedAt: null, status: "running" }, 1_450)
+    ).toBe("450 ms")
   })
 })

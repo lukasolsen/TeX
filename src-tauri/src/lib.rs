@@ -2,8 +2,10 @@
 
 mod asset_read;
 mod bounded_io;
+mod build_diagnostics;
 mod build_operations;
 mod build_system;
+mod build_tools;
 mod latex_analysis;
 mod latex_completion;
 #[cfg(test)]
@@ -90,6 +92,9 @@ pub fn run() {
             build_system::start_build,
             build_system::stop_build,
             build_system::get_build_history,
+            build_tools::get_build_tools,
+            build_tools::resolve_missing_package,
+            build_tools::install_latex_package,
             latex_install::get_latex_installation_support,
             latex_install::get_latex_installation_progress,
             latex_install::start_latex_installation,

@@ -12,6 +12,8 @@ import type {
   BuildProfile,
   BuildRequest,
   BuildRun,
+  BuildToolReport,
+  PackageCandidate,
   WatchEvent,
   WatchStatus,
   ProjectBuildConfiguration,
@@ -24,6 +26,8 @@ import {
   parseBuildInvocation,
   parseBuildProfiles,
   parseBuildRun,
+  parseBuildToolReport,
+  parsePackageCandidate,
   parseCleanCount,
   parseCleanPreview,
   parseProjectFilesEvent,
@@ -35,6 +39,27 @@ import { acceptEvent } from "@/services/ipc-contract"
 const BUILD_EVENT = "tex://build-event"
 const WATCH_EVENT = "tex://watch-event"
 const PROJECT_FILES_EVENT = "tex://project-files-event"
+
+export async function getBuildTools(): Promise<BuildToolReport> {
+  return parseBuildToolReport(await invoke<unknown>("get_build_tools"))
+}
+
+/**
+ * Asks the distribution which package provides a missing file. Reaches the
+ * package repository, so it runs only when someone asks about one diagnostic.
+ */
+export async function resolveMissingPackage(
+  file: string
+): Promise<PackageCandidate | null> {
+  return parsePackageCandidate(
+    await invoke<unknown>("resolve_missing_package", { file })
+  )
+}
+
+/** Installs one package after a native dialog names the exact command. */
+export async function installLatexPackage(packageName: string): Promise<void> {
+  await invoke<unknown>("install_latex_package", { package: packageName })
+}
 
 export async function previewBuild(
   request: BuildRequest

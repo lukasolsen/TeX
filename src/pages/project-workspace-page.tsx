@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactElement } from "react"
 
 import {
@@ -32,6 +32,10 @@ import { BuildPanel } from "@/features/build/build-panel"
 import { BottomPanel } from "@/features/workspace/bottom-panel"
 import { ProblemsPanel } from "@/features/workspace/problems-panel"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
+import {
+  latexSourcePaths,
+  reconciledPdf,
+} from "@/features/projects/project-model"
 import { useProjectBuild } from "@/features/build/use-project-build"
 import { useProjectWatch } from "@/features/build/use-project-watch"
 import { useProjectTreeWatch } from "@/features/projects/use-project-tree-watch"
@@ -181,6 +185,37 @@ export function ProjectWorkspacePage({
     }
   }, [buildOpen, bottomPanelTab, onUpdateWorkspaceView, showTerminal])
   const pdfOpen = session.workspace.pdfPaneOpen
+  // The workspace is restored before the build configuration is read, so a
+  // project that builds into an output directory has no PDF selected until the
+  // configured location is known.
+  const buildConfiguration =
+    build.configurationState.status === "ready"
+      ? build.configurationState.configuration
+      : null
+  const outputDirectory = buildConfiguration?.outputDirectory ?? null
+  const selectedPdf = session.workspace.selectedPdf
+  const selectedRoot = session.workspace.selectedRoot
+  useEffect(() => {
+    if (buildConfiguration === null) return
+    const reconciled = reconciledPdf(
+      session.project,
+      selectedPdf,
+      selectedRoot,
+      outputDirectory
+    )
+    if (reconciled !== null) onOpenPdf(reconciled)
+  }, [
+    buildConfiguration,
+    onOpenPdf,
+    outputDirectory,
+    selectedPdf,
+    selectedRoot,
+    session.project,
+  ])
+  const rootCandidates = useMemo(
+    () => latexSourcePaths(session.project.tree),
+    [session.project.tree]
+  )
   const latestBuild = build.state.runs[0] ?? null
   const running = build.state.runs.some((run) => run.status === "running")
   // Diagnostics belong to the buffer they were computed from; a tab switch
@@ -524,8 +559,12 @@ export function ProjectWorkspacePage({
                     }}
                     path={session.workspace.selectedPdf}
                     projectPath={session.project.path}
+                    // A failed run that still wrote a PDF is worth showing:
+                    // the file exists on disk, and making the reader rebuild
+                    // to see work already done helps nobody. The panel says
+                    // the build failed; the PDF is simply current.
                     refreshToken={
-                      latestBuild?.status === "succeeded"
+                      latestBuild?.pdfFresh === true
                         ? `${latestBuild.id}:${latestBuild.finishedAt ?? ""}`
                         : ""
                     }
@@ -621,6 +660,8 @@ export function ProjectWorkspacePage({
                     onTabChange={(buildPanelTab) =>
                       onUpdateWorkspaceView({ buildPanelTab })
                     }
+                    queued={build.queued}
+                    rootCandidates={rootCandidates}
                     watch={watch.state}
                   />
                 }

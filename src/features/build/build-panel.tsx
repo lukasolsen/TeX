@@ -7,6 +7,7 @@ import {
   Settings2,
   FolderOpen,
   Trash2,
+  Wrench,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -42,11 +43,13 @@ import { BuildOutput } from "@/features/build/build-output"
 import { BuildProblems } from "@/features/build/build-problems"
 import { BuildProfileSelect } from "@/features/build/build-profile-select"
 import { BuildStatus } from "@/features/build/build-status"
+import { BuildToolsDialog } from "@/features/build/build-tools-dialog"
 import { LatexToolBanner } from "@/features/build/latex-tool-banner"
 import { BuildConfigurationDialog } from "@/features/build/build-configuration-dialog"
 import { LatexInstallDialog } from "@/features/build/latex-install-dialog"
 import { useInstallCompletionNotice } from "@/features/build/use-install-completion-notice"
 import { useLatexInstall } from "@/features/build/use-latex-install"
+import { usePackageRecovery } from "@/features/build/use-package-recovery"
 
 export function BuildPanel({
   dispatch,
@@ -66,6 +69,8 @@ export function BuildPanel({
   onRevealOutput,
   onTabChange,
   profiles,
+  queued,
+  rootCandidates,
   setEngine,
   state,
   tab,
@@ -90,6 +95,10 @@ export function BuildPanel({
   onRevealOutput: () => void
   onTabChange: (tab: BuildPanelTab) => void
   profiles: BuildProfilesState
+  /** A build requested while another was running; it starts when that ends. */
+  queued: boolean
+  /** Every `.tex` file in the project, for the root-file picker. */
+  rootCandidates: ReadonlyArray<string>
   setEngine: (engine: BuildEngine) => void
   state: ProjectBuildState
   tab: BuildPanelTab
@@ -97,7 +106,12 @@ export function BuildPanel({
 }): ReactElement {
   const [configurationOpen, setConfigurationOpen] = useState(false)
   const [installOpen, setInstallOpen] = useState(false)
+  const [toolsOpen, setToolsOpen] = useState(false)
   const install = useLatexInstall({ onInstalled: onLatexInstalled })
+  // An install changes what the distribution provides, so the tools are
+  // re-detected before the panel offers a rebuild — the reconciliation rule in
+  // `ui-ux-requirements.md`, with `use-latex-install.ts` as the reference.
+  const recovery = usePackageRecovery({ onInstalled: onLatexInstalled })
   useInstallCompletionNotice({
     acknowledge: install.acknowledgeNotice,
     notice: install.notice,
@@ -117,13 +131,19 @@ export function BuildPanel({
       ? selectedProfile
       : null
   // A distribution can install without the recommended engine. Offering the
-  // engines that did arrive beats leaving the user at a dead end.
-  const installedAlternative =
+  // engines that did arrive beats leaving the user at a dead end — but a
+  // profile that resolves references is preferred over one that does not, and
+  // the banner says which kind it found.
+  const available =
     missingProfile === null || profiles.status !== "ready"
-      ? null
-      : (profiles.profiles.find(
+      ? []
+      : profiles.profiles.filter(
           (profile) => profile.engine !== engine && profile.available
-        ) ?? null)
+        )
+  const installedAlternative =
+    available.find((profile) => profile.resolvesReferences) ??
+    available[0] ??
+    null
   const canBuild =
     state.preview.status === "ready" && profileAvailable && !running && !pending
   const issue =
@@ -168,7 +188,13 @@ export function BuildPanel({
               )}
             </TabsTrigger>
           </TabsList>
-          <BuildStatus issue={issue} run={run} state={state} watch={watch} />
+          <BuildStatus
+            issue={issue}
+            queued={queued}
+            run={run}
+            state={state}
+            watch={watch}
+          />
           <div className="ml-auto flex shrink-0 items-center gap-0.5">
             {state.runs.length > 1 ? (
               <Select
@@ -214,6 +240,15 @@ export function BuildPanel({
               variant="ghost"
             >
               <FolderOpen aria-hidden="true" />
+            </Button>
+            <Button
+              aria-label="LaTeX tools"
+              onClick={() => setToolsOpen(true)}
+              size="icon-sm"
+              title="Show which LaTeX tools TeX found"
+              variant="ghost"
+            >
+              <Wrench aria-hidden="true" />
             </Button>
             <Button
               aria-label="Configure project build"
@@ -304,6 +339,7 @@ export function BuildPanel({
             onClean={onClean}
             onNavigate={onNavigate}
             onSelect={onSelectDiagnostic}
+            recovery={recovery}
             run={run}
           />
         </TabsContent>
@@ -321,6 +357,7 @@ export function BuildPanel({
           {watch.message}
         </p>
       ) : null}
+      <BuildToolsDialog onOpenChange={setToolsOpen} open={toolsOpen} />
       {installOpen ? (
         <LatexInstallDialog
           controller={install}
@@ -334,6 +371,7 @@ export function BuildPanel({
           onOpenChange={setConfigurationOpen}
           onSave={onSaveConfiguration}
           open
+          rootCandidates={rootCandidates}
         />
       ) : null}
     </section>
