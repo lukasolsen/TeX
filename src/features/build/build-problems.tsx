@@ -1,20 +1,27 @@
 import { useState } from "react"
-import { AlertCircle, PackagePlus, Trash2, TriangleAlert } from "lucide-react"
+import {
+  AlertCircle,
+  PackagePlus,
+  ScrollText,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import type { BuildDiagnostic, BuildRun } from "@/domain/build"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { ProjectError } from "@/domain/project"
-import { replaysCachedFailure } from "@/features/build/build-panel-model"
+import {
+  hasUnmappedFailure,
+  replaysCachedFailure,
+} from "@/features/build/build-panel-model"
 import {
   missingPackageFile,
   type PackageRecoveryController,
 } from "@/features/build/use-package-recovery"
 import { runDetached } from "@/lib/promises"
-import { PanelPlaceholder } from "@/features/build/panel-placeholder"
 
 /**
  * One problem: the sentence naming it, where it is, and — on request — the
@@ -181,12 +188,19 @@ function BuildIssue({ error }: { error: ProjectError }) {
   )
 }
 
-export function BuildProblems({
+/**
+ * The build half of the Problems surface: what the last run reported, plus the
+ * build-system faults that stop a run from happening at all. It renders inside
+ * the shared panel rather than owning one, so a reader has a single place to
+ * look for everything wrong with the project.
+ */
+export function BuildProblemsSection({
   activeIndex,
   issue,
   onClean,
   onNavigate,
   onSelect,
+  onShowOutput,
   recovery,
   run,
 }: {
@@ -195,11 +209,11 @@ export function BuildProblems({
   onClean: () => void
   onNavigate: (path: ProjectRelativePath, line: number) => void
   onSelect: (index: number) => void
+  onShowOutput: () => void
   recovery: PackageRecoveryController
   run: BuildRun | null
 }) {
-  const unmappedFailure =
-    run?.status === "failed" && run.diagnostics.length === 0
+  const unmappedFailure = hasUnmappedFailure(run)
   const cachedFailure = replaysCachedFailure(run)
   if (
     (run === null || run.diagnostics.length === 0) &&
@@ -207,45 +221,50 @@ export function BuildProblems({
     !unmappedFailure
   ) {
     return (
-      <PanelPlaceholder>
-        No diagnostics. Errors and warnings with a source location appear here.
-      </PanelPlaceholder>
+      <p className="px-3 py-2 text-ui text-muted-foreground">
+        {run === null
+          ? "No build yet. Errors and warnings from the compiler appear here."
+          : "The last build reported nothing."}
+      </p>
     )
   }
   return (
-    <ScrollArea className="h-full">
-      <div className="flex flex-col gap-2 p-2">
-        {issue !== null ? <BuildIssue error={issue} /> : null}
-        {cachedFailure ? (
-          <Alert variant="destructive">
-            <AlertCircle aria-hidden="true" />
-            <AlertTitle>latexmk replayed an earlier failure</AlertTitle>
-            <AlertDescription>
-              <p>
-                Your sources have not changed since a build failed, so latexmk
-                reported the stored result instead of compiling again. The
-                original error is in that earlier run&apos;s log. Remove the
-                generated files to force a full rebuild.
-              </p>
-              <Button className="mt-2" onClick={onClean} size="sm">
-                <Trash2 aria-hidden="true" data-icon="inline-start" />
-                Clean auxiliary files
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {unmappedFailure && !cachedFailure ? (
-          <Alert variant="destructive">
-            <AlertCircle aria-hidden="true" />
-            <AlertTitle>Build failed</AlertTitle>
-            <AlertDescription>
-              The compiler did not report a source location. Open Output for the
-              complete log.
-            </AlertDescription>
-          </Alert>
-        ) : null}
+    <div className="flex flex-col gap-2 p-2">
+      {issue !== null ? <BuildIssue error={issue} /> : null}
+      {cachedFailure ? (
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>latexmk replayed an earlier failure</AlertTitle>
+          <AlertDescription>
+            <p>
+              Your sources have not changed since a build failed, so latexmk
+              reported the stored result instead of compiling again. The
+              original error is in that earlier run&apos;s log. Remove the
+              generated files to force a full rebuild.
+            </p>
+            <Button className="mt-2" onClick={onClean} size="sm">
+              <Trash2 aria-hidden="true" data-icon="inline-start" />
+              Clean auxiliary files
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {unmappedFailure && !cachedFailure ? (
+        <Alert variant="destructive">
+          <AlertCircle aria-hidden="true" />
+          <AlertTitle>Build failed</AlertTitle>
+          <AlertDescription>
+            <p>The compiler did not report a source location.</p>
+            <Button className="mt-2" onClick={onShowOutput} size="sm">
+              <ScrollText aria-hidden="true" data-icon="inline-start" />
+              Show the complete log
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+      {run !== null && run.diagnostics.length > 0 ? (
         <ul className="flex flex-col" aria-label="Build diagnostics">
-          {(run?.diagnostics ?? []).map((diagnostic, index) => (
+          {run.diagnostics.map((diagnostic, index) => (
             <BuildProblem
               active={activeIndex === index}
               diagnostic={diagnostic}
@@ -256,7 +275,7 @@ export function BuildProblems({
             />
           ))}
         </ul>
-      </div>
-    </ScrollArea>
+      ) : null}
+    </div>
   )
 }

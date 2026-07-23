@@ -607,10 +607,6 @@ function parseWorkspaceState(value: unknown): WorkspaceState {
       "outline",
       "references",
     ]),
-    buildPanelTab: enumValue(input["buildPanelTab"], "build panel tab", [
-      "output",
-      "problems",
-    ]),
     bottomPanelTab:
       input["bottomPanelTab"] === "terminal"
         ? "terminal"

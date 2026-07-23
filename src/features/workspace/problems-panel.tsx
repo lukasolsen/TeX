@@ -1,21 +1,8 @@
-import {
-  CircleAlert,
-  CircleCheck,
-  EyeOff,
-  FileCode2,
-  LoaderCircle,
-  TriangleAlert,
-} from "lucide-react"
-import type { ReactElement } from "react"
+import { CircleAlert, TriangleAlert } from "lucide-react"
+import type { ReactElement, ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ProjectRelativePath } from "@/domain/identifiers"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
 import { cn } from "@/lib/utils"
@@ -27,14 +14,15 @@ const SEVERITY_LABEL = {
 } as const
 
 /**
- * The source problems the editor found in the active file: structural mistakes
- * it decided on its own, and cross-reference mistakes the project analysis
- * decided. Compiler diagnostics stay in the Build panel, because they describe
- * a build that happened rather than the text as it stands.
+ * The single place a reader looks for everything wrong with the project: what
+ * the editor found in the file being written, and what the last build reported.
+ * Both groups are always present, so the panel keeps its geometry and a reader
+ * never has to work out which of two surfaces holds the answer.
  */
 export function ProblemsPanel({
   analysed,
   analysisEnabled,
+  buildSection,
   diagnostics,
   onNavigate,
   onOpenSettings,
@@ -47,6 +35,8 @@ export function ProblemsPanel({
   analysed: boolean
   /** False when the user turned problem analysis off in settings. */
   analysisEnabled: boolean
+  /** The build half of the surface, composed by the workspace page. */
+  buildSection: ReactNode
   onOpenSettings: () => void
   diagnostics: readonly LatexDiagnosticEntry[]
   onNavigate: (line: number, column: number) => void
@@ -55,44 +45,109 @@ export function ProblemsPanel({
   selectedIndex: number | null
   onSelect: (index: number) => void
 }): ReactElement {
+  const errors = diagnostics.filter(
+    (diagnostic) => diagnostic.severity === "error"
+  ).length
+  const warnings = diagnostics.length - errors
+  const counted = path !== null && analysisEnabled && analysed
+
+  return (
+    <ScrollArea className="h-full bg-workspace-chrome">
+      <ProblemGroup
+        detail={
+          counted && diagnostics.length > 0
+            ? `${errors} ${errors === 1 ? "error" : "errors"}, ${warnings} ${warnings === 1 ? "warning" : "warnings"}`
+            : null
+        }
+        title={path ?? "This file"}
+      >
+        <SourceProblems
+          analysed={analysed}
+          analysisEnabled={analysisEnabled}
+          diagnostics={diagnostics}
+          onNavigate={onNavigate}
+          onOpenSettings={onOpenSettings}
+          path={path}
+          projectAnalysisComplete={projectAnalysisComplete}
+          onSelect={onSelect}
+          selectedIndex={selectedIndex}
+        />
+      </ProblemGroup>
+      <ProblemGroup detail={null} title="Last build">
+        {buildSection}
+      </ProblemGroup>
+    </ScrollArea>
+  )
+}
+
+/**
+ * A labelled band inside the panel. The heading stays put while its own list
+ * scrolls, so the origin of a diagnostic is readable at any scroll position.
+ */
+function ProblemGroup({
+  children,
+  detail,
+  title,
+}: {
+  children: ReactNode
+  detail: string | null
+  title: string
+}): ReactElement {
+  return (
+    <section className="border-b last:border-b-0">
+      <h3 className="sticky top-0 z-10 flex min-w-0 items-center gap-2 border-b bg-workspace-chrome px-3 py-1.5 text-meta font-medium tracking-wide text-muted-foreground uppercase">
+        <span className="truncate">{title}</span>
+        {detail === null ? null : (
+          <span className="shrink-0 tracking-normal normal-case tabular-nums">
+            {detail}
+          </span>
+        )}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function SourceProblems({
+  analysed,
+  analysisEnabled,
+  diagnostics,
+  onNavigate,
+  onOpenSettings,
+  path,
+  projectAnalysisComplete,
+  selectedIndex,
+  onSelect,
+}: {
+  analysed: boolean
+  analysisEnabled: boolean
+  diagnostics: readonly LatexDiagnosticEntry[]
+  onNavigate: (line: number, column: number) => void
+  onOpenSettings: () => void
+  path: ProjectRelativePath | null
+  projectAnalysisComplete: boolean
+  selectedIndex: number | null
+  onSelect: (index: number) => void
+}): ReactElement {
   if (path === null) {
     return (
-      <Empty className="h-full p-5">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <FileCode2 aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle className="text-sm">No source file open</EmptyTitle>
-          <EmptyDescription className="text-xs">
-            Open a LaTeX source file to see the problems TeX finds in it.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <GroupNote>
+        No source file open. Open a LaTeX source file to see the problems TeX
+        finds in it.
+      </GroupNote>
     )
   }
 
   if (!analysisEnabled) {
     return (
-      <Empty className="h-full p-5">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <EyeOff aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle className="text-sm">Problem analysis is off</EmptyTitle>
-          <EmptyDescription className="text-xs">
-            TeX is not checking this file as you type. Build diagnostics still
-            appear in the Build tab.
-          </EmptyDescription>
-          <Button
-            className="mt-2"
-            onClick={onOpenSettings}
-            size="sm"
-            variant="outline"
-          >
-            Turn it back on
-          </Button>
-        </EmptyHeader>
-      </Empty>
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2">
+        <p className="text-ui text-muted-foreground">
+          Problem analysis is off, so TeX is not checking this file as you type.
+        </p>
+        <Button onClick={onOpenSettings} size="sm" variant="outline">
+          Turn it back on
+        </Button>
+      </div>
     )
   }
 
@@ -100,66 +155,31 @@ export function ProblemsPanel({
     // Saying a file is clean before it has been read would be a claim TeX
     // cannot yet make.
     return (
-      <Empty className="h-full p-5" role="status">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <LoaderCircle
-              aria-hidden="true"
-              className="motion-safe:animate-spin"
-            />
-          </EmptyMedia>
-          <EmptyTitle className="text-sm">Checking {path}</EmptyTitle>
-          <EmptyDescription className="text-xs">
-            TeX is reading this file and the project it belongs to.
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <GroupNote role="status">
+        Checking {path} and the project it belongs to…
+      </GroupNote>
     )
   }
 
   if (diagnostics.length === 0) {
     return (
-      <Empty className="h-full p-5">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <CircleCheck aria-hidden="true" />
-          </EmptyMedia>
-          <EmptyTitle className="text-sm">No problems in {path}</EmptyTitle>
-          <EmptyDescription className="text-xs">
-            {projectAnalysisComplete
-              ? "Structure is balanced and every reference resolves."
-              : "Structure is balanced. Cross-reference checks are limited because TeX could not read every file in this project."}
-          </EmptyDescription>
-        </EmptyHeader>
-      </Empty>
+      <GroupNote>
+        {projectAnalysisComplete
+          ? "No problems. Structure is balanced and every reference resolves."
+          : "No problems. Structure is balanced, but cross-reference checks are limited because TeX could not read every file in this project."}
+      </GroupNote>
     )
   }
 
-  const errors = diagnostics.filter(
-    (diagnostic) => diagnostic.severity === "error"
-  ).length
-  const warnings = diagnostics.length - errors
-
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <p className="flex shrink-0 items-center gap-2 border-b px-3 py-2 text-meta text-muted-foreground">
-        <span className="truncate font-mono">{path}</span>
-        <span aria-hidden="true">·</span>
-        <span>
-          {errors} {errors === 1 ? "error" : "errors"}, {warnings}{" "}
-          {warnings === 1 ? "warning" : "warnings"}
-        </span>
-        {projectAnalysisComplete ? null : (
-          <span className="truncate">
-            · Cross-reference checks are limited: TeX could not read every file
-            in this project.
-          </span>
-        )}
-      </p>
-      <ul
-        aria-label={`Problems in ${path}`}
-        className="min-h-0 flex-1 overflow-auto p-1"
-      >
+    <>
+      {projectAnalysisComplete ? null : (
+        <p className="px-3 pt-2 text-meta text-muted-foreground">
+          Cross-reference checks are limited: TeX could not read every file in
+          this project.
+        </p>
+      )}
+      <ul aria-label={`Problems in ${path}`} className="p-1">
         {diagnostics.map((diagnostic, index) => (
           <li key={`${diagnostic.code}:${diagnostic.from}:${diagnostic.to}`}>
             <button
@@ -198,6 +218,20 @@ export function ProblemsPanel({
           </li>
         ))}
       </ul>
-    </div>
+    </>
+  )
+}
+
+function GroupNote({
+  children,
+  role,
+}: {
+  children: ReactNode
+  role?: "status"
+}): ReactElement {
+  return (
+    <p className="px-3 py-2 text-ui text-muted-foreground" role={role}>
+      {children}
+    </p>
   )
 }

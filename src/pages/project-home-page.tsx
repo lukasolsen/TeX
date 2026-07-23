@@ -1,30 +1,22 @@
-import {
-  FolderOpen,
-  Home,
-  Info,
-  LockKeyhole,
-  Settings,
-  ShieldCheck,
-} from "lucide-react"
+import { FolderOpen, Info, Settings } from "lucide-react"
 import type { ReactElement } from "react"
 
 import { AppBrand } from "@/components/brand/app-brand"
 import { OpenProjectFeedbackView } from "@/components/feedback/open-project-feedback"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import type { OpenProjectFeedback, StartupState } from "@/domain/project"
 import type { CanonicalProjectPath } from "@/domain/identifiers"
 import { RecentProjectList } from "@/features/projects/recent-project-list"
 
+/**
+ * The starting surface: one primary action, the projects this device actually
+ * remembers, and nothing else. `ui-ux-requirements.md` forbids turning an empty
+ * state into a dashboard, so there is no navigation rail standing in for
+ * destinations that do not exist and no repeated reassurance — the privacy
+ * statement is made once, at the end, where it also explains Forget.
+ */
 export function ProjectHomePage({
   feedback,
   onClearFeedback,
@@ -46,168 +38,86 @@ export function ProjectHomePage({
     feedback.status === "choosing" || feedback.status === "opening"
 
   return (
-    <main className="grid h-full min-h-0 bg-home-surface md:grid-cols-[14.5rem_minmax(0,1fr)]">
-      <aside className="hidden min-h-0 flex-col border-r bg-home-nav text-home-nav-foreground md:flex">
-        <div className="flex h-20 items-center px-6">
+    <main className="h-full min-h-0 overflow-y-auto bg-home-surface">
+      <div className="mx-auto w-full max-w-3xl px-6 py-12 sm:px-8 md:py-16">
+        <div className="flex items-center gap-3">
           <AppBrand />
-        </div>
-        <nav
-          aria-label="Project home"
-          className="flex flex-col gap-1 px-3 py-3"
-        >
-          <div
-            aria-current="page"
-            className="flex h-9 items-center gap-2 rounded-lg bg-home-nav-active px-3 text-sm font-medium text-foreground"
-          >
-            <Home aria-hidden="true" className="size-3.5" />
-            Home
-          </div>
           <Button
-            className="w-full justify-start"
+            aria-label="Open settings"
+            className="ml-auto"
+            onClick={onOpenSettings}
+            size="icon-sm"
+            title="Open settings"
+            variant="ghost"
+          >
+            <Settings aria-hidden="true" />
+          </Button>
+        </div>
+
+        <header className="mt-10">
+          <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
+            Open a LaTeX project
+          </h1>
+          <p className="mt-3 max-w-xl text-sm/6 text-muted-foreground">
+            TeX edits a project folder that already exists on this computer.
+            Source, PDF, reading position, and layout come back exactly as you
+            left them.
+          </p>
+        </header>
+
+        <div className="mt-8">
+          <Button
             disabled={isOpening}
             onClick={onOpenProject}
-            variant="ghost"
+            size="lg"
+            title="Open an existing project folder on this computer"
           >
             <FolderOpen data-icon="inline-start" />
-            Open project
+            Open project folder
           </Button>
-          <Button
-            className="w-full justify-start"
-            onClick={onOpenSettings}
-            variant="ghost"
-          >
-            <Settings data-icon="inline-start" />
-            Settings
-          </Button>
-        </nav>
-        <div className="mt-auto px-5 py-5">
-          <Separator className="mb-5" />
-          <div className="flex items-start gap-2.5 text-xs/5 text-muted-foreground">
-            <ShieldCheck
-              aria-hidden="true"
-              className="mt-0.5 size-3.5 shrink-0"
+          {/* Reserved so acknowledging the click never shifts the list below. */}
+          <div className="mt-3 min-h-9">
+            <OpenProjectFeedbackView
+              feedback={feedback}
+              onClear={onClearFeedback}
             />
-            <p>
-              Projects stay on this device. TeX does not upload document
-              contents.
-            </p>
           </div>
         </div>
-      </aside>
 
-      <div className="min-h-0 min-w-0 overflow-y-auto bg-background">
-        <div className="mx-auto max-w-6xl px-6 py-10 md:px-10 md:py-14 lg:px-14">
-          <header className="flex items-start gap-4">
-            <div className="pt-0.5 md:hidden">
-              <AppBrand compact />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="mb-2 text-xs font-medium tracking-wide text-primary uppercase">
-                Local LaTeX workbench
-              </p>
-              <h1 className="font-heading text-3xl font-semibold tracking-[-0.035em] sm:text-4xl">
-                Continue writing
-              </h1>
-              <p className="mt-2 max-w-2xl text-sm/6 text-muted-foreground">
-                Open an existing LaTeX project and return to the source, PDF,
-                and layout exactly where you left them.
-              </p>
-            </div>
-            <Button
-              aria-label="Open settings"
-              className="md:hidden"
-              onClick={onOpenSettings}
-              size="icon-sm"
-              title="Open settings"
-              variant="ghost"
-            >
-              <Settings aria-hidden="true" />
-            </Button>
-          </header>
+        <Separator className="my-10" />
 
-          <section aria-labelledby="start-heading" className="mt-10">
-            <div className="mb-4">
-              <h2
-                className="font-heading text-base font-semibold"
-                id="start-heading"
-              >
-                Open a project
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Select an existing folder from this computer.
-              </p>
-            </div>
+        <section aria-labelledby="recent-heading">
+          <h2
+            className="font-heading text-base font-semibold"
+            id="recent-heading"
+          >
+            Recent projects
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Continue from a workspace this device remembers.
+          </p>
 
-            <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,32rem)_minmax(18rem,1fr)]">
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle>Open a local project folder</CardTitle>
-                  <CardDescription>
-                    TeX will inspect its structure, find possible root files,
-                    and leave the source tree unchanged.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <LockKeyhole
-                      aria-hidden="true"
-                      className="size-3.5 shrink-0"
-                    />
-                    Access begins only after you choose a folder.
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button disabled={isOpening} onClick={onOpenProject}>
-                    <FolderOpen data-icon="inline-start" />
-                    Choose folder
-                  </Button>
-                </CardFooter>
-              </Card>
+          {startup.restorationNotice !== null ? (
+            <Alert className="mt-4">
+              <Info aria-hidden="true" />
+              <AlertDescription>{startup.restorationNotice}</AlertDescription>
+            </Alert>
+          ) : null}
 
-              <div className="min-h-12 pt-1">
-                <OpenProjectFeedbackView
-                  feedback={feedback}
-                  onClear={onClearFeedback}
-                />
-              </div>
-            </div>
-          </section>
-
-          <Separator className="my-10" />
-
-          <section aria-labelledby="recent-heading">
-            <div className="mb-5">
-              <div>
-                <h2
-                  className="font-heading text-base font-semibold"
-                  id="recent-heading"
-                >
-                  Recent projects
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Continue from locally remembered project workspaces.
-                </p>
-              </div>
-            </div>
-
-            {startup.restorationNotice !== null ? (
-              <Alert className="mb-4">
-                <Info aria-hidden="true" />
-                <AlertDescription>{startup.restorationNotice}</AlertDescription>
-              </Alert>
-            ) : null}
-
+          <div className="mt-4">
             <RecentProjectList
               onForget={onForgetProject}
               onOpen={onOpenRecent}
               projects={startup.recentProjects}
             />
-            <p className="mt-4 text-xs/5 text-muted-foreground">
-              Forget removes only TeX&apos;s local history. Project files are
-              never deleted.
-            </p>
-          </section>
-        </div>
+          </div>
+
+          <p className="mt-6 text-xs/5 text-muted-foreground">
+            Projects stay on this device; TeX does not upload document contents.
+            Forget removes only TeX&apos;s local history — project files are
+            never deleted.
+          </p>
+        </section>
       </div>
     </main>
   )

@@ -43,6 +43,7 @@ function renderPanel(
     <ProblemsPanel
       analysed
       analysisEnabled
+      buildSection={<p>Build section</p>}
       diagnostics={diagnostics}
       onNavigate={onNavigate}
       onOpenSettings={vi.fn<() => void>()}
@@ -57,12 +58,23 @@ function renderPanel(
 }
 
 describe("problems panel", () => {
+  it("keeps the build group visible alongside the file's own problems", () => {
+    // The dock has one Problems surface; a reader must never have to work out
+    // which of two places holds the answer.
+    renderPanel([unclosed])
+
+    expect(screen.getByText("Last build")).toBeTruthy()
+    expect(screen.getByText("Build section")).toBeTruthy()
+    expect(screen.getByText("main.tex")).toBeTruthy()
+  })
+
   it("states the file is clean rather than showing an empty list", () => {
     renderPanel([])
 
-    expect(screen.getByText("No problems in main.tex")).toBeTruthy()
     expect(
-      screen.getByText("Structure is balanced and every reference resolves.")
+      screen.getByText(
+        "No problems. Structure is balanced and every reference resolves."
+      )
     ).toBeTruthy()
   })
 
@@ -77,14 +89,14 @@ describe("problems panel", () => {
   it("says it is still checking rather than claiming the file is clean", () => {
     renderPanel([], { analysed: false })
 
-    expect(screen.getByText("Checking main.tex")).toBeTruthy()
+    expect(screen.getByText(/Checking main\.tex/)).toBeTruthy()
     expect(screen.queryByText(/No problems/)).toBeNull()
   })
 
   it("explains that no file is open rather than reporting zero problems", () => {
     renderPanel([], { path: null })
 
-    expect(screen.getByText("No source file open")).toBeTruthy()
+    expect(screen.getByText(/No source file open/)).toBeTruthy()
   })
 
   it("counts errors and warnings separately", () => {

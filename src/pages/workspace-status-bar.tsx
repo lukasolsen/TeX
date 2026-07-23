@@ -115,13 +115,15 @@ export function WorkspaceStatusBar({
         ) : (
           <ListChecks data-icon="inline-start" />
         )}
-        {!diagnosticsEnabled
-          ? "Problem analysis off"
-          : !problemsAnalysed
-            ? "Problems"
-            : problemCount === 0
-              ? "No problems"
-              : `${problemCount} ${problemCount === 1 ? "problem" : "problems"}`}
+        {/* A build problem is real whether or not the editor is analysing, so
+            the count leads and the analysis state only explains a zero. */}
+        {problemCount > 0
+          ? `${problemCount} ${problemCount === 1 ? "problem" : "problems"}`
+          : !diagnosticsEnabled
+            ? "Problem analysis off"
+            : !problemsAnalysed
+              ? "Problems"
+              : "No problems"}
       </Button>
       <Button
         className="text-status-foreground hover:bg-status-foreground/10 hover:text-status-foreground"

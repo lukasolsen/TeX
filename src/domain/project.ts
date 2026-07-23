@@ -49,7 +49,6 @@ export type WorkspaceState = Readonly<{
   buildPanelOpen: boolean
   buildPanelHeight: number
   sidebarTab: ProjectSidebarTab
-  buildPanelTab: BuildPanelTab
   bottomPanelTab: BottomPanelTab
   buildProfile: BuildProfile
   selectedPdf: ProjectRelativePath | null
@@ -58,7 +57,6 @@ export type WorkspaceState = Readonly<{
 }>
 
 export type ProjectSidebarTab = "files" | "outline" | "references"
-export type BuildPanelTab = "output" | "problems"
 export type BottomPanelTab = "build" | "problems" | "terminal"
 export type BuildProfile = "latexmkPdf" | "pdfLatex" | "xeLatex" | "luaLatex"
 export type WorkspaceFocus = "source" | "pdf"
@@ -75,7 +73,6 @@ export type WorkspaceViewUpdate = Partial<
     | "buildPanelOpen"
     | "buildPanelHeight"
     | "sidebarTab"
-    | "buildPanelTab"
     | "bottomPanelTab"
     | "buildProfile"
   >

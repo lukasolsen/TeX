@@ -54,7 +54,7 @@ export function useWorkspaceDiagnostics({
     setDiagnosticCursor(index)
     onUpdateWorkspaceView({
       buildPanelOpen: true,
-      buildPanelTab: "problems",
+      bottomPanelTab: "problems",
     })
     if (
       navigate &&
@@ -95,7 +95,7 @@ export function useWorkspaceDiagnostics({
     if (diagnostic === undefined) return
     setDiagnosticCursor(Math.max(0, diagnostics.indexOf(diagnostic)))
     setLogContextSequence(diagnostic.logSequence)
-    onUpdateWorkspaceView({ buildPanelOpen: true, buildPanelTab: "output" })
+    onUpdateWorkspaceView({ buildPanelOpen: true, bottomPanelTab: "build" })
   }
 
   useEffect(() => {

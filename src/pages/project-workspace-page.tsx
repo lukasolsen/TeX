@@ -29,6 +29,14 @@ import { WorkspaceCommandPalette } from "@/features/commands/workspace-command-p
 import { ProjectSearchPanel } from "@/features/search/project-search-panel"
 import type { EditorTarget } from "@/features/editor/latex-editor"
 import { BuildPanel } from "@/features/build/build-panel"
+import { BuildProblemsSection } from "@/features/build/build-problems"
+import {
+  buildErrorCount,
+  buildIssue,
+  buildProblemCount,
+} from "@/features/build/build-panel-model"
+import { usePackageRecovery } from "@/features/build/use-package-recovery"
+import { selectedBuildRun } from "@/domain/build"
 import { BottomPanel } from "@/features/workspace/bottom-panel"
 import { ProblemsPanel } from "@/features/workspace/problems-panel"
 import type { LatexDiagnosticEntry } from "@/domain/latex-diagnostics"
@@ -249,6 +257,20 @@ export function ProjectWorkspacePage({
     build.state.action.status !== "pending"
   const activity = describeOpenFeedback(feedback)
   const saveActivity = describeSaveState(session.documentState)
+  // Problems is one surface over two origins, so its count is the sum. An
+  // install changes what the distribution provides, so recovery is owned here
+  // and re-detects the tools before offering a rebuild.
+  const recovery = usePackageRecovery({ onInstalled: build.refreshProfiles })
+  const selectedRun = selectedBuildRun(build.state)
+  const issue = buildIssue(build.state, build.profiles)
+  const totalProblems =
+    activeProblems.length + buildProblemCount(selectedRun, issue)
+  const buildErrors = buildErrorCount(selectedRun, issue)
+  const showBuildOutput = useCallback(
+    () =>
+      onUpdateWorkspaceView({ buildPanelOpen: true, bottomPanelTab: "build" }),
+    [onUpdateWorkspaceView]
+  )
 
   const {
     diagnostics,
@@ -314,8 +336,7 @@ export function ProjectWorkspacePage({
     if (!openPanelOnFailure) return
     onUpdateWorkspaceView({
       buildPanelOpen: true,
-      bottomPanelTab: "build",
-      buildPanelTab: revealProblemsOnFailure ? "problems" : "output",
+      bottomPanelTab: revealProblemsOnFailure ? "problems" : "build",
     })
   }, [
     latestBuild,
@@ -598,11 +619,31 @@ export function ProjectWorkspacePage({
                   if (nextTab === "terminal") setTerminalStarted(true)
                   onUpdateWorkspaceView({ bottomPanelTab: nextTab })
                 }}
-                problemCount={activeProblems.length}
+                problemCount={totalProblems}
                 problemsPanel={
                   <ProblemsPanel
                     analysed={problemsAnalysed}
                     analysisEnabled={preferences.assistance.diagnosticsEnabled}
+                    buildSection={
+                      <BuildProblemsSection
+                        activeIndex={activeDiagnosticIndex}
+                        issue={issue}
+                        onClean={() => setCleanOpen(true)}
+                        onNavigate={(path, line) => {
+                          setTarget({
+                            path,
+                            line,
+                            column: 1,
+                            token: Date.now(),
+                          })
+                          onPinFile(path)
+                        }}
+                        onSelect={(index) => selectDiagnostic(index, false)}
+                        onShowOutput={showBuildOutput}
+                        recovery={recovery}
+                        run={selectedRun}
+                      />
+                    }
                     onOpenSettings={() =>
                       onOpenSettings(lastWorkspaceFocus.current)
                     }
@@ -629,7 +670,6 @@ export function ProjectWorkspacePage({
                 terminalStarted={terminalStarted}
                 buildPanel={
                   <BuildPanel
-                    activeDiagnosticIndex={activeDiagnosticIndex}
                     configurationState={build.configurationState}
                     dispatch={build.dispatch}
                     engine={build.engine}
@@ -637,14 +677,7 @@ export function ProjectWorkspacePage({
                     onBuild={() => runDetached(build.build())}
                     onClean={() => setCleanOpen(true)}
                     onLatexInstalled={build.refreshProfiles}
-                    onNavigate={(path, line) => {
-                      setTarget({ path, line, column: 1, token: Date.now() })
-                      onPinFile(path)
-                    }}
                     onRevealOutput={() => runDetached(revealOutput())}
-                    onSelectDiagnostic={(index) =>
-                      selectDiagnostic(index, false)
-                    }
                     onStop={() => runDetached(build.stop())}
                     onStartWatch={() => runDetached(watch.start())}
                     onStopWatch={() => runDetached(watch.stop())}
@@ -656,10 +689,6 @@ export function ProjectWorkspacePage({
                     profiles={build.profiles}
                     setEngine={build.setEngine}
                     state={build.state}
-                    tab={session.workspace.buildPanelTab}
-                    onTabChange={(buildPanelTab) =>
-                      onUpdateWorkspaceView({ buildPanelTab })
-                    }
                     queued={build.queued}
                     rootCandidates={rootCandidates}
                     watch={watch.state}
@@ -685,8 +714,8 @@ export function ProjectWorkspacePage({
         }
         diagnosticsEnabled={preferences.assistance.diagnosticsEnabled}
         problemsAnalysed={problemsAnalysed}
-        problemCount={activeProblems.length}
-        errorCount={activeProblemErrors}
+        problemCount={totalProblems}
+        errorCount={activeProblemErrors + buildErrors}
         watchState={watch.state}
         onToggleWatch={() =>
           runDetached(watch.active ? watch.stop() : watch.start())

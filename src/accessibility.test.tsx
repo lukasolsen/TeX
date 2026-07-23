@@ -61,7 +61,6 @@ const session: ProjectSession = {
     buildPanelOpen: false,
     buildPanelHeight: 240,
     sidebarTab: "files",
-    buildPanelTab: "output",
     bottomPanelTab: "build",
     buildProfile: "latexmkPdf",
     selectedPdf: null,
@@ -156,7 +155,6 @@ describe("primary workflow accessibility", () => {
     const { unmount } = render(
       <NotificationProvider>
         <BuildPanel
-          activeDiagnosticIndex={null}
           configurationState={{ status: "loading" }}
           dispatch={callback}
           engine="latexmkPdf"
@@ -164,20 +162,16 @@ describe("primary workflow accessibility", () => {
           onBuild={callback}
           onClean={callback}
           onLatexInstalled={callback}
-          onNavigate={callback}
           onRevealOutput={callback}
           onSaveConfiguration={asyncCallback}
-          onSelectDiagnostic={callback}
           onStartWatch={callback}
           onStop={callback}
           onStopWatch={callback}
-          onTabChange={callback}
           queued={false}
           rootCandidates={["main.tex"]}
           profiles={{ status: "loading" }}
           setEngine={callback}
           state={initialProjectBuildState}
-          tab="output"
           watch={{ status: "off", message: null }}
         />
       </NotificationProvider>

@@ -1,6 +1,61 @@
-import type { BuildRun } from "@/domain/build"
+import type {
+  BuildProfilesState,
+  BuildRun,
+  ProjectBuildState,
+} from "@/domain/build"
+import type { ProjectError } from "@/domain/project"
 import type { ProjectWatchState } from "@/features/build/use-project-watch"
 import { formatClockTime, formatElapsed } from "@/lib/format"
+
+/**
+ * The one build-system fault worth reporting, in the order that decides what
+ * the user does next: a rejected action, then an unusable invocation, then a
+ * distribution that could not be inspected.
+ */
+export function buildIssue(
+  state: ProjectBuildState,
+  profiles: BuildProfilesState
+): ProjectError | null {
+  if (state.action.status === "error") return state.action.error
+  if (state.preview.status === "error") return state.preview.error
+  if (profiles.status === "error") return profiles.error
+  return null
+}
+
+/**
+ * A failed run the log could not attribute to a source line. It still belongs
+ * in Problems — a failure with nothing listed under it reads as a lost report.
+ */
+export function hasUnmappedFailure(run: BuildRun | null): boolean {
+  return run?.status === "failed" && run.diagnostics.length === 0
+}
+
+/**
+ * Everything the Problems surface will show for the build: each diagnostic, an
+ * unavailable build system, and an unattributed failure. The count is shared by
+ * the dock tab badge and the status bar so they can never disagree.
+ */
+export function buildProblemCount(
+  run: BuildRun | null,
+  issue: ProjectError | null
+): number {
+  return (
+    (run?.diagnostics.length ?? 0) +
+    (issue === null ? 0 : 1) +
+    (hasUnmappedFailure(run) ? 1 : 0)
+  )
+}
+
+/** The subset of `buildProblemCount` that stops the project from building. */
+export function buildErrorCount(
+  run: BuildRun | null,
+  issue: ProjectError | null
+): number {
+  const errors = (run?.diagnostics ?? []).filter(
+    (diagnostic) => diagnostic.severity === "error"
+  ).length
+  return errors + (issue === null ? 0 : 1) + (hasUnmappedFailure(run) ? 1 : 0)
+}
 
 /**
  * latexmk keeps a database of the previous run. When nothing has changed since

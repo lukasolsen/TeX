@@ -398,8 +398,6 @@ pub struct WorkspaceState {
     #[serde(default)]
     pub sidebar_tab: ProjectSidebarTab,
     #[serde(default)]
-    pub build_panel_tab: BuildPanelTab,
-    #[serde(default)]
     pub bottom_panel_tab: BottomPanelTab,
     #[serde(default)]
     pub build_profile: BuildProfile,
@@ -418,14 +416,6 @@ pub enum ProjectSidebarTab {
     Files,
     Outline,
     References,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum BuildPanelTab {
-    #[default]
-    Output,
-    Problems,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
@@ -770,7 +760,6 @@ pub fn record_project_opened(
         build_panel_open: false,
         build_panel_height: default_build_panel_height(),
         sidebar_tab: ProjectSidebarTab::default(),
-        build_panel_tab: BuildPanelTab::default(),
         bottom_panel_tab: BottomPanelTab::default(),
         build_profile: BuildProfile::default(),
         selected_pdf: None,
@@ -933,10 +922,11 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
         }
         Err(_) => return Err(unavailable()),
     };
-    let value: serde_json::Value = match serde_json::from_slice(&source) {
+    let mut value: serde_json::Value = match serde_json::from_slice(&source) {
         Ok(value) => value,
         Err(_) => return Ok(corrupt_and_default(path)),
     };
+    drop_retired_workspace_keys(&mut value);
     let Some(version) = value.get("version").and_then(serde_json::Value::as_u64) else {
         return Ok(corrupt_and_default(path));
     };
@@ -980,6 +970,24 @@ fn read_state_with_notice(path: &Path) -> Result<ReadState, PersistenceError> {
             migrated: false,
             writable: false,
         }),
+    }
+}
+
+/// Workspace keys this version no longer models. `WorkspaceState` denies
+/// unknown fields, so a file written by an older build would otherwise be
+/// treated as corrupt and quarantined — discarding a layout the user still has.
+/// Dropping them keeps every field that is still meaningful.
+const RETIRED_WORKSPACE_KEYS: [&str; 1] = ["buildPanelTab"];
+
+fn drop_retired_workspace_keys(value: &mut serde_json::Value) {
+    let Some(workspace) = value
+        .get_mut("lastWorkspace")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return;
+    };
+    for key in RETIRED_WORKSPACE_KEYS {
+        workspace.remove(key);
     }
 }
 
@@ -1178,11 +1186,11 @@ mod tests {
 
     use super::{
         are_hidden_file_rules_valid, default_hidden_file_rules, load_startup_state_from_path,
-        read_state, write_state, AppPreferences, BottomPanelTab, BuildPanelTab, BuildProfile,
-        ColorTheme, EditorViewerState, HiddenFileRule, HiddenFileRuleKind, PdfLayoutMode,
-        PdfSidebarMode, PdfViewerState, PersistedRecentProject, PersistedState,
-        ProjectAvailability, ProjectSidebarTab, WorkspaceState, MAX_HIDDEN_FILE_RULES,
-        MAX_HIDDEN_FILE_RULE_LENGTH, STATE_VERSION,
+        read_state, write_state, AppPreferences, BottomPanelTab, BuildProfile, ColorTheme,
+        EditorViewerState, HiddenFileRule, HiddenFileRuleKind, PdfLayoutMode, PdfSidebarMode,
+        PdfViewerState, PersistedRecentProject, PersistedState, ProjectAvailability,
+        ProjectSidebarTab, WorkspaceState, MAX_HIDDEN_FILE_RULES, MAX_HIDDEN_FILE_RULE_LENGTH,
+        STATE_VERSION,
     };
 
     #[test]
@@ -1215,7 +1223,6 @@ mod tests {
                     build_panel_open: false,
                     build_panel_height: 240,
                     sidebar_tab: super::ProjectSidebarTab::Files,
-                    build_panel_tab: super::BuildPanelTab::Output,
                     bottom_panel_tab: super::BottomPanelTab::default(),
                     build_profile: super::BuildProfile::LatexmkPdf,
                     selected_pdf: None,
@@ -1369,6 +1376,39 @@ mod tests {
     }
 
     #[test]
+    fn a_retired_workspace_key_does_not_discard_the_saved_layout(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // `buildPanelTab` was written by earlier builds and `WorkspaceState`
+        // denies unknown fields. Without the retired-key sweep this file would
+        // be quarantined and the user would lose a layout they still have.
+        let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+        let directory = std::env::temp_dir().join(format!("tex-persistence-retired-{unique}"));
+        let project = directory.join("project");
+        fs::create_dir_all(&project)?;
+        fs::write(project.join("main.tex"), "\\documentclass{article}")?;
+        let state_path = directory.join("state.json");
+        let escaped = project.to_string_lossy().replace('\\', "\\\\");
+        fs::write(
+            &state_path,
+            format!(
+                r#"{{"version":{STATE_VERSION},"recentProjects":[],"lastWorkspace":{{
+                    "projectPath":"{escaped}","pinnedFiles":[],"selectedRoot":"main.tex",
+                    "selectedFile":"main.tex","sidebarWidth":312,"buildPanelTab":"problems",
+                    "bottomPanelTab":"terminal"}}}}"#
+            ),
+        )?;
+
+        let startup = load_startup_state_from_path(&state_path)?;
+        let workspace = startup.last_workspace.ok_or("workspace was not restored")?;
+        assert_eq!(workspace.sidebar_width, 312);
+        assert_eq!(workspace.bottom_panel_tab, BottomPanelTab::Terminal);
+        assert!(startup.restoration_notice.is_none());
+
+        fs::remove_dir_all(directory)?;
+        Ok(())
+    }
+
+    #[test]
     fn newer_schema_falls_back_without_becoming_writable() -> Result<(), Box<dyn std::error::Error>>
     {
         let unique = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
@@ -1409,7 +1449,6 @@ mod tests {
             build_panel_open: true,
             build_panel_height: 280,
             sidebar_tab: ProjectSidebarTab::References,
-            build_panel_tab: BuildPanelTab::Problems,
             bottom_panel_tab: BottomPanelTab::Terminal,
             build_profile: BuildProfile::LuaLatex,
             selected_pdf: Some("main.pdf".to_owned()),

@@ -46,7 +46,6 @@ function workspace(overrides: Partial<WorkspaceState> = {}): WorkspaceState {
     buildPanelOpen: false,
     buildPanelHeight: 240,
     sidebarTab: "files",
-    buildPanelTab: "output",
     bottomPanelTab: "build",
     buildProfile: "latexmkPdf",
     selectedPdf: null,

@@ -102,7 +102,6 @@ export type ProjectSessionController = Readonly<{
         | "buildPanelOpen"
         | "buildPanelHeight"
         | "sidebarTab"
-        | "buildPanelTab"
         | "bottomPanelTab"
         | "buildProfile"
       >

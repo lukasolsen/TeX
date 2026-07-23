@@ -29,8 +29,17 @@ import {
 } from "@/domain/identifiers"
 import { NotificationProvider } from "@/components/feedback/notification-provider"
 import { BuildPanel } from "@/features/build/build-panel"
+import { BuildProblemsSection } from "@/features/build/build-problems"
+import type { PackageRecoveryController } from "@/features/build/use-package-recovery"
 
 const projectPath = canonicalProjectPath("/projects/report")
+
+const idleRecovery: PackageRecoveryController = {
+  state: { status: "idle" },
+  resolve: () => Promise.resolve(),
+  install: () => Promise.resolve(),
+  reset: () => {},
+}
 
 const support: InstallSupport = {
   platform: "macOS",
@@ -146,7 +155,6 @@ function renderPanel(
   return render(
     <NotificationProvider>
       <BuildPanel
-        activeDiagnosticIndex={null}
         configurationState={{ status: "loading" }}
         dispatch={noop}
         engine="latexmkPdf"
@@ -154,14 +162,11 @@ function renderPanel(
         onBuild={noop}
         onClean={noop}
         onLatexInstalled={noop}
-        onNavigate={noop}
         onRevealOutput={noop}
         onSaveConfiguration={asyncNoop}
-        onSelectDiagnostic={noop}
         onStartWatch={noop}
         onStop={noop}
         onStopWatch={noop}
-        onTabChange={noop}
         queued={false}
         rootCandidates={["main.tex"]}
         profiles={{
@@ -170,7 +175,6 @@ function renderPanel(
         }}
         setEngine={overrides.setEngine ?? noop}
         state={initialProjectBuildState}
-        tab="output"
         watch={{ status: "off", message: null }}
       />
     </NotificationProvider>
@@ -353,40 +357,16 @@ describe("latexmk cached failures", () => {
   it("explains the replayed error and routes to the clean action", async () => {
     const onClean = vi.fn<(...arguments_: unknown[]) => void>()
     render(
-      <NotificationProvider>
-        <BuildPanel
-          activeDiagnosticIndex={null}
-          configurationState={{ status: "loading" }}
-          dispatch={noop}
-          engine="latexmkPdf"
-          logContextSequence={null}
-          onBuild={noop}
-          onClean={onClean}
-          onLatexInstalled={noop}
-          onNavigate={noop}
-          onRevealOutput={noop}
-          onSaveConfiguration={asyncNoop}
-          onSelectDiagnostic={noop}
-          onStartWatch={noop}
-          onStop={noop}
-          onStopWatch={noop}
-          onTabChange={noop}
-          queued={false}
-          rootCandidates={["main.tex"]}
-          profiles={{
-            status: "ready",
-            profiles: [{ ...missing, available: true }],
-          }}
-          setEngine={noop}
-          state={{
-            ...initialProjectBuildState,
-            runs: [failedRun],
-            selectedRunId: failedRun.id,
-          }}
-          tab="problems"
-          watch={{ status: "off", message: null }}
-        />
-      </NotificationProvider>
+      <BuildProblemsSection
+        activeIndex={null}
+        issue={null}
+        onClean={onClean}
+        onNavigate={noop}
+        onSelect={noop}
+        onShowOutput={noop}
+        recovery={idleRecovery}
+        run={failedRun}
+      />
     )
 
     const alert = screen.getByRole("alert", {

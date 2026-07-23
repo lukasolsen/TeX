@@ -225,8 +225,8 @@ Rules:
 ### 6.1 Taxonomy
 
 A closed set of codes, in the same shape as `LatexDiagnosticCode` in
-`src/domain/latex-diagnostics.ts`, so the build panel and the editor Problems panel speak one
-language. Minimum set:
+`src/domain/latex-diagnostics.ts`, so compiler diagnostics and the editor's own speak one
+language in the shared Problems panel they are listed in together. Minimum set:
 
 `undefined-control-sequence`, `missing-package`, `missing-file`, `undefined-reference`,
 `undefined-citation`, `missing-dollar`, `runaway-argument`, `too-many-braces`,
